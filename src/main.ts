@@ -7,7 +7,16 @@ import maplibregl, {
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./style.css";
 import { Graph, metres, type Anchor, type LatLon } from "./graph";
-import { AccidentIndex, findRoutes, minutesFor, type Accidents, type Meta, type Period, type Route } from "./routes";
+import {
+  AccidentIndex,
+  findRoutes,
+  joinRoutes,
+  minutesFor,
+  type Accidents,
+  type Meta,
+  type Period,
+  type Route,
+} from "./routes";
 
 type PlaceInfo = { hours?: string; phone?: string; web?: string; address?: string; operator?: string };
 type Place = LatLon & PlaceInfo & { name: string; kind?: string; ward?: string; genre?: Genre };
@@ -48,6 +57,8 @@ const state = {
   picked: null as Place | null,
   from: null as Place | null,
   to: null as Place | null,
+  /** 経由地。入力中の欄は null */
+  stops: [] as (Place | null)[],
   period: (new Date().getHours() >= 18 || new Date().getHours() < 6 ? "night" : "day") as Period,
   routes: [] as Route[],
   selected: 0,
@@ -75,8 +86,16 @@ const markers = {
   picked: new maplibregl.Marker({ color: COLORS.bad }),
   from: new maplibregl.Marker({ color: COLORS.good }),
   to: new maplibregl.Marker({ color: COLORS.bad }),
-  me: new maplibregl.Marker({ element: Object.assign(document.createElement("div"), { className: "me" }) }),
+  me: new maplibregl.Marker({ element: meElement() }),
 };
+const stopMarkers: maplibregl.Marker[] = [];
+
+function meElement(): HTMLElement {
+  const dot = document.createElement("div");
+  dot.className = "me";
+  dot.append(Object.assign(document.createElement("i"), { className: "cone" }));
+  return dot;
+}
 
 let toastTimer = 0;
 function toast(text: string): void {
@@ -203,8 +222,11 @@ function addLayers(): void {
   map.on("click", "result-dots", (e) => {
     const index = e.features?.[0]?.properties?.index;
     if (typeof index === "number") {
-      showPlace(lastResults[index]);
-      pushUrl();
+      if (state.mode === "directions") addStop(lastResults[index]);
+      else {
+        showPlace(lastResults[index]);
+        pushUrl();
+      }
     }
     e.preventDefault();
   });
@@ -525,8 +547,9 @@ function searchGenre(genre: Genre): void {
   );
   sheet.replaceChildren(wrap);
   sheet.hidden = false;
-  if (!inView.length && rows.length) {
-    const all = rows.slice(0, 5).map((p): [number, number] => [p.lon, p.lat]);
+  // 市全体を見ている時や範囲内に無い時は、結果が見える所まで寄る。
+  if (rows.length && (!inView.length || map.getZoom() < 13)) {
+    const all = rows.slice(0, 12).map((p): [number, number] => [p.lon, p.lat]);
     map.fitBounds(
       all.reduce((b, c) => b.extend(c), new maplibregl.LngLatBounds(all[0], all[0])),
       { padding: mapPadding(), maxZoom: 16, duration: 500 },
@@ -885,6 +908,8 @@ function closeDirections(): void {
   state.mode = "browse";
   document.body.classList.remove("routing");
   state.from = state.to = null;
+  state.stops = [];
+  renderStops();
   fromInput.value = toInput.value = "";
   markers.from.remove();
   markers.to.remove();
@@ -912,10 +937,76 @@ function setEnd(which: End, place: Place | null, run = true): void {
   if (run && state.from && state.to) search();
 }
 
+const MAX_STOPS = 3;
+
+/** 経由地の入力欄と印を作り直す。 */
+function renderStops(): void {
+  stopMarkers.splice(0).forEach((marker) => marker.remove());
+  $("stops").replaceChildren(
+    ...state.stops.map((stop, i) => {
+      const row = el("div", "stop-row");
+      const field = el("div", "field");
+      const input = el("input");
+      input.placeholder = "経由地";
+      input.setAttribute("aria-label", `経由地${i + 1}`);
+      input.value = stop?.name ?? "";
+      field.append(input);
+      const remove = el("button", "icon plain", "✕");
+      remove.type = "button";
+      remove.setAttribute("aria-label", `経由地${i + 1}を外す`);
+      remove.addEventListener("click", () => {
+        state.stops.splice(i, 1);
+        renderStops();
+        if (state.from && state.to) search();
+      });
+      row.append(field, remove);
+      bindSuggest(input, (place) => {
+        state.stops[i] = place;
+        renderStops();
+        if (state.from && state.to) search();
+      });
+      if (stop) {
+        stopMarkers.push(new maplibregl.Marker({ color: COLORS.mid }).setLngLat([stop.lon, stop.lat]).addTo(map));
+      }
+      return row;
+    }),
+  );
+  $<HTMLButtonElement>("add-stop").hidden = state.stops.length >= MAX_STOPS;
+}
+
+function addStop(place: Place): void {
+  if (state.stops.filter(Boolean).length >= MAX_STOPS) {
+    toast(`経由地は${MAX_STOPS}か所までです。`);
+    return;
+  }
+  const empty = state.stops.indexOf(null);
+  if (empty >= 0) state.stops[empty] = place;
+  else state.stops.push(place);
+  showResultDots([]);
+  renderStops();
+  if (state.from && state.to) search();
+}
+
+function searchThrough(): Route | null {
+  const points = [state.from!, ...state.stops.filter((s): s is Place => s !== null), state.to!];
+  const anchors = points.map(snap);
+  if (anchors.some((a) => a === null)) return null;
+  const parts = anchors.slice(1).map((a, i) => findRoutes(graph, anchors[i]!, a!, state.period, accidents, meta, names)[0]);
+  if (parts.some((part) => !part)) return null;
+  return joinRoutes(parts, points.slice(1, -1).map((p) => p.name));
+}
+
 function search(): void {
   const start = snap(state.from!);
   const goal = snap(state.to!);
+  showResultDots([]);
   if (start === null || goal === null) return clearRoutes("出発地か目的地の近くに、神戸市内の歩ける道がありません。");
+  if (state.stops.some(Boolean)) {
+    const through = searchThrough();
+    if (!through) return clearRoutes("経由地を通る経路が見つかりませんでした。");
+    state.routes = [through];
+    return showRoutes();
+  }
   const [sx, sy] = start.point;
   const [gx, gy] = goal.point;
   if (metres({ lat: sy, lon: sx }, { lat: gy, lon: gx }) < 5) {
@@ -923,10 +1014,15 @@ function search(): void {
   }
   state.routes = findRoutes(graph, start, goal, state.period, accidents, meta, names);
   if (!state.routes.length) return clearRoutes("歩いて行ける経路が見つかりませんでした。");
+  showRoutes();
+}
+
+function showRoutes(): void {
   for (const route of state.routes) connectEnds(route, state.from!, state.to!);
   replaceUrl();
-  const best = state.routes.reduce((a, b, i, all) => ((b.safety ?? -1) > (all[a].safety ?? -1) ? i : a), 0);
-  selectRoute(best);
+  // 昼は Google マップと同じく最短を選び、夜は最も安全な経路を選ぶ。
+  const safest = state.routes.reduce((a, b, i, all) => ((b.safety ?? -1) > (all[a].safety ?? -1) ? i : a), 0);
+  selectRoute(state.period === "night" ? safest : 0);
   const all = state.routes.flatMap((r) => r.coords);
   const bounds = all.reduce((b, c) => b.extend(c), new maplibregl.LngLatBounds(all[0], all[0]));
   map.fitBounds(bounds, { padding: mapPadding(), duration: 500 });
@@ -1021,7 +1117,7 @@ function selectRoute(index: number): void {
     })),
   });
   const route = state.routes[index];
-  showAccidents(route);
+  showAccidents(route, false);
   drawTimeTags();
   const start = el("button", "primary start", "案内を始める");
   start.type = "button";
@@ -1031,10 +1127,90 @@ function selectRoute(index: number): void {
     ...routeWarnings(route),
     start,
     stepList(route),
+    elevationDetail(route),
+    alongDetail(route),
     accidentDetail(route),
     el("p", "note", "安全度は公開データから計算した目安で、その道の安全を保証するものではありません。"),
   );
   sheet.hidden = false;
+  sheet.querySelector(".routes [aria-current]")?.scrollIntoView({ block: "nearest" });
+}
+
+const FLAT_M = 10;
+
+/** 出発地からの高さの変化を線で描く。 */
+function elevationDetail(route: Route): HTMLElement {
+  const wrap = el("details", "detail");
+  const flat = route.climb < FLAT_M && route.descent < FLAT_M;
+  wrap.append(el("summary", "", flat ? "高度: ほぼ平坦" : `高度: 上り${route.climb}m・下り${route.descent}m`));
+  const heights = route.profile.map(([, h]) => h);
+  const low = Math.min(...heights);
+  const high = Math.max(...heights);
+  const end = route.profile[route.profile.length - 1][0] || 1;
+  const width = 340;
+  const height = 80;
+  const line = route.profile
+    .map(([d, h]) => `${((d / end) * width).toFixed(1)},${(height - 6 - ((h - low) / Math.max(high - low, 20)) * (height - 12)).toFixed(1)}`)
+    .join(" ");
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("class", "profile");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", `高低差 ${Math.round(high - low)}m`);
+  const area = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+  area.setAttribute("points", `0,${height} ${line} ${width},${height}`);
+  const stroke = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+  stroke.setAttribute("points", line);
+  svg.append(area, stroke);
+  wrap.append(svg, el("p", "", `高低差 ${Math.round(high - low)}m・全長 ${formatMetres(end)}`));
+  return wrap;
+}
+
+const ALONG_M = 100;
+const ALONG_LIMIT = 12;
+
+/** 経路の近くにある場所を、出発地に近い順に探す。 */
+function placesAlong(route: Route, genre: Genre): { place: Place; order: number }[] {
+  const stride = Math.max(1, Math.floor(route.coords.length / 400));
+  const points = route.coords.filter((_, i) => i % stride === 0);
+  const lons = route.coords.map(([lon]) => lon);
+  const lats = route.coords.map(([, lat]) => lat);
+  const pad = 0.002;
+  const [west, east] = [Math.min(...lons) - pad, Math.max(...lons) + pad];
+  const [south, north] = [Math.min(...lats) - pad, Math.max(...lats) + pad];
+  const hits: { place: Place; order: number }[] = [];
+  for (const place of places) {
+    if (!genre.kinds.includes(place.kind)) continue;
+    if (place.lon < west || place.lon > east || place.lat < south || place.lat > north) continue;
+    const order = points.findIndex(([lon, lat]) => metres(place, { lat, lon }) <= ALONG_M);
+    if (order >= 0) hits.push({ place, order });
+  }
+  return hits.sort((a, b) => a.order - b.order).slice(0, ALONG_LIMIT);
+}
+
+function alongDetail(route: Route): HTMLElement {
+  const wrap = el("details", "detail");
+  wrap.append(el("summary", "", "経路沿いを検索"));
+  const chips = el("div", "chips inline");
+  const results = el("div");
+  chips.append(
+    ...GENRES.slice(0, 6).map((genre) => {
+      const chip = el("button", "chip", genre.label);
+      chip.type = "button";
+      chip.addEventListener("click", () => {
+        const rows = placesAlong(route, genre).map(({ place }) => place);
+        showResultDots(rows);
+        results.replaceChildren(
+          rows.length
+            ? placeRows(rows, state.from!, addStop)
+            : el("p", "", `経路から${ALONG_M}m以内に${genre.label}の記録がありません。`),
+        );
+      });
+      return chip;
+    }),
+  );
+  wrap.append(chips, results);
+  return wrap;
 }
 
 /** 徒歩に向かない経路の注意。基準の距離と上りは仮の値。 */
@@ -1083,8 +1259,59 @@ function stepList(route: Route): HTMLElement {
 
 const OFF_ROUTE_M = 60;
 const STEP_REACHED_M = 20;
+const ANNOUNCE_M = 40;
 let watchId: number | null = null;
 let rerouting = false;
+let voiceOn = true;
+let announced = "";
+let wakeLock: WakeLockSentinel | null = null;
+
+function speak(text: string): void {
+  if (!voiceOn || !("speechSynthesis" in window)) return;
+  speechSynthesis.cancel();
+  const line = new SpeechSynthesisUtterance(text);
+  line.lang = "ja-JP";
+  speechSynthesis.speak(line);
+}
+
+/** 案内中は画面が消えないようにする。対応しない端末ではそのまま続ける。 */
+async function keepScreenOn(): Promise<void> {
+  try {
+    wakeLock = (await navigator.wakeLock?.request("screen")) ?? null;
+  } catch {
+    wakeLock = null;
+  }
+}
+
+function setHeading(deg: number): void {
+  const me = markers.me.getElement();
+  me.style.setProperty("--heading", `${deg}deg`);
+  me.classList.add("facing");
+}
+
+type CompassEvent = DeviceOrientationEvent & { webkitCompassHeading?: number };
+
+function onCompass(e: CompassEvent): void {
+  const deg = e.webkitCompassHeading ?? (e.absolute && e.alpha !== null ? 360 - e.alpha : null);
+  if (deg !== null) setHeading(deg);
+}
+
+/** iPhone は方位の利用に許可が要る。許可を求められるのは操作の直後だけ。 */
+function watchCompass(): void {
+  const asking = DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> };
+  const start = () => {
+    window.addEventListener("deviceorientationabsolute", onCompass as EventListener);
+    window.addEventListener("deviceorientation", onCompass as EventListener);
+  };
+  if (asking.requestPermission) asking.requestPermission().then((answer) => answer === "granted" && start(), () => undefined);
+  else start();
+}
+
+function stopCompass(): void {
+  window.removeEventListener("deviceorientationabsolute", onCompass as EventListener);
+  window.removeEventListener("deviceorientation", onCompass as EventListener);
+  markers.me.getElement().classList.remove("facing");
+}
 
 function distanceToRoute(p: LatLon, route: Route): number {
   let best = Infinity;
@@ -1112,25 +1339,35 @@ function remainingFrom(p: LatLon, route: Route): { next: Route["steps"][number] 
   return { next: rest.find((s) => metres(p, { lat: s.at[1], lon: s.at[0] }) > STEP_REACHED_M) ?? null, metresLeft };
 }
 
-function updateGuide(p: LatLon): void {
+function updateGuide(p: LatLon, accuracy?: number): void {
   const route = state.routes[state.selected];
   if (!route) return;
   markers.me.setLngLat([p.lon, p.lat]).addTo(map);
+  if (accuracy) showAccuracy(p, accuracy);
   map.easeTo({ center: [p.lon, p.lat], zoom: Math.max(map.getZoom(), 17), duration: 500 });
   if (distanceToRoute(p, route) > OFF_ROUTE_M && !rerouting) {
     rerouting = true;
     toast("経路を外れたので、現在地から探し直します。");
+    speak("経路を外れました。探し直します。");
     setEnd("from", { ...p, name: CURRENT });
     rerouting = false;
     return;
   }
   const end = route.coords[route.coords.length - 1];
   if (metres(p, { lat: end[1], lon: end[0] }) <= STEP_REACHED_M) {
+    if ($("guide-next").textContent !== "目的地に着きました") speak("目的地に着きました");
     $("guide-next").textContent = "目的地に着きました";
     $("guide-rest").textContent = "";
     return;
   }
   const { next, metresLeft } = remainingFrom(p, route);
+  if (next && metres(p, { lat: next.at[1], lon: next.at[0] }) <= ANNOUNCE_M) {
+    const key = next.at.join(",");
+    if (key !== announced) {
+      announced = key;
+      speak(`まもなく、${next.text.replace(/（.*）/, "")}`);
+    }
+  }
   $("guide-next").textContent = next
     ? `${formatMetres(metres(p, { lat: next.at[1], lon: next.at[0] }))}先、${next.text}`
     : "このまま目的地へ進む";
@@ -1147,8 +1384,14 @@ function startGuide(index: number): void {
   $("guide").hidden = false;
   $("guide-next").textContent = "現在地を確認しています…";
   $("guide-rest").textContent = "";
+  announced = "";
+  keepScreenOn();
+  watchCompass();
   watchId = navigator.geolocation.watchPosition(
-    ({ coords }) => updateGuide({ lat: coords.latitude, lon: coords.longitude }),
+    ({ coords }) => {
+      updateGuide({ lat: coords.latitude, lon: coords.longitude }, coords.accuracy);
+      if (coords.heading !== null && coords.heading !== undefined && (coords.speed ?? 0) > 0.5) setHeading(coords.heading);
+    },
     (error) => {
       // 立ち止まって更新が途切れただけでは案内を止めない。
       if (error.code !== error.PERMISSION_DENIED) return;
@@ -1164,6 +1407,10 @@ function stopGuide(): void {
   watchId = null;
   document.body.classList.remove("guiding");
   $("guide").hidden = true;
+  stopCompass();
+  wakeLock?.release();
+  wakeLock = null;
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
 }
 
 function accidentLine(i: number): string {
@@ -1175,11 +1422,12 @@ function accidentLine(i: number): string {
   return `${year}年${month}月 ${a.hour[i]}時台 ${who}（${harm}）`;
 }
 
-function showAccidents(route: Route): void {
+/** 事故の点は、一覧を開いている間だけ地図に出す。 */
+function showAccidents(route: Route, visible: boolean): void {
   const a = accidents.data;
   (map.getSource("accidents") as GeoJSONSource).setData({
     type: "FeatureCollection",
-    features: route.accidents.map((i) => ({
+    features: (visible ? route.accidents : []).map((i) => ({
       type: "Feature",
       properties: { ped: a.ped[i], dead: a.dead[i] },
       geometry: { type: "Point", coordinates: [a.lon[i], a.lat[i]] },
@@ -1192,6 +1440,7 @@ function accidentDetail(route: Route): HTMLElement {
   const list = route.accidents;
   const count = (test: (i: number) => boolean) => list.filter(test).length;
   const wrap = el("details", "detail");
+  wrap.addEventListener("toggle", () => showAccidents(route, wrap.open));
   wrap.append(el("summary", "", `この経路の近くの事故 ${list.length}件`));
   wrap.append(
     el(
@@ -1244,6 +1493,8 @@ function urlForState(): string {
     q.set("to", coords(state.to));
     q.set("fromName", label(state.from));
     q.set("toName", label(state.to));
+    const stops = state.stops.filter((stop): stop is Place => stop !== null);
+    if (stops.length) q.set("via", stops.map((stop) => `${coords(stop)},${label(stop)}`).join("|"));
     q.set("period", state.period);
   } else if (state.mode === "directions") {
     q.set("mode", "directions");
@@ -1284,6 +1535,15 @@ function applyUrl(): void {
   state.picked = null;
   qInput.value = "";
   clearGenre();
+  state.stops = (q.get("via") ?? "")
+    .split("|")
+    .filter(Boolean)
+    .map((text) => {
+      const [lat, lon, ...name] = text.split(",");
+      return { lat: Number(lat), lon: Number(lon), name: name.join(",") };
+    })
+    .filter((stop) => Number.isFinite(stop.lat) && Number.isFinite(stop.lon));
+  renderStops();
   if (from && to) {
     openDirections({
       from: { ...from, name: q.get("fromName") || "共有された地点" },
@@ -1353,9 +1613,58 @@ $("guide-stop").addEventListener("click", stopGuide);
 window.addEventListener("popstate", applyUrl);
 $("swap").addEventListener("click", () => {
   const { from, to } = state;
+  state.stops.reverse();
+  renderStops();
   setEnd("from", to, false);
   setEnd("to", from);
 });
+$("add-stop").addEventListener("click", () => {
+  state.stops.push(null);
+  renderStops();
+  $("stops").querySelector<HTMLInputElement>(".stop-row:last-child input")?.focus();
+});
+$("guide-voice").addEventListener("click", () => {
+  voiceOn = !voiceOn;
+  $("guide-voice").setAttribute("aria-pressed", String(voiceOn));
+  $("guide-voice").textContent = voiceOn ? "音声 オン" : "音声 オフ";
+  if (voiceOn) speak("音声案内をオンにしました");
+  else speechSynthesis?.cancel();
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && watchId !== null) keepScreenOn();
+});
+
+/* ---- スマートフォンのシート ---- */
+
+const SHEET_STOPS = [0.2, 0.44, 0.82];
+
+/** シートの高さを、つまみのドラッグで3段階に切り替える。 */
+function bindGrip(): void {
+  const grip = $("grip");
+  let startY = 0;
+  let startH = 0;
+  let moved = false;
+  const setHeight = (px: number) => sheet.style.setProperty("--sheet-h", `${px}px`);
+  grip.addEventListener("pointerdown", (e) => {
+    grip.setPointerCapture(e.pointerId);
+    startY = e.clientY;
+    startH = sheet.getBoundingClientRect().height;
+    moved = false;
+  });
+  grip.addEventListener("pointermove", (e) => {
+    if (!grip.hasPointerCapture(e.pointerId)) return;
+    if (Math.abs(e.clientY - startY) > 4) moved = true;
+    setHeight(Math.max(60, startH + startY - e.clientY));
+  });
+  grip.addEventListener("pointerup", () => {
+    const now = sheet.getBoundingClientRect().height / window.innerHeight;
+    const nearest = SHEET_STOPS.reduce((a, b) => (Math.abs(b - now) < Math.abs(a - now) ? b : a));
+    const index = SHEET_STOPS.indexOf(nearest);
+    const target = moved ? nearest : SHEET_STOPS[(index + 1) % SHEET_STOPS.length];
+    setHeight(target * window.innerHeight);
+  });
+}
+bindGrip();
 $("locate").addEventListener("click", async () => {
   const me = await locateMe();
   if (me) map.flyTo({ center: [me.lon, me.lat], zoom: 16, padding: mapPadding() });
@@ -1380,9 +1689,11 @@ Promise.all([loadData(), new Promise<void>((resolve) => map.on("load", () => res
     addLayers();
     ui.inert = false;
     locateButton.disabled = false;
+    $("loading").hidden = true;
     applyUrl();
   })
   .catch((err) => {
     console.error(err);
+    $("loading").hidden = true;
     toast("データの読み込みに失敗しました。再読み込みしてください。");
   });

@@ -31,6 +31,10 @@ export type Route = {
   minutes: number;
   /** 上りの合計(m) */
   climb: number;
+  /** 下りの合計(m) */
+  descent: number;
+  /** [出発からの距離(m), 出発地からの高さ(m)] */
+  profile: [number, number][];
   steps: Step[];
   /** 安全度の目安。評価できない道が多い時は null */
   safety: number | null;
@@ -97,7 +101,7 @@ export function findRoutes(
       ...edgeLegs(g, edges, path.from, names),
       { pts: tail, metres: tailM, name: names[g.nameId[to.edge]] ?? "" },
     ];
-    const { climb, steps, via } = walkThrough(legs);
+    const { climb, descent, profile, steps, via } = walkThrough(legs);
     const measure = (mask: number) => edges.reduce((sum, e) => sum + (g.flags[e] & mask ? g.length[e] : 0), 0);
     const perKm = edges.reduce((sum, e) => sum + risk[e], 0) / (Math.max(onRoads, 1) / 1000);
     found.push({
@@ -107,6 +111,8 @@ export function findRoutes(
       metres: total,
       minutes: minutesFor(total, climb),
       climb,
+      descent,
+      profile,
       steps,
       safety: measure(REMOTE | OUTSIDE) > total * MAX_UNKNOWN ? null : Math.round(100 / (1 + perKm / reference)),
       remoteMetres: measure(REMOTE),
@@ -156,7 +162,7 @@ function compass(deg: number): string {
 }
 
 /** 経路を歩く時の1区間 */
-type Leg = { pts: [number, number][]; metres: number; name: string; climb?: number };
+type Leg = { pts: [number, number][]; metres: number; name: string; climb?: number; descent?: number };
 
 function lengthOf(coords: [number, number][]): number {
   let total = 0;
@@ -171,8 +177,15 @@ function lengthOf(coords: [number, number][]): number {
 function edgeLegs(g: Graph, edges: number[], from: number, names: string[]): Leg[] {
   let node = from;
   return edges.map((e) => {
-    const leg = { pts: g.edgeCoords(e, node), metres: g.length[e], name: names[g.nameId[e]] ?? "", climb: g.climb(e, node) };
-    node = g.edgeU[e] === node ? g.edgeV[e] : g.edgeU[e];
+    const next = g.edgeU[e] === node ? g.edgeV[e] : g.edgeU[e];
+    const leg = {
+      pts: g.edgeCoords(e, node),
+      metres: g.length[e],
+      name: names[g.nameId[e]] ?? "",
+      climb: g.climb(e, node),
+      descent: g.climb(e, next),
+    };
+    node = next;
     return leg;
   });
 }
@@ -181,7 +194,7 @@ function edgeLegs(g: Graph, edges: number[], from: number, names: string[]): Leg
 function alongOneEdge(g: Graph, from: Anchor, to: Anchor, names: string[], acc: AccidentIndex): Route {
   const coords = g.between(from, to);
   const total = lengthOf(coords);
-  const { steps, via } = walkThrough([{ pts: coords, metres: total, name: names[g.nameId[from.edge]] ?? "" }]);
+  const { steps, via, profile } = walkThrough([{ pts: coords, metres: total, name: names[g.nameId[from.edge]] ?? "" }]);
   const remote = g.flags[from.edge] & REMOTE;
   return {
     label: "おすすめ",
@@ -190,6 +203,8 @@ function alongOneEdge(g: Graph, from: Anchor, to: Anchor, names: string[], acc: 
     metres: total,
     minutes: minutesFor(total, 0),
     climb: 0,
+    descent: 0,
+    profile,
     steps,
     safety: null,
     remoteMetres: remote ? total : 0,
@@ -199,14 +214,26 @@ function alongOneEdge(g: Graph, from: Anchor, to: Anchor, names: string[], acc: 
 }
 
 /** 区間の列をたどり、上りの合計と曲がる場所ごとの案内を作る。 */
-function walkThrough(legs: Leg[]): { climb: number; steps: Step[]; via: string } {
+function walkThrough(legs: Leg[]): {
+  climb: number;
+  descent: number;
+  profile: [number, number][];
+  steps: Step[];
+  via: string;
+} {
   let climb = 0;
+  let descent = 0;
+  let walked = 0;
+  const profile: [number, number][] = [[0, 0]];
   let heading: number | null = null;
   const steps: (Step & { road: string })[] = [];
   const byRoad = new Map<string, number>();
   for (const leg of legs) {
     if (leg.metres < 1 || leg.pts.length < 2) continue;
     climb += leg.climb ?? 0;
+    descent += leg.descent ?? 0;
+    walked += leg.metres;
+    profile.push([walked, climb - descent]);
     const pts = leg.pts;
     const road = displayName(leg.name);
     if (road) byRoad.set(road, (byRoad.get(road) ?? 0) + leg.metres);
@@ -236,9 +263,40 @@ function walkThrough(legs: Leg[]): { climb: number; steps: Step[]; via: string }
   const via = [...byRoad].reduce((a, b) => (b[1] > a[1] ? b : a), ["", 0] as [string, number])[0];
   return {
     climb: Math.round(climb),
+    descent: Math.round(descent),
+    profile,
     steps: steps.map(({ text, metres, at, road }) => ({ text: road ? `${text}（${road}）` : text, metres, at })),
     via,
   };
+}
+
+/** 経由地で区切った経路を、1本の経路につなぐ。 */
+export function joinRoutes(parts: Route[], stopNames: string[]): Route {
+  const head = parts[0];
+  const route: Route = { ...head, label: "経由地あり", accidents: [...head.accidents], steps: [...head.steps], coords: [...head.coords] };
+  let longest = head;
+  parts.slice(1).forEach((part, i) => {
+    const at = part.coords[0];
+    const shift = route.metres;
+    const rise = route.profile[route.profile.length - 1][1];
+    route.steps.push({ text: `経由地「${stopNames[i]}」`, metres: 0, at }, ...part.steps);
+    route.coords.push(...part.coords.slice(1));
+    route.edges = [...route.edges, ...part.edges];
+    route.profile = [...route.profile, ...part.profile.map(([d, h]): [number, number] => [d + shift, h + rise])];
+    route.metres += part.metres;
+    route.climb += part.climb;
+    route.descent += part.descent;
+    route.remoteMetres += part.remoteMetres;
+    route.accidents.push(...part.accidents);
+    if (part.metres > longest.metres) longest = part;
+  });
+  const known = parts.every((part) => part.safety !== null);
+  const weighted = parts.reduce((sum, part) => sum + (part.safety ?? 0) * part.metres, 0);
+  route.safety = known ? Math.round(weighted / route.metres) : null;
+  route.via = longest.via;
+  route.accidents = [...new Set(route.accidents)];
+  route.minutes = minutesFor(route.metres, route.climb);
+  return route;
 }
 
 function overlap(g: Graph, a: number[], b: number[]): number {

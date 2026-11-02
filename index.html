@@ -30,15 +30,18 @@
         </div>
         <div class="dir-fields">
           <div class="field"><input id="from" placeholder="出発地（現在地も選べます）" aria-label="出発地" /></div>
+          <div id="stops" class="stops"></div>
           <div class="field"><input id="to" placeholder="目的地" aria-label="目的地" /></div>
           <button id="swap" type="button" class="icon plain swap" aria-label="出発地と目的地を入れ替える">⇅</button>
         </div>
+        <button id="add-stop" type="button" class="add-stop">＋ 経由地を追加</button>
         <div class="period" role="group" aria-label="歩く時間帯">
           <button type="button" data-period="day">昼に歩く</button>
           <button type="button" data-period="night">夜に歩く</button>
         </div>
       </form>
 
+      <div id="grip" class="grip" role="button" aria-label="パネルの高さを変える"></div>
       <section id="sheet" class="card sheet" hidden aria-live="polite"></section>
     </div>
 
@@ -56,9 +59,13 @@
     <section id="guide" class="card guide" hidden aria-live="polite">
       <p id="guide-next" class="next"></p>
       <p id="guide-rest" class="rest"></p>
-      <button id="guide-stop" type="button" class="secondary">案内を終わる</button>
+      <div class="guide-actions">
+        <button id="guide-stop" type="button" class="secondary">案内を終わる</button>
+        <button id="guide-voice" type="button" class="secondary" aria-pressed="true">音声 オン</button>
+      </div>
     </section>
     <p id="toast" class="toast" role="status" hidden></p>
+    <p id="loading" class="toast" role="status">地図を読み込んでいます…</p>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
