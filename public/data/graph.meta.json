@@ -5,9 +5,11 @@
     34.95,
     135.38
   ],
-  "nodes": 93760,
-  "edges": 132673,
-  "km": 7184,
-  "riskPerKmDay": 12.9554,
-  "riskPerKmNight": 8.6386
+  "nodes": 142230,
+  "edges": 200104,
+  "km": 11953,
+  "innerKm": 7167,
+  "remoteKm": 2498,
+  "riskPerKmDay": 12.9858,
+  "riskPerKmNight": 8.6589
 }

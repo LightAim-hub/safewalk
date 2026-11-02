@@ -1,4 +1,4 @@
-import { Graph, metres, type LatLon } from "./graph";
+import { Graph, metres, OUTSIDE, REMOTE, type Anchor, type LatLon } from "./graph";
 
 export type Accidents = {
   lat: number[];
@@ -32,15 +32,20 @@ export type Route = {
   /** 上りの合計(m) */
   climb: number;
   steps: Step[];
-  safety: number;
+  /** 安全度の目安。評価できない道が多い時は null */
+  safety: number | null;
+  /** 人家から離れた道の長さ(m) */
+  remoteMetres: number;
+  /** いちばん長く通る道の名前 */
+  via: string;
   /** 経路から 30m 以内の事故の添字 */
   accidents: number[];
 };
 
 /** 平地の歩く速さ。Google マップの徒歩経路4区間の実測(分速71〜73m)に合わせた。 */
 export const WALK_M_PER_MIN = 72;
-/** 上り 10m を 1 分として足す(ナイスミスの目安) */
-const MINUTES_PER_CLIMB_M = 0.1;
+/** 上り 20m を 1 分として足す。三宮→有馬で Google の所要時間に合わせた(1区間の比較)。 */
+const MINUTES_PER_CLIMB_M = 0.05;
 /** 曲がり角 1 つを、安全重視の時に何 m の遠回りとみなすか。路地のジグザグを抑える。 */
 const TURN_M = 25;
 const NEAR_M = 30;
@@ -49,12 +54,16 @@ const METRES_PER_RISK = 30;
 const SAFETY_WEIGHTS = [0, 1, 3, 8];
 const MAX_DETOUR = 1.7;
 const MAX_OVERLAP = 0.85;
+/** 夜に人家から離れた道を、何倍の長さとして扱うか。他に道があれば通らない。 */
+const REMOTE_NIGHT = 4;
+/** 評価できない道がこの割合を超える経路は、安全度を「不明」にする。 */
+const MAX_UNKNOWN = 0.3;
 
 /** 安全を重く見る度合いを変えて経路を出し、似た経路を除く。 */
 export function findRoutes(
   g: Graph,
-  from: number,
-  to: number,
+  from: Anchor,
+  to: Anchor,
   period: Period,
   acc: AccidentIndex,
   meta: Meta,
@@ -63,23 +72,34 @@ export function findRoutes(
   const risk = period === "night" ? g.riskNight : g.riskDay;
   const reference = period === "night" ? meta.riskPerKmNight : meta.riskPerKmDay;
   const found: Route[] = [];
+  const nightRemote = period === "night" ? REMOTE_NIGHT : 1;
+  if (from.edge === to.edge) return [alongOneEdge(g, from, to, names, acc)];
 
   for (const weight of SAFETY_WEIGHTS) {
     const climbM = WALK_M_PER_MIN * MINUTES_PER_CLIMB_M;
-    const edges = g.shortestPath(
-      from,
-      to,
-      (e, node) =>
-        g.length[e] + climbM * g.climb(e, node) + weight * METRES_PER_RISK * risk[e] + (weight > 0 ? TURN_M : 0),
-    );
-    if (!edges) return [];
-    const total = edges.reduce((sum, e) => sum + g.length[e], 0);
+    const path = g.shortestPath(from, to, (e, node) => {
+      const length = g.length[e] * (g.flags[e] & REMOTE ? nightRemote : 1);
+      return length + climbM * g.climb(e, node) + weight * METRES_PER_RISK * risk[e] + (weight > 0 ? TURN_M : 0);
+    });
+    if (!path) return [];
+    const { edges } = path;
+    const lead = g.toEnd(from, path.from);
+    const tail = g.toEnd(to, path.to).reverse();
+    const leadM = lengthOf(lead);
+    const tailM = lengthOf(tail);
+    const onRoads = edges.reduce((sum, e) => sum + g.length[e], 0);
+    const total = onRoads + leadM + tailM;
     if (found.length && total > found[0].metres * MAX_DETOUR) continue;
     if (found.some((r) => overlap(g, r.edges, edges) > MAX_OVERLAP)) continue;
-    const riskSum = edges.reduce((sum, e) => sum + risk[e], 0);
-    const perKm = riskSum / (total / 1000);
-    const coords = g.pathCoords(edges, from);
-    const { climb, steps } = walkThrough(g, edges, from, names);
+    const coords = [...lead, ...g.pathCoords(edges, path.from).slice(1), ...tail.slice(1)];
+    const legs: Leg[] = [
+      { pts: lead, metres: leadM, name: names[g.nameId[from.edge]] ?? "" },
+      ...edgeLegs(g, edges, path.from, names),
+      { pts: tail, metres: tailM, name: names[g.nameId[to.edge]] ?? "" },
+    ];
+    const { climb, steps, via } = walkThrough(legs);
+    const measure = (mask: number) => edges.reduce((sum, e) => sum + (g.flags[e] & mask ? g.length[e] : 0), 0);
+    const perKm = edges.reduce((sum, e) => sum + risk[e], 0) / (Math.max(onRoads, 1) / 1000);
     found.push({
       label: "",
       edges,
@@ -88,14 +108,17 @@ export function findRoutes(
       minutes: minutesFor(total, climb),
       climb,
       steps,
-      safety: Math.round(100 / (1 + perKm / reference)),
+      safety: measure(REMOTE | OUTSIDE) > total * MAX_UNKNOWN ? null : Math.round(100 / (1 + perKm / reference)),
+      remoteMetres: measure(REMOTE),
+      via,
       accidents: acc.near(coords),
     });
   }
 
-  const safest = found.reduce((a, b) => (b.safety > a.safety ? b : a), found[0]);
+  const known = found.filter((r) => r.safety !== null);
+  const safest = known.reduce<Route | null>((a, b) => (!a || b.safety! > a.safety! ? b : a), null);
   found.forEach((r, i) => {
-    r.label = i === 0 ? "最短" : r === safest ? "最も安全" : "バランス";
+    r.label = i === 0 ? "最短" : r === safest ? "最も安全" : "別の道";
   });
   if (found.length === 1) found[0].label = "おすすめ";
   return found;
@@ -106,6 +129,7 @@ export function minutesFor(metres: number, climb: number): number {
 }
 
 const STEP_MIN_M = 25;
+const RENAME_MIN_M = 100;
 
 /** 「葺合南１３４号線」のような市道の管理番号は、案内に出しても分からないので省く。 */
 function displayName(name: string): string {
@@ -131,16 +155,61 @@ function compass(deg: number): string {
   return names[Math.round(((deg + 360) % 360) / 45) % 8];
 }
 
-/** 辺の列をたどり、上りの合計と曲がる場所ごとの案内を作る。 */
-function walkThrough(g: Graph, edges: number[], from: number, names: string[]): { climb: number; steps: Step[] } {
+/** 経路を歩く時の1区間 */
+type Leg = { pts: [number, number][]; metres: number; name: string; climb?: number };
+
+function lengthOf(coords: [number, number][]): number {
+  let total = 0;
+  for (let i = 0; i + 1 < coords.length; i++) {
+    const [lon1, lat1] = coords[i];
+    const [lon2, lat2] = coords[i + 1];
+    total += metres({ lat: lat1, lon: lon1 }, { lat: lat2, lon: lon2 });
+  }
+  return total;
+}
+
+function edgeLegs(g: Graph, edges: number[], from: number, names: string[]): Leg[] {
   let node = from;
+  return edges.map((e) => {
+    const leg = { pts: g.edgeCoords(e, node), metres: g.length[e], name: names[g.nameId[e]] ?? "", climb: g.climb(e, node) };
+    node = g.edgeU[e] === node ? g.edgeV[e] : g.edgeU[e];
+    return leg;
+  });
+}
+
+/** 同じ道の上の2点を結ぶ経路 */
+function alongOneEdge(g: Graph, from: Anchor, to: Anchor, names: string[], acc: AccidentIndex): Route {
+  const coords = g.between(from, to);
+  const total = lengthOf(coords);
+  const { steps, via } = walkThrough([{ pts: coords, metres: total, name: names[g.nameId[from.edge]] ?? "" }]);
+  const remote = g.flags[from.edge] & REMOTE;
+  return {
+    label: "おすすめ",
+    edges: [],
+    coords,
+    metres: total,
+    minutes: minutesFor(total, 0),
+    climb: 0,
+    steps,
+    safety: null,
+    remoteMetres: remote ? total : 0,
+    via,
+    accidents: acc.near(coords),
+  };
+}
+
+/** 区間の列をたどり、上りの合計と曲がる場所ごとの案内を作る。 */
+function walkThrough(legs: Leg[]): { climb: number; steps: Step[]; via: string } {
   let climb = 0;
   let heading: number | null = null;
   const steps: (Step & { road: string })[] = [];
-  for (const e of edges) {
-    climb += g.climb(e, node);
-    const pts = g.edgeCoords(e, node);
-    const road = displayName(names[g.nameId[e]] ?? "");
+  const byRoad = new Map<string, number>();
+  for (const leg of legs) {
+    if (leg.metres < 1 || leg.pts.length < 2) continue;
+    climb += leg.climb ?? 0;
+    const pts = leg.pts;
+    const road = displayName(leg.name);
+    if (road) byRoad.set(road, (byRoad.get(road) ?? 0) + leg.metres);
     const start = bearing(pts[0], pts[1]);
     const last = steps[steps.length - 1];
     if (!last) {
@@ -153,14 +222,22 @@ function walkThrough(g: Graph, edges: number[], from: number, names: string[]): 
       else if (renamed && last.metres >= STEP_MIN_M) steps.push({ text: "道なりに進む", metres: 0, at: pts[0], road });
     }
     const current = steps[steps.length - 1];
-    current.metres += g.length[e];
+    current.metres += leg.metres;
     if (!current.road) current.road = road;
     heading = bearing(pts[pts.length - 2], pts[pts.length - 1]);
-    node = g.edgeU[e] === node ? g.edgeV[e] : g.edgeU[e];
   }
+  // 短い橋などで道路名が変わるだけの区間は、案内に出さず前の手順へまとめる。
+  for (let i = steps.length - 1; i > 0; i--) {
+    if (steps[i].text === "道なりに進む" && steps[i].metres < RENAME_MIN_M) {
+      steps[i - 1].metres += steps[i].metres;
+      steps.splice(i, 1);
+    }
+  }
+  const via = [...byRoad].reduce((a, b) => (b[1] > a[1] ? b : a), ["", 0] as [string, number])[0];
   return {
     climb: Math.round(climb),
     steps: steps.map(({ text, metres, at, road }) => ({ text: road ? `${text}（${road}）` : text, metres, at })),
+    via,
   };
 }
 
@@ -172,7 +249,7 @@ function overlap(g: Graph, a: number[], b: number[]): number {
     total += g.length[e];
     if (set.has(e)) shared += g.length[e];
   }
-  return shared / total;
+  return total ? shared / total : 1;
 }
 
 /** 事故を格子に入れ、経路の近くの事故をすぐ引けるようにする。 */

@@ -6,7 +6,7 @@ import maplibregl, {
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./style.css";
-import { Graph, metres, type LatLon } from "./graph";
+import { Graph, metres, type Anchor, type LatLon } from "./graph";
 import { AccidentIndex, findRoutes, minutesFor, type Accidents, type Meta, type Period, type Route } from "./routes";
 
 type Place = LatLon & { name: string; kind?: string; ward?: string };
@@ -43,6 +43,7 @@ let accidents: AccidentIndex;
 let meta: Meta;
 let places: IndexedPlace[] = [];
 let names: string[] = [];
+let kobeRings: [number, number][][] = [];
 
 const map: MapLibre = new maplibregl.Map({
   container: "map",
@@ -69,7 +70,8 @@ function toast(text: string): void {
   toastTimer = window.setTimeout(() => (toastEl.hidden = true), 3500);
 }
 
-function scoreColor(score: number): string {
+function scoreColor(score: number | null): string {
+  if (score === null) return COLORS.other;
   return score >= 70 ? COLORS.good : score >= 50 ? COLORS.mid : COLORS.bad;
 }
 
@@ -81,13 +83,16 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, className = "", text 
 }
 
 async function loadData(): Promise<void> {
-  const [bin, acc, m, rows, roadNames] = await Promise.all([
+  const [bin, acc, m, rows, roadNames, kobe] = await Promise.all([
     fetch("/data/graph.bin").then((r) => r.arrayBuffer()),
     fetch("/data/accidents.json").then((r) => r.json() as Promise<Accidents>),
     fetch("/data/graph.meta.json").then((r) => r.json() as Promise<Meta>),
     fetch("/data/places.json").then((r) => r.json() as Promise<PlaceRow[]>),
     fetch("/data/names.json").then((r) => r.json() as Promise<string[]>),
+    fetch("/data/kobe.geojson").then((r) => r.json() as Promise<GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>>),
   ]);
+  const shape = kobe.geometry;
+  kobeRings = (shape.type === "Polygon" ? [shape.coordinates] : shape.coordinates).flat() as [number, number][][];
   graph = new Graph(bin);
   accidents = new AccidentIndex(acc);
   meta = m;
@@ -175,12 +180,23 @@ function emptyCollection(): GeoJSON.FeatureCollection {
   return { type: "FeatureCollection", features: [] };
 }
 
-/** 歩ける道の近くなら、その交差点の番号を返す。 */
-function snap(p: LatLon): number | null {
-  const node = graph.nearestNode(p);
-  if (node === null) return null;
-  const at = { lat: graph.nodeLat[node] / 1e6, lon: graph.nodeLon[node] / 1e6 };
-  return metres(p, at) <= MAX_SNAP_M ? node : null;
+function inKobe(p: LatLon): boolean {
+  let inside = false;
+  for (const ring of kobeRings) {
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [x1, y1] = ring[i];
+      const [x2, y2] = ring[j];
+      if (y1 > p.lat !== y2 > p.lat && p.lon < ((x2 - x1) * (p.lat - y1)) / (y2 - y1) + x1) inside = !inside;
+    }
+  }
+  return inside;
+}
+
+/** 神戸市内で歩ける道の近くなら、道の上の点を返す。 */
+function snap(p: LatLon): Anchor | null {
+  if (!inKobe(p)) return null;
+  const road = graph.nearestRoad(p);
+  return road && road.metres <= MAX_SNAP_M ? road : null;
 }
 
 const WARD_BY_CODE: Record<string, string> = {
@@ -526,12 +542,16 @@ function search(): void {
   const start = snap(state.from!);
   const goal = snap(state.to!);
   if (start === null || goal === null) return clearRoutes("出発地か目的地の近くに、神戸市内の歩ける道がありません。");
-  if (start === goal) return clearRoutes("出発地と目的地が近すぎるため、経路を出せません。");
+  const [sx, sy] = start.point;
+  const [gx, gy] = goal.point;
+  if (metres({ lat: sy, lon: sx }, { lat: gy, lon: gx }) < 5) {
+    return clearRoutes("出発地と目的地が近すぎるため、経路を出せません。");
+  }
   state.routes = findRoutes(graph, start, goal, state.period, accidents, meta, names);
   if (!state.routes.length) return clearRoutes("歩いて行ける経路が見つかりませんでした。");
   for (const route of state.routes) connectEnds(route, state.from!, state.to!);
   replaceUrl();
-  const best = state.routes.reduce((a, b, i, all) => (b.safety > all[a].safety ? i : a), 0);
+  const best = state.routes.reduce((a, b, i, all) => ((b.safety ?? -1) > (all[a].safety ?? -1) ? i : a), 0);
   selectRoute(best);
   const all = state.routes.flatMap((r) => r.coords);
   const bounds = all.reduce((b, c) => b.extend(c), new maplibregl.LngLatBounds(all[0], all[0]));
@@ -600,13 +620,14 @@ function routeList(): HTMLOListElement {
       button.type = "button";
       button.toggleAttribute("aria-current", i === state.selected);
       button.addEventListener("click", () => selectRoute(i));
-      const safety = el("span", "safety", `${route.safety}%`);
+      const safety = el("span", "safety", route.safety === null ? "不明" : `${route.safety}%`);
       safety.style.color = scoreColor(route.safety);
       safety.append(el("small", "", "安全度の目安"));
       button.append(
         el("span", "time", formatMinutes(route.minutes)),
         safety,
         el("span", "facts", `${route.label}・${(route.metres / 1000).toFixed(1)}km・上り${route.climb}m`),
+        ...(route.via ? [el("span", "via", `${route.via} 経由`)] : []),
       );
       li.append(button);
       return li;
@@ -633,12 +654,34 @@ function selectRoute(index: number): void {
   start.addEventListener("click", () => startGuide(index));
   sheet.replaceChildren(
     routeList(),
+    ...routeWarnings(route),
     start,
     stepList(route),
     accidentDetail(route),
     el("p", "note", "安全度は公開データから計算した目安で、その道の安全を保証するものではありません。"),
   );
   sheet.hidden = false;
+}
+
+/** 徒歩に向かない経路の注意。基準の距離と上りは仮の値。 */
+const LONG_WALK_M = 8000;
+const BIG_CLIMB_M = 300;
+const NOTE_REMOTE_M = 500;
+
+function routeWarnings(route: Route): HTMLElement[] {
+  const lines: string[] = [];
+  if (route.metres >= LONG_WALK_M) lines.push(`徒歩では長い距離です（${(route.metres / 1000).toFixed(1)}km）。`);
+  if (route.climb >= BIG_CLIMB_M) lines.push(`上りの大きい経路です（上り${route.climb}m）。`);
+  if (route.remoteMetres >= NOTE_REMOTE_M) {
+    const km = (route.remoteMetres / 1000).toFixed(1);
+    lines.push(
+      state.period === "night"
+        ? `人家から離れた道を${km}km通ります。夜は避けることをおすすめします。`
+        : `人家から離れた道を${km}km通ります。`,
+    );
+  }
+  if (route.safety === null) lines.push("事故データで評価できない道が多いため、安全度は不明です。");
+  return lines.map((line) => el("p", "warn", line));
 }
 
 function formatMetres(m: number): string {

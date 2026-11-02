@@ -8,11 +8,13 @@
   Float32 riskDay[nEdges], riskNight[nEdges]
   Float32 climbForward[nEdges], climbBackward[nEdges]  (m。U→V と V→U の上り)
   Uint32  nameId[nEdges]                     (public/data/names.json の添字)
+  Uint32  flags[nEdges]                      (1=人家から離れた道 2=神戸市の外)
   Uint32  geomStart[nEdges + 1]
   Int32   geomLat[nCoords], geomLon[nCoords] (度 x 1e6)
 """
 import json
 import math
+import re
 import struct
 from collections import defaultdict
 from pathlib import Path
@@ -25,6 +27,9 @@ from area import BBOX, kobe
 from dem import Elevation
 
 KOBE = kobe()
+# 市境をまたぐ道を歩けるよう、経路網は市の外へ約6km広げる。
+AREA = KOBE.buffer(0.06)
+shapely.prepare(AREA)
 PBF = "data/raw/kansai.osm.pbf"
 ACC = Path("public/data/accidents.json")
 OUT = Path("public/data/graph.bin")
@@ -39,20 +44,63 @@ WALKABLE = {
 # 山道は徒歩ナビの経路に出さない。path と track は、舗装か街灯の記録がある時だけ通す。
 TRAILS = {"path", "track"}
 PAVED = {"asphalt", "concrete", "paved", "paving_stones", "sett", "concrete:plates", "concrete:lanes"}
+# 建物と車道の両方から離れた徒歩道は、タグが footway でも山道として扱う。
+FOOT_ONLY = {"footway", "path", "track", "steps"}
+ROADS = {
+    "residential", "living_street", "unclassified", "tertiary", "tertiary_link", "secondary",
+    "secondary_link", "primary", "primary_link", "trunk", "trunk_link",
+}
+TRAIL_NAME = re.compile(r"尾根|登山|縦走|ハイキング|トレイル|自然歩道|山道$")
+NEAR_CELL_M = 50.0
+NEAR_CELLS = 2  # 周囲約100mを見る
+REMOTE = 1
+OUTSIDE = 2
 SAMPLE_M = 30.0  # 標高を見る間隔
 CLIMB_STEP_M = 2.0  # これ未満の標高差は標高データの揺れとして数えない
 NEAR_M = 30.0  # 事故をこの距離まで道に結び付ける
 SIGMA_M = 15.0  # 距離による減衰
 
 
+def to_cell(lat, lon):
+    return int(lon * 91000 / NEAR_CELL_M), int(lat * 111000 / NEAR_CELL_M)
+
+
+def is_near(cells, lat, lon):
+    x, y = to_cell(lat, lon)
+    span = range(-NEAR_CELLS, NEAR_CELLS + 1)
+    return any((x + i, y + j) in cells for i in span for j in span)
+
+
+def metres(lat1, lon1, lat2, lon2):
+    x = math.radians(lon2 - lon1) * math.cos(math.radians((lat1 + lat2) / 2))
+    y = math.radians(lat2 - lat1)
+    return 6371000 * math.hypot(x, y)
+
+
 class Ways(osmium.SimpleHandler):
     def __init__(self):
         super().__init__()
         self.ways = []
+        self.roads = set()
+        self.buildings = set()
+
+    def note_surroundings(self, w, hw):
+        s, west, n, e = BBOX
+        pts = [(nd.location.lat, nd.location.lon) for nd in w.nodes if nd.location.valid()]
+        if not pts or not s <= pts[0][0] <= n or not west <= pts[0][1] <= e:
+            return
+        if "building" in w.tags:
+            self.buildings.add(to_cell(*pts[0]))
+        elif hw in ROADS:
+            for (la1, lo1), (la2, lo2) in zip(pts, pts[1:]):
+                steps = max(1, int(metres(la1, lo1, la2, lo2) / NEAR_CELL_M))
+                for t in range(steps + 1):
+                    self.roads.add(to_cell(la1 + (la2 - la1) * t / steps, lo1 + (lo2 - lo1) * t / steps))
 
     def way(self, w):
         tags = w.tags
         hw = tags.get("highway")
+        self.note_surroundings(w, hw)
         if hw is None:
             return
         foot = tags.get("foot", "")
@@ -80,16 +128,29 @@ class Ways(osmium.SimpleHandler):
             pts.append((nd.ref, nd.location.lat, nd.location.lon))
         if len(pts) < 2 or not any(s <= p[1] <= n and west <= p[2] <= e for p in pts):
             return
-        # 市内の点を1つでも持つ道を残す。市境の道が途中で切れないようにするため。
-        if shapely.contains_xy(KOBE, [p[2] for p in pts], [p[1] for p in pts]).any():
+        lons, lats = [p[2] for p in pts], [p[1] for p in pts]
+        if shapely.contains_xy(AREA, lons, lats).any():
             flat = tags.get("bridge", "no") != "no" or tags.get("tunnel", "no") != "no"
-            self.ways.append((pts, tags.get("name") or tags.get("ref") or "", flat))
+            inside = bool(shapely.contains_xy(KOBE, lons, lats).any())
+            self.ways.append((pts, tags.get("name") or tags.get("ref") or "", flat, hw, inside))
 
 
-def metres(lat1, lon1, lat2, lon2):
-    x = math.radians(lon2 - lon1) * math.cos(math.radians((lat1 + lat2) / 2))
-    y = math.radians(lat2 - lat1)
-    return 6371000 * math.hypot(x, y)
+def drop_trails(handler):
+    """名前か周囲の様子から山道と判断した徒歩道を除く。"""
+    kept = []
+    dropped = 0.0
+    for way in handler.ways:
+        pts, name, _, hw, _ = way
+        if hw in FOOT_ONLY:
+            lonely = sum(
+                not is_near(handler.roads, p[1], p[2]) and not is_near(handler.buildings, p[1], p[2]) for p in pts
+            )
+            if TRAIL_NAME.search(name) or lonely * 2 > len(pts):
+                dropped += sum(metres(p[1], p[2], q[1], q[2]) for p, q in zip(pts, pts[1:]))
+                continue
+        kept.append(way)
+    print(f"trails dropped {dropped / 1000:.0f}km")
+    return kept
 
 
 class Edge(list):
@@ -97,32 +158,34 @@ class Edge(list):
 
     name = ""
     flat = False
+    inside = True
 
 
-def new_edge(points, name, flat):
+def new_edge(points, name, flat, inside):
     edge = Edge(points)
     edge.name = name
     edge.flat = flat
+    edge.inside = inside
     return edge
 
 
 def split_edges(ways):
     use = defaultdict(int)
-    for pts, _, _ in ways:
+    for pts, *_ in ways:
         for ref, _, _ in pts:
             use[ref] += 1
         use[pts[0][0]] += 1
         use[pts[-1][0]] += 1
     edges = []
-    for pts, name, flat in ways:
+    for pts, name, flat, _, inside in ways:
         cur = [pts[0]]
         for p in pts[1:]:
             cur.append(p)
             if use[p[0]] > 1:
-                edges.append(new_edge(cur, name, flat))
+                edges.append(new_edge(cur, name, flat, inside))
                 cur = [p]
         if len(cur) > 1:
-            edges.append(new_edge(cur, name, flat))
+            edges.append(new_edge(cur, name, flat, inside))
     return edges
 
 
@@ -229,11 +292,16 @@ def climbs(edges):
     return forward, backward
 
 
+def edge_flags(edge, buildings):
+    lonely = sum(not is_near(buildings, p[1], p[2]) for p in edge)
+    return (REMOTE if lonely * 2 > len(edge) else 0) | (0 if edge.inside else OUTSIDE)
+
+
 def main():
     h = Ways()
     h.apply_file(PBF, locations=True, idx="flex_mem")
     print("ways", len(h.ways))
-    edges = largest_component(split_edges(h.ways))
+    edges = largest_component(split_edges(drop_trails(h)))
     print("edges", len(edges))
 
     index = {}
@@ -253,6 +321,7 @@ def main():
     )
     day, night = attach_risk(edges)
     climb_f, climb_b = climbs(edges)
+    flags = np.array([edge_flags(e, h.buildings) for e in edges], dtype=np.uint32)
     names = {"": 0}
     name_id = np.array([names.setdefault(e.name, len(names)) for e in edges], dtype=np.uint32)
     NAMES.write_text(json.dumps(list(names), ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
@@ -265,17 +334,22 @@ def main():
     OUT.parent.mkdir(parents=True, exist_ok=True)
     with OUT.open("wb") as f:
         f.write(struct.pack("<III", len(index), len(edges), len(g_lat)))
-        for arr in (n_lat, n_lon, u, v, length, day, night, climb_f, climb_b, name_id, start, g_lat, g_lon):
+        for arr in (n_lat, n_lon, u, v, length, day, night, climb_f, climb_b, name_id, flags, start, g_lat, g_lon):
             f.write(arr.tobytes())
 
     km = float(length.sum()) / 1000
+    # 事故データは神戸市内だけなので、基準も市内の道で求める。
+    inner = (flags & OUTSIDE) == 0
+    inner_km = float(length[inner].sum()) / 1000
     meta = {
         "bbox": BBOX,
         "nodes": len(index),
         "edges": len(edges),
         "km": round(km),
-        "riskPerKmDay": round(float(day.sum()) / km, 4),
-        "riskPerKmNight": round(float(night.sum()) / km, 4),
+        "innerKm": round(inner_km),
+        "remoteKm": round(float(length[(flags & REMOTE) != 0].sum()) / 1000),
+        "riskPerKmDay": round(float(day[inner].sum()) / inner_km, 4),
+        "riskPerKmNight": round(float(night[inner].sum()) / inner_km, 4),
     }
     META.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     print(meta, f"{OUT.stat().st_size/1e6:.1f}MB")

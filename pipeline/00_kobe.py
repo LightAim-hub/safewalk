@@ -2,7 +2,7 @@
 
 出力:
   public/data/kobe.geojson  神戸市の行政界
-  public/data/places.json   [名前, 緯度, 経度, 種別, 読み, 区] の配列
+  public/data/places.json   [名前, 緯度, 経度, 種別, 読み, 区, 営業時間, 電話, サイト, 住所, 運営] の配列
 """
 import json
 from pathlib import Path
@@ -26,13 +26,20 @@ KINDS = {
         "police": "警察", "fire_station": "消防署", "community_centre": "公民館",
         "theatre": "劇場", "cinema": "映画館", "place_of_worship": "寺社", "post_office": "郵便局",
         "bank": "銀行", "restaurant": "飲食店", "cafe": "カフェ", "fast_food": "飲食店",
+        "pharmacy": "薬局", "atm": "ATM", "toilets": "トイレ",
     },
     "tourism": {"attraction": "名所", "museum": "博物館", "hotel": "宿泊", "zoo": "動物園", "viewpoint": "展望地"},
     "leisure": {"park": "公園", "stadium": "競技場", "sports_centre": "体育施設"},
-    "shop": {"mall": "商業施設", "department_store": "百貨店", "supermarket": "スーパー", "convenience": "コンビニ"},
+    "shop": {
+        "mall": "商業施設", "department_store": "百貨店", "supermarket": "スーパー", "convenience": "コンビニ",
+        "chemist": "薬局",
+    },
     "place": {"suburb": "地区", "neighbourhood": "地区", "quarter": "地区", "village": "地区"},
 }
 
+
+# 名前のない施設でも探せるよう、種別の呼び名を付ける。
+UNNAMED = {"トイレ": "公衆トイレ", "ATM": "ATM"}
 
 # 上の表に無いものも、名前が付いていれば検索に出す。
 GENERAL = {"shop": "店", "amenity": "施設", "tourism": "観光", "office": "事業所", "leisure": "施設", "historic": "史跡"}
@@ -49,6 +56,20 @@ def kind_of(tags) -> str | None:
     return None
 
 
+def details(tags) -> list[str]:
+    """場所の画面に出す情報。OpenStreetMap に記録がある時だけ入る。"""
+    address = tags.get("addr:full") or "".join(
+        tags.get(key, "") for key in ("addr:province", "addr:city", "addr:quarter", "addr:neighbourhood", "addr:block_number", "addr:housenumber")
+    )
+    return [
+        tags.get("opening_hours", ""),
+        tags.get("phone") or tags.get("contact:phone", ""),
+        tags.get("website") or tags.get("contact:website", ""),
+        address,
+        tags.get("operator", "") if tags.get("railway") else "",
+    ]
+
+
 class Reader(osmium.SimpleHandler):
     def __init__(self):
         super().__init__()
@@ -58,12 +79,12 @@ class Reader(osmium.SimpleHandler):
         self.places = []
 
     def add(self, tags, lat, lon):
-        name = tags.get("name:ja") or tags.get("name")
         kind = kind_of(tags)
+        name = tags.get("name:ja") or tags.get("name") or UNNAMED.get(kind)
         s, w, n, e = BBOX
         if name and kind and s <= lat <= n and w <= lon <= e:
             yomi = tags.get("name:ja-Hira") or tags.get("name:ja-Kana") or tags.get("name:ja_kana") or ""
-            self.places.append((name, round(lat, 6), round(lon, 6), kind, yomi))
+            self.places.append((name, round(lat, 6), round(lon, 6), kind, yomi, details(tags)))
 
     def node(self, n):
         if n.location.valid():
@@ -103,12 +124,12 @@ def main():
     kks = pykakasi.kakasi()
     seen = set()
     rows = []
-    for name, lat, lon, kind, yomi in r.places:
+    for name, lat, lon, kind, yomi, extra in r.places:
         key = (name, round(lat, 3), round(lon, 3))
         if key not in seen and shapely.contains_xy(r.boundary, lon, lat):
             seen.add(key)
             reading = yomi or "".join(part["hira"] for part in kks.convert(name))
-            rows.append([name, lat, lon, kind, reading, ""])
+            rows.append([name, lat, lon, kind, reading, "", *extra])
 
     # 他の市にも同じ名前の区があるので、神戸市の中にある区だけを使う。
     lons = np.array([row[2] for row in rows])

@@ -1,5 +1,24 @@
 export type LatLon = { lat: number; lon: number };
 
+/** 人家から離れた道 */
+export const REMOTE = 1;
+/** 神戸市の外の道。事故データがない。 */
+export const OUTSIDE = 2;
+
+/** 道の途中の地点。辺の両端までの距離を持つ。 */
+export type Anchor = {
+  edge: number;
+  /** 辺の点の列で、この地点の直前にある点の番号 */
+  index: number;
+  point: [number, number];
+  toU: number;
+  toV: number;
+  /** 元の地点から道までの距離(m) */
+  metres: number;
+};
+
+export type Path = { edges: number[]; from: number; to: number };
+
 /** pipeline/02_graph.py が書き出す graph.bin を読み、経路探索できる形にする。 */
 export class Graph {
   readonly nNodes: number;
@@ -14,12 +33,14 @@ export class Graph {
   readonly climbForward: Float32Array;
   readonly climbBackward: Float32Array;
   readonly nameId: Uint32Array;
+  readonly flags: Uint32Array;
   private readonly geomStart: Uint32Array;
   private readonly geomLat: Int32Array;
   private readonly geomLon: Int32Array;
   private readonly adjStart: Uint32Array;
   private readonly adjEdge: Uint32Array;
-  private readonly grid = new Map<string, number[]>();
+  /** 格子ごとの、その中に点を持つ辺 */
+  private readonly grid = new Map<number, number[]>();
 
   constructor(buf: ArrayBuffer) {
     const [n, m, k] = new Uint32Array(buf, 0, 3);
@@ -41,6 +62,7 @@ export class Graph {
     this.climbForward = take(Float32Array, m, 4);
     this.climbBackward = take(Float32Array, m, 4);
     this.nameId = take(Uint32Array, m, 4);
+    this.flags = take(Uint32Array, m, 4);
     this.geomStart = take(Uint32Array, m + 1, 4);
     this.geomLat = take(Int32Array, k, 4);
     this.geomLon = take(Int32Array, k, 4);
@@ -58,49 +80,107 @@ export class Graph {
       this.adjEdge[fill[this.edgeU[e]]++] = e;
       this.adjEdge[fill[this.edgeV[e]]++] = e;
     }
-    for (let i = 0; i < n; i++) {
-      const key = cellKey(this.nodeLat[i] / 1e6, this.nodeLon[i] / 1e6);
-      const list = this.grid.get(key);
-      if (list) list.push(i);
-      else this.grid.set(key, [i]);
+    for (let e = 0; e < m; e++) {
+      let last = -1;
+      for (let i = this.geomStart[e]; i < this.geomStart[e + 1]; i++) {
+        const key = cellOf(this.geomLat[i] / 1e6, this.geomLon[i] / 1e6);
+        if (key === last) continue;
+        last = key;
+        const list = this.grid.get(key);
+        if (!list) this.grid.set(key, [e]);
+        else if (list[list.length - 1] !== e) list.push(e);
+      }
     }
   }
 
-  /** 指定地点にいちばん近い交差点。範囲外なら null。 */
-  nearestNode(p: LatLon): number | null {
-    const [cy, cx] = cell(p.lat, p.lon);
-    let best: number | null = null;
-    let bestD = Infinity;
+  /** 指定地点にいちばん近い道の上の点。範囲外なら null。 */
+  nearestRoad(p: LatLon): Anchor | null {
+    const row = Math.floor(p.lat / CELL_DEG);
+    const col = Math.floor(p.lon / CELL_DEG);
+    const seen = new Set<number>();
+    let best = null as Anchor | null;
     for (let radius = 0; radius <= 12; radius++) {
-      for (let y = cy - radius; y <= cy + radius; y++) {
-        for (let x = cx - radius; x <= cx + radius; x++) {
-          if (Math.max(Math.abs(y - cy), Math.abs(x - cx)) !== radius) continue;
-          for (const i of this.grid.get(`${y}:${x}`) ?? []) {
-            const d = metres(p, { lat: this.nodeLat[i] / 1e6, lon: this.nodeLon[i] / 1e6 });
-            if (d < bestD) {
-              bestD = d;
-              best = i;
-            }
+      for (let y = row - radius; y <= row + radius; y++) {
+        for (let x = col - radius; x <= col + radius; x++) {
+          if (Math.max(Math.abs(y - row), Math.abs(x - col)) !== radius) continue;
+          for (const e of this.grid.get(y * ROW + x) ?? []) {
+            if (seen.has(e)) continue;
+            seen.add(e);
+            const found = this.closestOnEdge(e, p);
+            if (!best || found.metres < best.metres) best = found;
           }
         }
       }
-      // 外側の輪により近い点が残っていないと言える時だけ止める。
-      if (best !== null && bestD <= radius * CELL_MIN_M) return best;
+      // 外側の輪により近い道が残っていないと言える時だけ止める。
+      if (best && best.metres <= radius * CELL_MIN_M) return best;
     }
     return best;
   }
 
-  /** 辺ごとの費用で最短経路を求め、辺の列を返す。 */
-  shortestPath(from: number, to: number, cost: (edge: number, node: number) => number): number[] | null {
+  private closestOnEdge(edge: number, p: LatLon): Anchor {
+    const start = this.geomStart[edge];
+    const count = this.geomStart[edge + 1] - start;
+    const k = Math.cos((p.lat * Math.PI) / 180);
+    let walked = 0;
+    let best = { d: Infinity, along: 0, index: 0, point: [0, 0] as [number, number] };
+    for (let i = 0; i + 1 < count; i++) {
+      const a = { lat: this.geomLat[start + i] / 1e6, lon: this.geomLon[start + i] / 1e6 };
+      const b = { lat: this.geomLat[start + i + 1] / 1e6, lon: this.geomLon[start + i + 1] / 1e6 };
+      const dx = (b.lon - a.lon) * k;
+      const dy = b.lat - a.lat;
+      const size = dx * dx + dy * dy;
+      const t = size ? Math.max(0, Math.min(1, (((p.lon - a.lon) * k) * dx + (p.lat - a.lat) * dy) / size)) : 0;
+      const on = { lat: a.lat + (b.lat - a.lat) * t, lon: a.lon + (b.lon - a.lon) * t };
+      const d = metres(p, on);
+      const span = metres(a, b);
+      if (d < best.d) best = { d, along: walked + span * t, index: i, point: [on.lon, on.lat] };
+      walked += span;
+    }
+    return { edge, index: best.index, point: best.point, toU: best.along, toV: walked - best.along, metres: best.d };
+  }
+
+  /** 道の途中の点から、辺の端までの座標列。端が近い順ではなく、点から端へ向かう順に返す。 */
+  toEnd(a: Anchor, node: number): [number, number][] {
+    const pts = this.edgeCoords(a.edge, this.edgeU[a.edge]);
+    const toward = this.edgeU[a.edge] === node ? pts.slice(0, a.index + 1).reverse() : pts.slice(a.index + 1);
+    return [a.point, ...toward];
+  }
+
+  /** 同じ辺の上の2点の間の座標列 */
+  between(a: Anchor, b: Anchor): [number, number][] {
+    const pts = this.edgeCoords(a.edge, this.edgeU[a.edge]);
+    if (a.toU <= b.toU) return [a.point, ...pts.slice(a.index + 1, b.index + 1), b.point];
+    return [a.point, ...pts.slice(b.index + 1, a.index + 1).reverse(), b.point];
+  }
+
+  /** 辺ごとの費用で、道の上の2点を結ぶ最短経路を求める。 */
+  shortestPath(start: Anchor, goal: Anchor, cost: (edge: number, node: number) => number): Path | null {
     const dist = new Float64Array(this.nNodes).fill(Infinity);
     const prev = new Int32Array(this.nNodes).fill(-1);
     const heap = new MinHeap();
-    dist[from] = 0;
-    heap.push(0, from);
+    const seed = (node: number, d: number) => {
+      if (d >= dist[node]) return;
+      dist[node] = d;
+      heap.push(d, node);
+    };
+    seed(this.edgeU[start.edge], start.toU);
+    seed(this.edgeV[start.edge], start.toV);
+    const ends: [number, number][] = [
+      [this.edgeU[goal.edge], goal.toU],
+      [this.edgeV[goal.edge], goal.toV],
+    ];
+    let to = -1;
+    let bestTotal = Infinity;
     while (heap.size > 0) {
       const [d, node] = heap.pop();
       if (d > dist[node]) continue;
-      if (node === to) break;
+      if (d >= bestTotal) break;
+      for (const [end, rest] of ends) {
+        if (end === node && d + rest < bestTotal) {
+          bestTotal = d + rest;
+          to = node;
+        }
+      }
       for (let a = this.adjStart[node]; a < this.adjStart[node + 1]; a++) {
         const e = this.adjEdge[a];
         const next = this.edgeU[e] === node ? this.edgeV[e] : this.edgeU[e];
@@ -112,14 +192,15 @@ export class Graph {
         }
       }
     }
-    if (dist[to] === Infinity) return null;
-    const path: number[] = [];
-    for (let n = to; n !== from; ) {
-      const e = prev[n];
-      path.push(e);
-      n = this.edgeU[e] === n ? this.edgeV[e] : this.edgeU[e];
+    if (to < 0) return null;
+    const edges: number[] = [];
+    let from = to;
+    while (prev[from] >= 0) {
+      const e = prev[from];
+      edges.push(e);
+      from = this.edgeU[e] === from ? this.edgeV[e] : this.edgeU[e];
     }
-    return path.reverse();
+    return { edges: edges.reverse(), from, to };
   }
 
   /** 地点 node からこの辺を歩く時の上り(m) */
@@ -153,14 +234,11 @@ export class Graph {
 const CELL_DEG = 0.002;
 /** 格子1マスの短い方の辺の長さ(神戸の緯度で経度方向 約183m) */
 const CELL_MIN_M = 180;
+/** 格子の行と列を1つの数にする時の桁 */
+const ROW = 1_000_000;
 
-function cell(lat: number, lon: number): [number, number] {
-  return [Math.floor(lat / CELL_DEG), Math.floor(lon / CELL_DEG)];
-}
-
-function cellKey(lat: number, lon: number): string {
-  const [y, x] = cell(lat, lon);
-  return `${y}:${x}`;
+function cellOf(lat: number, lon: number): number {
+  return Math.floor(lat / CELL_DEG) * ROW + Math.floor(lon / CELL_DEG);
 }
 
 export function metres(a: LatLon, b: LatLon): number {

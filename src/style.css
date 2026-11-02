@@ -320,6 +320,22 @@ input:focus-visible {
   font-size: 13px;
 }
 
+.via {
+  grid-column: 1 / -1;
+  color: var(--sub);
+  font-size: 12px;
+}
+
+.warn {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fef7e0;
+  color: #7a4f01;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .detail {
   margin-top: 12px;
   font-size: 13px;
