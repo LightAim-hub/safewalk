@@ -18,3 +18,29 @@ SafeWalk はこの壁を取り払います。
 
 安全度は公開データから計算した**目安**です。その道の安全を保証するものではありません。
 犯罪の公開データは町丁目単位までのため、「この道で犯罪が何件」とは表示しません。
+
+## 使っているデータ
+
+ハッカソン期間中に各提供元から取得し、`pipeline/` で加工しています。
+
+| データ | 提供元 | 利用条件 |
+| --- | --- | --- |
+| 交通事故（2020〜2025年） | [警察庁 交通事故統計情報のオープンデータ](https://www.npa.go.jp/publications/statistics/koutsuu/opendata/index_opendata.html) | 公共データ利用規約 PDL1.0 |
+| 道路網 | [OpenStreetMap](https://www.openstreetmap.org/copyright)（Geofabrik 抽出） | ODbL |
+| 背景地図 | [国土地理院 地理院タイル](https://maps.gsi.go.jp/development/ichiran.html) | 国土地理院コンテンツ利用規約 |
+
+## データの作り直し
+
+```sh
+python -m venv .venv && .venv/Scripts/pip install pandas osmium numpy
+# data/raw に事故データ(honhyo_年.csv)と kansai.osm.pbf を置いてから
+PYTHONPATH=pipeline .venv/Scripts/python pipeline/01_accidents.py
+PYTHONPATH=pipeline .venv/Scripts/python pipeline/02_graph.py
+```
+
+## 開発
+
+```sh
+npm install
+npm run dev
+```

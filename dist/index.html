@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SafeWalk</title>
+    <meta name="description" content="公開データから道の安全度を計算し、安全な歩き方を提案する歩行ナビ" />
+    <script type="module" crossorigin src="/assets/index-DYt2YdqU.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-ChRMbslI.css">
+  </head>
+  <body>
+    <aside class="panel">
+      <header>
+        <h1>SafeWalk</h1>
+        <p>道の安全度で選ぶ、歩行ナビ</p>
+      </header>
+
+      <form id="search">
+        <label>出発地<input id="from" autocomplete="off" placeholder="駅名・住所、または地図をタップ" /></label>
+        <label>目的地<input id="to" autocomplete="off" placeholder="駅名・住所、または地図をタップ" /></label>
+        <div class="row">
+          <div class="period" role="group" aria-label="歩く時間帯">
+            <button type="button" data-period="day">昼</button>
+            <button type="button" data-period="night">夜</button>
+          </div>
+          <button type="submit" class="go">経路を探す</button>
+        </div>
+      </form>
+
+      <p id="status" role="status"></p>
+      <ol id="routes"></ol>
+      <section id="detail" hidden></section>
+
+      <footer>
+        <p>安全度は公開データから計算した<strong>目安</strong>です。その道の安全を保証するものではありません。</p>
+        <p>事故: 警察庁 交通事故統計オープンデータ 2020〜2025年（PDL1.0） / 道路: © OpenStreetMap contributors / 地図: 国土地理院</p>
+      </footer>
+    </aside>
+    <main id="map" aria-label="地図"></main>
+  </body>
+</html>
