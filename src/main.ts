@@ -236,7 +236,10 @@ function addLayers(): void {
     e.preventDefault();
   });
   map.on("click", (e) => {
-    if (e.defaultPrevented) return;
+    if (e.defaultPrevented || longPressed) {
+      longPressed = false;
+      return;
+    }
     const { x, y } = e.point;
     const labelled = map
       .queryRenderedFeatures([
@@ -262,6 +265,8 @@ function addLayers(): void {
 /** 指が主な操作の端末では、何もない所の短いタップで地点を選ばない。 */
 const TOUCH = window.matchMedia("(pointer: coarse)").matches;
 const LONG_PRESS_MS = 550;
+/** 長押しの後に来る click で、開いた場所を閉じないようにする。 */
+let longPressed = false;
 
 /** 長押しで地点を選ぶ。指が動いたら地図の移動として扱う。 */
 function bindLongPress(): void {
@@ -269,8 +274,10 @@ function bindLongPress(): void {
   const cancel = () => clearTimeout(timer);
   map.on("touchstart", (e) => {
     cancel();
+    longPressed = false;
     if (e.originalEvent.touches.length !== 1) return;
     timer = window.setTimeout(() => {
+      longPressed = true;
       onMapPick({ lat: e.lngLat.lat, lon: e.lngLat.lng, name: "地図で選んだ地点" }, false);
     }, LONG_PRESS_MS);
   });
@@ -743,29 +750,37 @@ function bindSuggest(
 
 const DAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
+const MINUTES_PER_DAY = 1440;
+
 /** 「Mo-Fr 09:00-18:00」形式の営業時間から、今開いているかを求める。読めない時は null。 */
 function isOpen(hours: string, now = new Date()): boolean | null {
   if (/^24\/7$/.test(hours.trim())) return true;
-  const today = now.getDay();
-  const clock = now.getHours() * 60 + now.getMinutes();
-  let open: boolean | null = null;
+  const rules: { days: string | undefined; spans: [number, number][] }[] = [];
   for (const rule of hours.split(";").map((r) => r.trim()).filter(Boolean)) {
     const m = rule.match(/^(?:((?:Mo|Tu|We|Th|Fr|Sa|Su)(?:[-,](?:Mo|Tu|We|Th|Fr|Sa|Su))*)\s+)?(off|closed|\d{1,2}:\d{2}-\d{1,2}:\d{2}(?:,\d{1,2}:\d{2}-\d{1,2}:\d{2})*)$/);
     if (!m) return null;
-    if (m[1] && !m[1].split(",").some((part) => dayInRange(part, today))) continue;
-    if (m[2] === "off" || m[2] === "closed") {
-      open = false;
-      continue;
-    }
-    open = m[2].split(",").some((span) => {
-      const [a, b] = span.split("-").map((t) => {
-        const [h, min] = t.split(":").map(Number);
-        return h * 60 + min;
-      });
-      return b > a ? clock >= a && clock < b : clock >= a || clock < b;
-    });
+    const spans = m[2] === "off" || m[2] === "closed" ? [] : m[2].split(",").map(parseSpan);
+    rules.push({ days: m[1], spans });
   }
-  return open ?? false;
+  // 同じ曜日に複数の決まりがある時は、後のものが優先される。
+  const spansOn = (day: number) =>
+    rules.filter((r) => !r.days || r.days.split(",").some((part) => dayInRange(part, day))).at(-1)?.spans ?? [];
+  const clock = now.getHours() * 60 + now.getMinutes();
+  const today = now.getDay();
+  const yesterday = (today + 6) % 7;
+  return (
+    spansOn(today).some(([a, b]) => clock >= a && clock < b) ||
+    spansOn(yesterday).some(([a, b]) => clock + MINUTES_PER_DAY >= a && clock + MINUTES_PER_DAY < b)
+  );
+}
+
+/** 「22:00-02:00」のように日をまたぐ時間は、終わりを翌日の分で表す。 */
+function parseSpan(span: string): [number, number] {
+  const [a, b] = span.split("-").map((t) => {
+    const [h, min] = t.split(":").map(Number);
+    return h * 60 + min;
+  });
+  return [a, b > a ? b : b + MINUTES_PER_DAY];
 }
 
 function dayInRange(part: string, day: number): boolean {
@@ -940,8 +955,15 @@ function setEnd(which: End, place: Place | null, run = true): void {
 const MAX_STOPS = 3;
 
 /** 経由地の入力欄と印を作り直す。 */
-function renderStops(): void {
+function drawStopMarkers(): void {
   stopMarkers.splice(0).forEach((marker) => marker.remove());
+  for (const stop of state.stops) {
+    if (stop) stopMarkers.push(new maplibregl.Marker({ color: COLORS.mid }).setLngLat([stop.lon, stop.lat]).addTo(map));
+  }
+}
+
+function renderStops(): void {
+  drawStopMarkers();
   $("stops").replaceChildren(
     ...state.stops.map((stop, i) => {
       const row = el("div", "stop-row");
@@ -960,14 +982,22 @@ function renderStops(): void {
         if (state.from && state.to) search();
       });
       row.append(field, remove);
-      bindSuggest(input, (place) => {
-        state.stops[i] = place;
-        renderStops();
-        if (state.from && state.to) search();
-      });
-      if (stop) {
-        stopMarkers.push(new maplibregl.Marker({ color: COLORS.mid }).setLngLat([stop.lon, stop.lat]).addTo(map));
-      }
+      bindSuggest(
+        input,
+        (place) => {
+          state.stops[i] = place;
+          renderStops();
+          if (state.from && state.to) search();
+        },
+        {
+          onEdit: (value) => {
+            if (value || !state.stops[i]) return;
+            state.stops[i] = null;
+            drawStopMarkers();
+            if (state.from && state.to) search();
+          },
+        },
+      );
       return row;
     }),
   );
@@ -991,9 +1021,16 @@ function searchThrough(): Route | null {
   const points = [state.from!, ...state.stops.filter((s): s is Place => s !== null), state.to!];
   const anchors = points.map(snap);
   if (anchors.some((a) => a === null)) return null;
-  const parts = anchors.slice(1).map((a, i) => findRoutes(graph, anchors[i]!, a!, state.period, accidents, meta, names)[0]);
+  const parts = anchors.slice(1).map((a, i) => {
+    const options = findRoutes(graph, anchors[i]!, a!, state.period, accidents, meta, names);
+    return options[state.period === "night" ? safestIndex(options) : 0];
+  });
   if (parts.some((part) => !part)) return null;
   return joinRoutes(parts, points.slice(1, -1).map((p) => p.name));
+}
+
+function safestIndex(routes: Route[]): number {
+  return routes.reduce((a, b, i, all) => ((b.safety ?? -1) > (all[a].safety ?? -1) ? i : a), 0);
 }
 
 function search(): void {
@@ -1021,8 +1058,7 @@ function showRoutes(): void {
   for (const route of state.routes) connectEnds(route, state.from!, state.to!);
   replaceUrl();
   // 昼は Google マップと同じく最短を選び、夜は最も安全な経路を選ぶ。
-  const safest = state.routes.reduce((a, b, i, all) => ((b.safety ?? -1) > (all[a].safety ?? -1) ? i : a), 0);
-  selectRoute(state.period === "night" ? safest : 0);
+  selectRoute(state.period === "night" ? safestIndex(state.routes) : 0);
   const all = state.routes.flatMap((r) => r.coords);
   const bounds = all.reduce((b, c) => b.extend(c), new maplibregl.LngLatBounds(all[0], all[0]));
   map.fitBounds(bounds, { padding: mapPadding(), duration: 500 });
@@ -1260,6 +1296,9 @@ function stepList(route: Route): HTMLElement {
 const OFF_ROUTE_M = 60;
 const STEP_REACHED_M = 20;
 const ANNOUNCE_M = 40;
+/** 次に歩く座標を探す範囲。GPS の跳びで先へ進み過ぎないようにする。 */
+const GUIDE_WINDOW = 400;
+let guideProgress = 0;
 let watchId: number | null = null;
 let rerouting = false;
 let voiceOn = true;
@@ -1278,6 +1317,10 @@ function speak(text: string): void {
 async function keepScreenOn(): Promise<void> {
   try {
     wakeLock = (await navigator.wakeLock?.request("screen")) ?? null;
+    if (watchId === null) {
+      wakeLock?.release();
+      wakeLock = null;
+    }
   } catch {
     wakeLock = null;
   }
@@ -1300,6 +1343,7 @@ function onCompass(e: CompassEvent): void {
 function watchCompass(): void {
   const asking = DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> };
   const start = () => {
+    if (watchId === null) return;
     window.addEventListener("deviceorientationabsolute", onCompass as EventListener);
     window.addEventListener("deviceorientation", onCompass as EventListener);
   };
@@ -1313,30 +1357,83 @@ function stopCompass(): void {
   markers.me.getElement().classList.remove("facing");
 }
 
+/** 線分までの距離。長い直線の途中で経路外と誤判定しないよう、頂点だけで測らない。 */
+function distanceToSegment(p: LatLon, a: [number, number], b: [number, number]): number {
+  const k = Math.cos((p.lat * Math.PI) / 180);
+  const dx = (b[0] - a[0]) * k;
+  const dy = b[1] - a[1];
+  const size = dx * dx + dy * dy;
+  const t = size ? Math.max(0, Math.min(1, (((p.lon - a[0]) * k) * dx + (p.lat - a[1]) * dy) / size)) : 0;
+  return metres(p, { lat: a[1] + (b[1] - a[1]) * t, lon: a[0] + (b[0] - a[0]) * t });
+}
+
 function distanceToRoute(p: LatLon, route: Route): number {
   let best = Infinity;
-  for (const [lon, lat] of route.coords) best = Math.min(best, metres(p, { lat, lon }));
+  for (let i = 0; i + 1 < route.coords.length; i++) best = Math.min(best, distanceToSegment(p, route.coords[i], route.coords[i + 1]));
   return best;
 }
 
-function remainingFrom(p: LatLon, route: Route): { next: Route["steps"][number] | null; metresLeft: number } {
-  let nearest = 0;
-  let bestD = Infinity;
-  route.coords.forEach(([lon, lat], i) => {
+/** 経路の座標のうち、from より先で地点にいちばん近い番号。 */
+function nearestIndex(p: LatLon, route: Route, from = 0, limit = route.coords.length): number {
+  let nearest = from;
+  let best = Infinity;
+  const end = Math.min(route.coords.length, from + limit);
+  for (let i = from; i < end; i++) {
+    const [lon, lat] = route.coords[i];
     const d = metres(p, { lat, lon });
-    if (d < bestD) {
-      bestD = d;
+    if (d < best) {
+      best = d;
       nearest = i;
     }
+  }
+  return nearest;
+}
+
+/** 案内の手順が、経路の座標の何番目にあるか。同じ道を往復しても順に求める。 */
+function stepIndexes(route: Route): number[] {
+  let at = 0;
+  return route.steps.map((step) => {
+    while (at < route.coords.length && (route.coords[at][0] !== step.at[0] || route.coords[at][1] !== step.at[1])) at++;
+    return at;
   });
+}
+
+function remainingFrom(p: LatLon, route: Route): { next: Route["steps"][number] | null; metresLeft: number } {
+  // 往復する経路で帰りを行きと取り違えないよう、進んだ所より先だけを見る。
+  const nearest = nearestIndex(p, route, guideProgress, GUIDE_WINDOW);
+  guideProgress = nearest;
   let metresLeft = 0;
   for (let i = nearest; i + 1 < route.coords.length; i++) {
     const [lon1, lat1] = route.coords[i];
     const [lon2, lat2] = route.coords[i + 1];
     metresLeft += metres({ lat: lat1, lon: lon1 }, { lat: lat2, lon: lon2 });
   }
-  const rest = route.steps.filter((step) => route.coords.findIndex(([x, y]) => x === step.at[0] && y === step.at[1]) > nearest);
+  const indexes = stepIndexes(route);
+  const rest = route.steps.filter((_, i) => indexes[i] > nearest);
   return { next: rest.find((s) => metres(p, { lat: s.at[1], lon: s.at[0] }) > STEP_REACHED_M) ?? null, metresLeft };
+}
+
+/** 現在地から探し直す。探せない時は元の経路を残し、戻るように伝える。 */
+function reroute(p: LatLon, route: Route): void {
+  const saved = { from: state.from, stops: state.stops, routes: state.routes, selected: state.selected };
+  const here = nearestIndex(p, route, guideProgress);
+  rerouting = true;
+  state.stops = state.stops.filter((stop) => stop !== null && nearestIndex(stop, route, here) > here);
+  renderStops();
+  guideProgress = 0;
+  if (snap(p)) {
+    toast("経路を外れたので、現在地から探し直します。");
+    speak("経路を外れました。探し直します。");
+    setEnd("from", { ...p, name: CURRENT });
+  }
+  rerouting = false;
+  if (state.routes.length && snap(p)) return;
+  state.stops = saved.stops;
+  renderStops();
+  state.routes = saved.routes;
+  setEnd("from", saved.from, false);
+  selectRoute(saved.selected);
+  $("guide-next").textContent = "経路から離れています。元の経路へ戻ってください";
 }
 
 function updateGuide(p: LatLon, accuracy?: number): void {
@@ -1346,11 +1443,7 @@ function updateGuide(p: LatLon, accuracy?: number): void {
   if (accuracy) showAccuracy(p, accuracy);
   map.easeTo({ center: [p.lon, p.lat], zoom: Math.max(map.getZoom(), 17), duration: 500 });
   if (distanceToRoute(p, route) > OFF_ROUTE_M && !rerouting) {
-    rerouting = true;
-    toast("経路を外れたので、現在地から探し直します。");
-    speak("経路を外れました。探し直します。");
-    setEnd("from", { ...p, name: CURRENT });
-    rerouting = false;
+    reroute(p, route);
     return;
   }
   const end = route.coords[route.coords.length - 1];
@@ -1385,8 +1478,7 @@ function startGuide(index: number): void {
   $("guide-next").textContent = "現在地を確認しています…";
   $("guide-rest").textContent = "";
   announced = "";
-  keepScreenOn();
-  watchCompass();
+  guideProgress = 0;
   watchId = navigator.geolocation.watchPosition(
     ({ coords }) => {
       updateGuide({ lat: coords.latitude, lon: coords.longitude }, coords.accuracy);
@@ -1400,6 +1492,8 @@ function startGuide(index: number): void {
     },
     { enableHighAccuracy: true, maximumAge: 2000 },
   );
+  keepScreenOn();
+  watchCompass();
 }
 
 function stopGuide(): void {

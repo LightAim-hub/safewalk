@@ -77,7 +77,7 @@ export function findRoutes(
   const reference = period === "night" ? meta.riskPerKmNight : meta.riskPerKmDay;
   const found: Route[] = [];
   const nightRemote = period === "night" ? REMOTE_NIGHT : 1;
-  if (from.edge === to.edge) return [alongOneEdge(g, from, to, names, acc)];
+  if (from.edge === to.edge) return [alongOneEdge(g, from, to, names, acc, risk, reference)];
 
   for (const weight of SAFETY_WEIGHTS) {
     const climbM = WALK_M_PER_MIN * MINUTES_PER_CLIMB_M;
@@ -102,8 +102,11 @@ export function findRoutes(
       { pts: tail, metres: tailM, name: names[g.nameId[to.edge]] ?? "" },
     ];
     const { climb, descent, profile, steps, via } = walkThrough(legs);
-    const measure = (mask: number) => edges.reduce((sum, e) => sum + (g.flags[e] & mask ? g.length[e] : 0), 0);
-    const perKm = edges.reduce((sum, e) => sum + risk[e], 0) / (Math.max(onRoads, 1) / 1000);
+    const pieces: Piece[] = [
+      [from.edge, leadM],
+      ...edges.map((e): Piece => [e, g.length[e]]),
+      [to.edge, tailM],
+    ];
     found.push({
       label: "",
       edges,
@@ -114,8 +117,8 @@ export function findRoutes(
       descent,
       profile,
       steps,
-      safety: measure(REMOTE | OUTSIDE) > total * MAX_UNKNOWN ? null : Math.round(100 / (1 + perKm / reference)),
-      remoteMetres: measure(REMOTE),
+      safety: safetyOf(g, pieces, risk, reference),
+      remoteMetres: flaggedMetres(g, pieces, REMOTE),
       via,
       accidents: acc.near(coords),
     });
@@ -161,6 +164,21 @@ function compass(deg: number): string {
   return names[Math.round(((deg + 360) % 360) / 45) % 8];
 }
 
+/** [辺, その辺を歩く長さ(m)] */
+type Piece = [number, number];
+
+function flaggedMetres(g: Graph, pieces: Piece[], mask: number): number {
+  return pieces.reduce((sum, [e, m]) => sum + (g.flags[e] & mask ? m : 0), 0);
+}
+
+/** 通る長さの割合で事故の重みを数える。評価できない道が多い時は null。 */
+function safetyOf(g: Graph, pieces: Piece[], risk: Float32Array, reference: number): number | null {
+  const total = pieces.reduce((sum, [, m]) => sum + m, 0);
+  if (flaggedMetres(g, pieces, REMOTE | OUTSIDE) > total * MAX_UNKNOWN) return null;
+  const weight = pieces.reduce((sum, [e, m]) => sum + (risk[e] * m) / Math.max(g.length[e], 1), 0);
+  return Math.round(100 / (1 + weight / (Math.max(total, 1) / 1000) / reference));
+}
+
 /** 経路を歩く時の1区間 */
 type Leg = { pts: [number, number][]; metres: number; name: string; climb?: number; descent?: number };
 
@@ -191,11 +209,19 @@ function edgeLegs(g: Graph, edges: number[], from: number, names: string[]): Leg
 }
 
 /** 同じ道の上の2点を結ぶ経路 */
-function alongOneEdge(g: Graph, from: Anchor, to: Anchor, names: string[], acc: AccidentIndex): Route {
+function alongOneEdge(
+  g: Graph,
+  from: Anchor,
+  to: Anchor,
+  names: string[],
+  acc: AccidentIndex,
+  risk: Float32Array,
+  reference: number,
+): Route {
   const coords = g.between(from, to);
   const total = lengthOf(coords);
   const { steps, via, profile } = walkThrough([{ pts: coords, metres: total, name: names[g.nameId[from.edge]] ?? "" }]);
-  const remote = g.flags[from.edge] & REMOTE;
+  const pieces: Piece[] = [[from.edge, total]];
   return {
     label: "おすすめ",
     edges: [],
@@ -206,8 +232,8 @@ function alongOneEdge(g: Graph, from: Anchor, to: Anchor, names: string[], acc: 
     descent: 0,
     profile,
     steps,
-    safety: null,
-    remoteMetres: remote ? total : 0,
+    safety: safetyOf(g, pieces, risk, reference),
+    remoteMetres: flaggedMetres(g, pieces, REMOTE),
     via,
     accidents: acc.near(coords),
   };
@@ -226,7 +252,7 @@ function walkThrough(legs: Leg[]): {
   let walked = 0;
   const profile: [number, number][] = [[0, 0]];
   let heading: number | null = null;
-  const steps: (Step & { road: string })[] = [];
+  const steps: (Step & { road: string; entry: number | null })[] = [];
   const byRoad = new Map<string, number>();
   for (const leg of legs) {
     if (leg.metres < 1 || leg.pts.length < 2) continue;
@@ -240,13 +266,19 @@ function walkThrough(legs: Leg[]): {
     const start = bearing(pts[0], pts[1]);
     const last = steps[steps.length - 1];
     if (!last) {
-      steps.push({ text: `${compass(start)}へ歩き始める`, metres: 0, at: pts[0], road });
+      steps.push({ text: `${compass(start)}へ歩き始める`, metres: 0, at: pts[0], road, entry: null });
     } else {
       const delta = ((start - heading! + 540) % 360) - 180;
       const turn = turnWord(delta);
       const renamed = road !== "" && last.road !== "" && road !== last.road;
-      if (turn && last.metres >= STEP_MIN_M) steps.push({ text: turn, metres: 0, at: pts[0], road });
-      else if (renamed && last.metres >= STEP_MIN_M) steps.push({ text: "道なりに進む", metres: 0, at: pts[0], road });
+      if (turn && last.metres >= STEP_MIN_M) steps.push({ text: turn, metres: 0, at: pts[0], road, entry: heading });
+      else if (turn && last.entry === null) last.text = `${compass(start)}へ歩き始める`;
+      else if (turn) {
+        // 短い区間の直後に曲がる時は、その手前からの向きの変化を1つの案内にする。
+        last.text = turnWord(((start - last.entry! + 540) % 360) - 180) ?? "道なりに進む";
+      } else if (renamed && last.metres >= STEP_MIN_M) {
+        steps.push({ text: "道なりに進む", metres: 0, at: pts[0], road, entry: heading });
+      }
     }
     const current = steps[steps.length - 1];
     current.metres += leg.metres;

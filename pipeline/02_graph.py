@@ -90,7 +90,8 @@ class Ways(osmium.SimpleHandler):
         if not pts or not s <= pts[0][0] <= n or not west <= pts[0][1] <= e:
             return
         if "building" in w.tags:
-            self.buildings.add(to_cell(*pts[0]))
+            # 大きな施設の沿道を山道と誤らないよう、輪郭の点をすべて記録する。
+            self.buildings.update(to_cell(*p) for p in pts)
         elif hw in ROADS:
             for (la1, lo1), (la2, lo2) in zip(pts, pts[1:]):
                 steps = max(1, int(metres(la1, lo1, la2, lo2) / NEAR_CELL_M))

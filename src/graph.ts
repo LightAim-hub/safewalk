@@ -81,14 +81,22 @@ export class Graph {
       this.adjEdge[fill[this.edgeV[e]]++] = e;
     }
     for (let e = 0; e < m; e++) {
-      let last = -1;
-      for (let i = this.geomStart[e]; i < this.geomStart[e + 1]; i++) {
-        const key = cellOf(this.geomLat[i] / 1e6, this.geomLon[i] / 1e6);
-        if (key === last) continue;
-        last = key;
+      const add = (lat: number, lon: number) => {
+        const key = cellOf(lat, lon);
         const list = this.grid.get(key);
         if (!list) this.grid.set(key, [e]);
         else if (list[list.length - 1] !== e) list.push(e);
+      };
+      for (let i = this.geomStart[e]; i < this.geomStart[e + 1]; i++) {
+        const lat = this.geomLat[i] / 1e6;
+        const lon = this.geomLon[i] / 1e6;
+        add(lat, lon);
+        if (i + 1 === this.geomStart[e + 1]) break;
+        // 長い線分の途中の格子にも登録する。頂点だけだと線分の中ほどで別の道を拾う。
+        const dLat = this.geomLat[i + 1] / 1e6 - lat;
+        const dLon = this.geomLon[i + 1] / 1e6 - lon;
+        const parts = Math.ceil(Math.max(Math.abs(dLat), Math.abs(dLon)) / (CELL_DEG / 2));
+        for (let t = 1; t < parts; t++) add(lat + (dLat * t) / parts, lon + (dLon * t) / parts);
       }
     }
   }
@@ -143,14 +151,14 @@ export class Graph {
   toEnd(a: Anchor, node: number): [number, number][] {
     const pts = this.edgeCoords(a.edge, this.edgeU[a.edge]);
     const toward = this.edgeU[a.edge] === node ? pts.slice(0, a.index + 1).reverse() : pts.slice(a.index + 1);
-    return [a.point, ...toward];
+    return distinct([a.point, ...toward]);
   }
 
   /** 同じ辺の上の2点の間の座標列 */
   between(a: Anchor, b: Anchor): [number, number][] {
     const pts = this.edgeCoords(a.edge, this.edgeU[a.edge]);
-    if (a.toU <= b.toU) return [a.point, ...pts.slice(a.index + 1, b.index + 1), b.point];
-    return [a.point, ...pts.slice(b.index + 1, a.index + 1).reverse(), b.point];
+    if (a.toU <= b.toU) return distinct([a.point, ...pts.slice(a.index + 1, b.index + 1), b.point]);
+    return distinct([a.point, ...pts.slice(b.index + 1, a.index + 1).reverse(), b.point]);
   }
 
   /** 辺ごとの費用で、道の上の2点を結ぶ最短経路を求める。 */
@@ -239,6 +247,11 @@ const ROW = 1_000_000;
 
 function cellOf(lat: number, lon: number): number {
   return Math.floor(lat / CELL_DEG) * ROW + Math.floor(lon / CELL_DEG);
+}
+
+/** 同じ座標が続くと向きを求められないので、連続する重複を除く。 */
+function distinct(coords: [number, number][]): [number, number][] {
+  return coords.filter((c, i) => i === 0 || c[0] !== coords[i - 1][0] || c[1] !== coords[i - 1][1]);
 }
 
 export function metres(a: LatLon, b: LatLon): number {
