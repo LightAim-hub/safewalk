@@ -6,6 +6,8 @@
   Uint32  edgeU[nEdges], edgeV[nEdges]
   Float32 length[nEdges]                     (m)
   Float32 riskDay[nEdges], riskNight[nEdges]
+  Float32 climbForward[nEdges], climbBackward[nEdges]  (m。U→V と V→U の上り)
+  Uint32  nameId[nEdges]                     (public/data/names.json の添字)
   Uint32  geomStart[nEdges + 1]
   Int32   geomLat[nCoords], geomLon[nCoords] (度 x 1e6)
 """
@@ -20,18 +22,25 @@ import osmium
 import shapely
 
 from area import BBOX, kobe
+from dem import Elevation
 
 KOBE = kobe()
 PBF = "data/raw/kansai.osm.pbf"
 ACC = Path("public/data/accidents.json")
 OUT = Path("public/data/graph.bin")
 META = Path("public/data/graph.meta.json")
+NAMES = Path("public/data/names.json")
 
 WALKABLE = {
     "footway", "path", "pedestrian", "steps", "living_street", "residential", "service",
     "unclassified", "tertiary", "tertiary_link", "secondary", "secondary_link",
     "primary", "primary_link", "track", "cycleway", "corridor",
 }
+# 山道は徒歩ナビの経路に出さない。path と track は、舗装か街灯の記録がある時だけ通す。
+TRAILS = {"path", "track"}
+PAVED = {"asphalt", "concrete", "paved", "paving_stones", "sett", "concrete:plates", "concrete:lanes"}
+SAMPLE_M = 30.0  # 標高を見る間隔
+CLIMB_STEP_M = 2.0  # これ未満の標高差は標高データの揺れとして数えない
 NEAR_M = 30.0  # 事故をこの距離まで道に結び付ける
 SIGMA_M = 15.0  # 距離による減衰
 
@@ -56,6 +65,13 @@ class Ways(osmium.SimpleHandler):
             return
         if tags.get("area") == "yes":
             return
+        if tags.get("sac_scale"):
+            return
+        # 有料道路と自動車専用道路は歩けない。
+        if tags.get("motorroad") == "yes" or (tags.get("toll") == "yes" and foot not in ("yes", "designated")):
+            return
+        if hw in TRAILS and tags.get("surface") not in PAVED and tags.get("lit") != "yes":
+            return
         s, west, n, e = BBOX
         pts = []
         for nd in w.nodes:
@@ -66,7 +82,8 @@ class Ways(osmium.SimpleHandler):
             return
         # 市内の点を1つでも持つ道を残す。市境の道が途中で切れないようにするため。
         if shapely.contains_xy(KOBE, [p[2] for p in pts], [p[1] for p in pts]).any():
-            self.ways.append(pts)
+            flat = tags.get("bridge", "no") != "no" or tags.get("tunnel", "no") != "no"
+            self.ways.append((pts, tags.get("name") or tags.get("ref") or "", flat))
 
 
 def metres(lat1, lon1, lat2, lon2):
@@ -75,23 +92,37 @@ def metres(lat1, lon1, lat2, lon2):
     return 6371000 * math.hypot(x, y)
 
 
+class Edge(list):
+    """点の列に、道路名と標高を見ない印を持たせたもの。"""
+
+    name = ""
+    flat = False
+
+
+def new_edge(points, name, flat):
+    edge = Edge(points)
+    edge.name = name
+    edge.flat = flat
+    return edge
+
+
 def split_edges(ways):
     use = defaultdict(int)
-    for pts in ways:
+    for pts, _, _ in ways:
         for ref, _, _ in pts:
             use[ref] += 1
         use[pts[0][0]] += 1
         use[pts[-1][0]] += 1
     edges = []
-    for pts in ways:
+    for pts, name, flat in ways:
         cur = [pts[0]]
         for p in pts[1:]:
             cur.append(p)
             if use[p[0]] > 1:
-                edges.append(cur)
+                edges.append(new_edge(cur, name, flat))
                 cur = [p]
         if len(cur) > 1:
-            edges.append(cur)
+            edges.append(new_edge(cur, name, flat))
     return edges
 
 
@@ -173,6 +204,31 @@ def attach_risk(edges):
     return day, night
 
 
+def climbs(edges):
+    """辺ごとに、両方向の上りの合計を標高タイルから求める。"""
+    dem = Elevation(BBOX)
+    forward = np.zeros(len(edges), dtype=np.float32)
+    backward = np.zeros(len(edges), dtype=np.float32)
+    for i, e in enumerate(edges):
+        if e.flat:
+            continue
+        heights = []
+        for (_, la1, lo1), (_, la2, lo2) in zip(e, e[1:]):
+            n = max(1, int(metres(la1, lo1, la2, lo2) / SAMPLE_M))
+            heights += [dem.at(la1 + (la2 - la1) * t / n, lo1 + (lo2 - lo1) * t / n) for t in range(n)]
+        heights.append(dem.at(e[-1][1], e[-1][2]))
+        last = heights[0]
+        for h in heights[1:]:
+            if abs(h - last) < CLIMB_STEP_M:
+                continue
+            if h > last:
+                forward[i] += h - last
+            else:
+                backward[i] += last - h
+            last = h
+    return forward, backward
+
+
 def main():
     h = Ways()
     h.apply_file(PBF, locations=True, idx="flex_mem")
@@ -196,6 +252,10 @@ def main():
         dtype=np.float32,
     )
     day, night = attach_risk(edges)
+    climb_f, climb_b = climbs(edges)
+    names = {"": 0}
+    name_id = np.array([names.setdefault(e.name, len(names)) for e in edges], dtype=np.uint32)
+    NAMES.write_text(json.dumps(list(names), ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
     start = np.zeros(len(edges) + 1, dtype=np.uint32)
     start[1:] = np.cumsum([len(e) for e in edges])
@@ -205,7 +265,7 @@ def main():
     OUT.parent.mkdir(parents=True, exist_ok=True)
     with OUT.open("wb") as f:
         f.write(struct.pack("<III", len(index), len(edges), len(g_lat)))
-        for arr in (n_lat, n_lon, u, v, length, day, night, start, g_lat, g_lon):
+        for arr in (n_lat, n_lon, u, v, length, day, night, climb_f, climb_b, name_id, start, g_lat, g_lon):
             f.write(arr.tobytes())
 
     km = float(length.sum()) / 1000

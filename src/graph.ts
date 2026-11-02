@@ -11,6 +11,9 @@ export class Graph {
   readonly length: Float32Array;
   readonly riskDay: Float32Array;
   readonly riskNight: Float32Array;
+  readonly climbForward: Float32Array;
+  readonly climbBackward: Float32Array;
+  readonly nameId: Uint32Array;
   private readonly geomStart: Uint32Array;
   private readonly geomLat: Int32Array;
   private readonly geomLon: Int32Array;
@@ -35,6 +38,9 @@ export class Graph {
     this.length = take(Float32Array, m, 4);
     this.riskDay = take(Float32Array, m, 4);
     this.riskNight = take(Float32Array, m, 4);
+    this.climbForward = take(Float32Array, m, 4);
+    this.climbBackward = take(Float32Array, m, 4);
+    this.nameId = take(Uint32Array, m, 4);
     this.geomStart = take(Uint32Array, m + 1, 4);
     this.geomLat = take(Int32Array, k, 4);
     this.geomLon = take(Int32Array, k, 4);
@@ -85,7 +91,7 @@ export class Graph {
   }
 
   /** 辺ごとの費用で最短経路を求め、辺の列を返す。 */
-  shortestPath(from: number, to: number, cost: (edge: number) => number): number[] | null {
+  shortestPath(from: number, to: number, cost: (edge: number, node: number) => number): number[] | null {
     const dist = new Float64Array(this.nNodes).fill(Infinity);
     const prev = new Int32Array(this.nNodes).fill(-1);
     const heap = new MinHeap();
@@ -98,7 +104,7 @@ export class Graph {
       for (let a = this.adjStart[node]; a < this.adjStart[node + 1]; a++) {
         const e = this.adjEdge[a];
         const next = this.edgeU[e] === node ? this.edgeV[e] : this.edgeU[e];
-        const nd = d + cost(e);
+        const nd = d + cost(e, node);
         if (nd < dist[next]) {
           dist[next] = nd;
           prev[next] = e;
@@ -116,16 +122,27 @@ export class Graph {
     return path.reverse();
   }
 
+  /** 地点 node からこの辺を歩く時の上り(m) */
+  climb(edge: number, node: number): number {
+    return this.edgeU[edge] === node ? this.climbForward[edge] : this.climbBackward[edge];
+  }
+
+  /** 辺を node から歩く向きの座標列にする。 */
+  edgeCoords(edge: number, node: number): [number, number][] {
+    const pts: [number, number][] = [];
+    for (let i = this.geomStart[edge]; i < this.geomStart[edge + 1]; i++) {
+      pts.push([this.geomLon[i] / 1e6, this.geomLat[i] / 1e6]);
+    }
+    if (this.edgeU[edge] !== node) pts.reverse();
+    return pts;
+  }
+
   /** 辺の列を、歩く向きの座標列 [lon, lat] にする。 */
   pathCoords(path: number[], from: number): [number, number][] {
     const out: [number, number][] = [];
     let node = from;
     for (const e of path) {
-      const pts: [number, number][] = [];
-      for (let i = this.geomStart[e]; i < this.geomStart[e + 1]; i++) {
-        pts.push([this.geomLon[i] / 1e6, this.geomLat[i] / 1e6]);
-      }
-      if (this.edgeU[e] !== node) pts.reverse();
+      const pts = this.edgeCoords(e, node);
       out.push(...(out.length ? pts.slice(1) : pts));
       node = this.edgeU[e] === node ? this.edgeV[e] : this.edgeU[e];
     }

@@ -7,11 +7,11 @@ import maplibregl, {
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./style.css";
 import { Graph, metres, type LatLon } from "./graph";
-import { AccidentIndex, WALK_M_PER_MIN, findRoutes, type Accidents, type Meta, type Period, type Route } from "./routes";
+import { AccidentIndex, findRoutes, minutesFor, type Accidents, type Meta, type Period, type Route } from "./routes";
 
-type Place = LatLon & { name: string; kind?: string };
-type PlaceRow = [string, number, number, string, string];
-type IndexedPlace = Place & { kind: string; n: string; y: string };
+type Place = LatLon & { name: string; kind?: string; ward?: string };
+type PlaceRow = [string, number, number, string, string, string];
+type IndexedPlace = Place & { kind: string; ward: string; n: string; y: string };
 type End = "from" | "to";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -42,6 +42,7 @@ let graph: Graph;
 let accidents: AccidentIndex;
 let meta: Meta;
 let places: IndexedPlace[] = [];
+let names: string[] = [];
 
 const map: MapLibre = new maplibregl.Map({
   container: "map",
@@ -50,7 +51,8 @@ const map: MapLibre = new maplibregl.Map({
   zoom: 11,
   attributionControl: { compact: true },
 });
-map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+map.addControl(new maplibregl.NavigationControl(), "bottom-right");
+map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
 
 const markers = {
   picked: new maplibregl.Marker({ color: COLORS.bad }),
@@ -79,19 +81,21 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, className = "", text 
 }
 
 async function loadData(): Promise<void> {
-  const [bin, acc, m, rows] = await Promise.all([
+  const [bin, acc, m, rows, roadNames] = await Promise.all([
     fetch("/data/graph.bin").then((r) => r.arrayBuffer()),
     fetch("/data/accidents.json").then((r) => r.json() as Promise<Accidents>),
     fetch("/data/graph.meta.json").then((r) => r.json() as Promise<Meta>),
     fetch("/data/places.json").then((r) => r.json() as Promise<PlaceRow[]>),
+    fetch("/data/names.json").then((r) => r.json() as Promise<string[]>),
   ]);
   graph = new Graph(bin);
   accidents = new AccidentIndex(acc);
   meta = m;
-  places = rows.map(([raw, lat, lon, kind, reading]) => {
+  names = roadNames;
+  places = rows.map(([raw, lat, lon, kind, reading, ward]) => {
     // OpenStreetMap の駅名は「灘」のように「駅」が付かないことがある。
     const name = kind === "駅" && !raw.endsWith("駅") ? `${raw}駅` : raw;
-    return { name, lat, lon, kind, n: normalize(name), y: normalize(reading) };
+    return { name, lat, lon, kind, ward, n: normalize(name), y: normalize(reading) };
   });
 }
 
@@ -161,7 +165,7 @@ function addLayers(): void {
       ])
       .find((f) => f.layer.type === "symbol" && f.properties.name);
     const name = labelled ? String(labelled.properties["name:ja"] ?? labelled.properties.name) : "地図で選んだ地点";
-    onMapPick({ lat: e.lngLat.lat, lon: e.lngLat.lng, name });
+    onMapPick({ lat: e.lngLat.lat, lon: e.lngLat.lng, name }, labelled !== undefined);
   });
   map.on("mouseenter", "route-line", () => (map.getCanvas().style.cursor = "pointer"));
   map.on("mouseleave", "route-line", () => (map.getCanvas().style.cursor = ""));
@@ -179,14 +183,70 @@ function snap(p: LatLon): number | null {
   return metres(p, at) <= MAX_SNAP_M ? node : null;
 }
 
-function onMapPick(place: Place): void {
+const WARD_BY_CODE: Record<string, string> = {
+  "28101": "東灘区",
+  "28102": "灘区",
+  "28105": "兵庫区",
+  "28106": "長田区",
+  "28107": "須磨区",
+  "28108": "垂水区",
+  "28109": "北区",
+  "28110": "中央区",
+  "28111": "西区",
+};
+
+/** 国土地理院の逆ジオコーダーで、地点の住所を引く。取れない時は null。 */
+async function addressOf(p: LatLon): Promise<string | null> {
+  const url = `https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress?lat=${p.lat}&lon=${p.lon}`;
+  try {
+    const { results } = (await fetch(url).then((r) => r.json())) as { results?: { muniCd: string; lv01Nm: string } };
+    const ward = results && WARD_BY_CODE[results.muniCd];
+    if (!ward) return null;
+    const town = results.lv01Nm && results.lv01Nm !== "－" ? results.lv01Nm : "";
+    return `神戸市${ward}${town}`;
+  } catch {
+    return null;
+  }
+}
+
+let popup: maplibregl.Popup | null = null;
+
+/** 出発地と目的地が埋まっている時は、どちらに使うかを選んでもらう。 */
+function askWhichEnd(place: Place): void {
+  popup?.remove();
+  const box = el("div", "popup-actions");
+  for (const [end, label] of [
+    ["from", "ここを出発地にする"],
+    ["to", "ここを目的地にする"],
+  ] as [End, string][]) {
+    const button = el("button", "", label);
+    button.type = "button";
+    button.addEventListener("click", () => {
+      popup?.remove();
+      setEnd(end, place);
+    });
+    box.append(button);
+  }
+  popup = new maplibregl.Popup({ closeButton: false, maxWidth: "220px" })
+    .setLngLat([place.lon, place.lat])
+    .setDOMContent(box)
+    .addTo(map);
+}
+
+async function onMapPick(place: Place, labelled: boolean): Promise<void> {
   if (snap(place) === null) {
     toast("この地点の近くに、神戸市内の歩ける道がありません。");
     return;
   }
-  if (state.mode === "browse") return showPlace(place);
+  if (!labelled) place.name = (await addressOf(place)) ?? place.name;
+  if (state.mode === "browse") {
+    showPlace(place);
+    pushUrl();
+    return;
+  }
   const empty: End | null = !state.from ? "from" : !state.to ? "to" : null;
   if (empty) setEnd(empty, place);
+  else askWhichEnd(place);
 }
 
 /* ---- 検索 ---- */
@@ -214,13 +274,14 @@ function searchPlaces(query: string): Place[] {
     .filter((p) => p.n.includes(q) || p.y.includes(q))
     .sort((a, b) => rank(sortKey(a), a.kind) - rank(sortKey(b), b.kind))
     .filter((p) => {
-      const key = `${p.name}:${p.kind}`;
+      // 同じ駅が路線ごとに重なるのを1つにする。チェーン店は別の店なので残す。
+      const key = `${p.name}:${p.kind}:${Math.round(p.lat * 200)}:${Math.round(p.lon * 200)}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     })
     .slice(0, 7)
-    .map(({ name, lat, lon, kind }) => ({ name, lat, lon, kind }));
+    .map(({ name, lat, lon, kind, ward }) => ({ name, lat, lon, kind, ward }));
 }
 
 /** 国土地理院の住所検索。神戸市内の住所だけを採る。 */
@@ -270,7 +331,12 @@ function locateMe(): Promise<Place | null> {
 }
 
 /** 入力欄に候補の一覧を付ける。Enter で候補を確定する。 */
-function bindSuggest(input: HTMLInputElement, onPick: (p: Place) => void, offerCurrent = false): void {
+function bindSuggest(
+  input: HTMLInputElement,
+  onPick: (p: Place) => void,
+  offerCurrent = false,
+  onEdit?: (value: string) => void,
+): void {
   const field = input.parentElement as HTMLElement;
   const list = el("ul", "suggest");
   list.hidden = true;
@@ -303,7 +369,7 @@ function bindSuggest(input: HTMLInputElement, onPick: (p: Place) => void, offerC
         const button = el("button");
         button.type = "button";
         button.setAttribute("aria-selected", String(i === active));
-        button.append(el("span", "", p.name), el("span", "kind", p.kind ?? ""));
+        button.append(el("span", "", p.name), el("span", "kind", [p.kind, p.ward].filter(Boolean).join("・")));
         button.addEventListener("mousedown", (e) => {
           e.preventDefault();
           choose(p);
@@ -312,6 +378,11 @@ function bindSuggest(input: HTMLInputElement, onPick: (p: Place) => void, offerC
         return li;
       }),
     );
+    if (!items.length && input.value.trim()) {
+      list.replaceChildren(el("li", "empty", "神戸市内で見つかりません（SafeWalk は神戸市内のみ対応です）"));
+      list.hidden = false;
+      return;
+    }
     list.hidden = items.length === 0;
   };
 
@@ -331,6 +402,7 @@ function bindSuggest(input: HTMLInputElement, onPick: (p: Place) => void, offerC
   };
 
   input.addEventListener("input", () => {
+    onEdit?.(input.value);
     clearTimeout(timer);
     timer = window.setTimeout(refresh, 120);
   });
@@ -368,17 +440,25 @@ function bindSuggest(input: HTMLInputElement, onPick: (p: Place) => void, offerC
 
 function showPlace(place: Place): void {
   state.picked = place;
-  qInput.value = place.name === "地図で選んだ地点" ? "" : place.name;
+  qInput.value = place.name;
   markers.picked.setLngLat([place.lon, place.lat]).addTo(map);
 
   const wrap = el("div", "place");
-  const facts = place.kind ? `${place.kind}・神戸市` : "神戸市";
+  const facts = place.name.startsWith("神戸市")
+    ? "地図で選んだ地点"
+    : [place.kind, place.ward ? `神戸市${place.ward}` : "神戸市"].filter(Boolean).join("・");
   const go = el("button", "primary", "経路");
   go.type = "button";
-  go.addEventListener("click", () => openDirections({ to: place }));
+  go.addEventListener("click", () => {
+    openDirections({ to: place });
+    pushUrl();
+  });
   const start = el("button", "secondary", "ここから出発");
   start.type = "button";
-  start.addEventListener("click", () => openDirections({ from: place }));
+  start.addEventListener("click", () => {
+    openDirections({ from: place });
+    pushUrl();
+  });
   const actions = el("div", "actions");
   actions.append(go, start);
   wrap.append(el("h2", "", place.name), el("p", "", facts), actions);
@@ -410,6 +490,8 @@ function openDirections(ends: Partial<Record<End, Place>>): void {
 }
 
 function closeDirections(): void {
+  stopGuide();
+  popup?.remove();
   state.mode = "browse";
   document.body.classList.remove("routing");
   state.from = state.to = null;
@@ -424,9 +506,9 @@ function closeDirections(): void {
 /** 表示中の経路を消す。経路を出せない時は、古い経路を残さず理由を出す。 */
 function clearRoutes(message = ""): void {
   state.routes = [];
+  timeTags.splice(0).forEach((tag) => tag.remove());
   (map.getSource("routes") as GeoJSONSource).setData(emptyCollection());
   (map.getSource("accidents") as GeoJSONSource).setData(emptyCollection());
-  history.replaceState(null, "", location.pathname);
   sheet.replaceChildren(el("p", "", message));
   sheet.hidden = !message;
 }
@@ -445,10 +527,10 @@ function search(): void {
   const goal = snap(state.to!);
   if (start === null || goal === null) return clearRoutes("出発地か目的地の近くに、神戸市内の歩ける道がありません。");
   if (start === goal) return clearRoutes("出発地と目的地が近すぎるため、経路を出せません。");
-  state.routes = findRoutes(graph, start, goal, state.period, accidents, meta);
+  state.routes = findRoutes(graph, start, goal, state.period, accidents, meta, names);
   if (!state.routes.length) return clearRoutes("歩いて行ける経路が見つかりませんでした。");
   for (const route of state.routes) connectEnds(route, state.from!, state.to!);
-  writeUrl();
+  replaceUrl();
   const best = state.routes.reduce((a, b, i, all) => (b.safety > all[a].safety ? i : a), 0);
   selectRoute(best);
   const all = state.routes.flatMap((r) => r.coords);
@@ -461,12 +543,52 @@ function connectEnds(route: Route, from: LatLon, to: LatLon): void {
   const [startLon, startLat] = route.coords[0];
   const [endLon, endLat] = route.coords[route.coords.length - 1];
   route.metres += metres(from, { lat: startLat, lon: startLon }) + metres(to, { lat: endLat, lon: endLon });
-  route.minutes = Math.ceil(route.metres / WALK_M_PER_MIN);
+  route.minutes = minutesFor(route.metres, route.climb);
   route.coords = [[from.lon, from.lat], ...route.coords, [to.lon, to.lat]];
 }
 
 function formatMinutes(min: number): string {
   return min < 60 ? `${min}分` : `${Math.floor(min / 60)}時間${min % 60 ? `${min % 60}分` : ""}`;
+}
+
+const timeTags: maplibregl.Marker[] = [];
+
+/** 他の経路や札からいちばん離れた地点を、札の置き場所にする。 */
+function tagPosition(index: number): [number, number] {
+  const coords = state.routes[index].coords;
+  const others = state.routes.flatMap((route, i) => {
+    if (i === index) return [];
+    const stride = Math.max(1, Math.floor(route.coords.length / 80));
+    return route.coords.filter((_, k) => k % stride === 0);
+  });
+  const placed = timeTags.map((tag) => tag.getLngLat().toArray() as [number, number]);
+  const stride = Math.max(1, Math.floor(coords.length / 80));
+  let best = coords[Math.floor(coords.length / 2)];
+  let bestScore = -1;
+  for (let i = stride; i < coords.length - stride; i += stride) {
+    const [lon, lat] = coords[i];
+    const near = (list: [number, number][], weight: number) =>
+      list.reduce((min, [x, y]) => Math.min(min, metres({ lat, lon }, { lat: y, lon: x }) * weight), Infinity);
+    const score = Math.min(near(others, 1), near(placed, 0.5));
+    if (score > bestScore) {
+      bestScore = score;
+      best = coords[i];
+    }
+  }
+  return best;
+}
+
+/** 地図上の経路に、所要時間の札を付ける。 */
+function drawTimeTags(): void {
+  timeTags.splice(0).forEach((tag) => tag.remove());
+  state.routes.forEach((route, i) => {
+    const tag = el("div", i === state.selected ? "time-tag on" : "time-tag", formatMinutes(route.minutes));
+    tag.addEventListener("click", (e) => {
+      e.stopPropagation();
+      selectRoute(i);
+    });
+    timeTags.push(new maplibregl.Marker({ element: tag }).setLngLat(tagPosition(i)).addTo(map));
+  });
 }
 
 function routeList(): HTMLOListElement {
@@ -484,7 +606,7 @@ function routeList(): HTMLOListElement {
       button.append(
         el("span", "time", formatMinutes(route.minutes)),
         safety,
-        el("span", "facts", `${route.label}・${(route.metres / 1000).toFixed(1)}km`),
+        el("span", "facts", `${route.label}・${(route.metres / 1000).toFixed(1)}km・上り${route.climb}m`),
       );
       li.append(button);
       return li;
@@ -505,12 +627,126 @@ function selectRoute(index: number): void {
   });
   const route = state.routes[index];
   showAccidents(route);
+  drawTimeTags();
+  const start = el("button", "primary start", "案内を始める");
+  start.type = "button";
+  start.addEventListener("click", () => startGuide(index));
   sheet.replaceChildren(
     routeList(),
+    start,
+    stepList(route),
     accidentDetail(route),
     el("p", "note", "安全度は公開データから計算した目安で、その道の安全を保証するものではありません。"),
   );
   sheet.hidden = false;
+}
+
+function formatMetres(m: number): string {
+  return m < 1000 ? `${Math.round(m / 10) * 10}m` : `${(m / 1000).toFixed(1)}km`;
+}
+
+function stepList(route: Route): HTMLElement {
+  const wrap = el("details", "detail");
+  wrap.append(el("summary", "", `曲がる場所の案内 ${route.steps.length}か所`));
+  const list = el("ol", "steps");
+  for (const step of route.steps) {
+    const li = el("li");
+    const button = el("button");
+    button.type = "button";
+    button.append(el("span", "", step.text), el("span", "dist", formatMetres(step.metres)));
+    button.addEventListener("click", () => map.flyTo({ center: step.at, zoom: 17, padding: mapPadding() }));
+    li.append(button);
+    list.append(li);
+  }
+  wrap.append(list);
+  return wrap;
+}
+
+/* ---- 歩きながらの案内 ---- */
+
+const OFF_ROUTE_M = 60;
+const STEP_REACHED_M = 20;
+let watchId: number | null = null;
+let rerouting = false;
+
+function distanceToRoute(p: LatLon, route: Route): number {
+  let best = Infinity;
+  for (const [lon, lat] of route.coords) best = Math.min(best, metres(p, { lat, lon }));
+  return best;
+}
+
+function remainingFrom(p: LatLon, route: Route): { next: Route["steps"][number] | null; metresLeft: number } {
+  let nearest = 0;
+  let bestD = Infinity;
+  route.coords.forEach(([lon, lat], i) => {
+    const d = metres(p, { lat, lon });
+    if (d < bestD) {
+      bestD = d;
+      nearest = i;
+    }
+  });
+  let metresLeft = 0;
+  for (let i = nearest; i + 1 < route.coords.length; i++) {
+    const [lon1, lat1] = route.coords[i];
+    const [lon2, lat2] = route.coords[i + 1];
+    metresLeft += metres({ lat: lat1, lon: lon1 }, { lat: lat2, lon: lon2 });
+  }
+  const rest = route.steps.filter((step) => route.coords.findIndex(([x, y]) => x === step.at[0] && y === step.at[1]) > nearest);
+  return { next: rest.find((s) => metres(p, { lat: s.at[1], lon: s.at[0] }) > STEP_REACHED_M) ?? null, metresLeft };
+}
+
+function updateGuide(p: LatLon): void {
+  const route = state.routes[state.selected];
+  if (!route) return;
+  markers.me.setLngLat([p.lon, p.lat]).addTo(map);
+  map.easeTo({ center: [p.lon, p.lat], zoom: Math.max(map.getZoom(), 17), duration: 500 });
+  if (distanceToRoute(p, route) > OFF_ROUTE_M && !rerouting) {
+    rerouting = true;
+    toast("経路を外れたので、現在地から探し直します。");
+    setEnd("from", { ...p, name: CURRENT });
+    rerouting = false;
+    return;
+  }
+  const end = route.coords[route.coords.length - 1];
+  if (metres(p, { lat: end[1], lon: end[0] }) <= STEP_REACHED_M) {
+    $("guide-next").textContent = "目的地に着きました";
+    $("guide-rest").textContent = "";
+    return;
+  }
+  const { next, metresLeft } = remainingFrom(p, route);
+  $("guide-next").textContent = next
+    ? `${formatMetres(metres(p, { lat: next.at[1], lon: next.at[0] }))}先、${next.text}`
+    : "このまま目的地へ進む";
+  $("guide-rest").textContent = `残り ${formatMetres(metresLeft)}・約${minutesFor(metresLeft, 0)}分`;
+}
+
+function startGuide(index: number): void {
+  if (!navigator.geolocation) {
+    toast("この端末では現在地を取得できません。");
+    return;
+  }
+  selectRoute(index);
+  document.body.classList.add("guiding");
+  $("guide").hidden = false;
+  $("guide-next").textContent = "現在地を確認しています…";
+  $("guide-rest").textContent = "";
+  watchId = navigator.geolocation.watchPosition(
+    ({ coords }) => updateGuide({ lat: coords.latitude, lon: coords.longitude }),
+    (error) => {
+      // 立ち止まって更新が途切れただけでは案内を止めない。
+      if (error.code !== error.PERMISSION_DENIED) return;
+      toast("位置情報が許可されていないため、案内を終わります。");
+      stopGuide();
+    },
+    { enableHighAccuracy: true, maximumAge: 2000 },
+  );
+}
+
+function stopGuide(): void {
+  if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+  watchId = null;
+  document.body.classList.remove("guiding");
+  $("guide").hidden = true;
 }
 
 function accidentLine(i: number): string {
@@ -576,36 +812,69 @@ function accidentDetail(route: Route): HTMLElement {
   return wrap;
 }
 
-function writeUrl(): void {
-  // 共有リンクに現在地の正確な座標を載せない。
-  const coords = (p: Place) => {
-    const digits = p.name === CURRENT ? 3 : 5;
-    return `${p.lat.toFixed(digits)},${p.lon.toFixed(digits)}`;
-  };
-  const label = (p: Place) => (p.name === CURRENT ? "現在地の付近" : p.name);
-  const q = new URLSearchParams({
-    from: coords(state.from!),
-    to: coords(state.to!),
-    fromName: label(state.from!),
-    toName: label(state.to!),
-    period: state.period,
-  });
-  history.replaceState(null, "", `?${q}`);
+function urlForState(): string {
+  const q = new URLSearchParams();
+  if (state.mode === "directions" && state.from && state.to) {
+    // 共有リンクに現在地の正確な座標を載せない。
+    const coords = (p: Place) => {
+      const digits = p.name === CURRENT ? 3 : 5;
+      return `${p.lat.toFixed(digits)},${p.lon.toFixed(digits)}`;
+    };
+    const label = (p: Place) => (p.name === CURRENT ? "現在地の付近" : p.name);
+    q.set("from", coords(state.from));
+    q.set("to", coords(state.to));
+    q.set("fromName", label(state.from));
+    q.set("toName", label(state.to));
+    q.set("period", state.period);
+  } else if (state.mode === "directions") {
+    q.set("mode", "directions");
+  } else if (state.picked) {
+    q.set("place", `${state.picked.lat.toFixed(5)},${state.picked.lon.toFixed(5)}`);
+    q.set("name", state.picked.name);
+  }
+  const text = q.toString();
+  return text ? `?${text}` : location.pathname;
 }
 
-function readUrl(): boolean {
+function replaceUrl(): void {
+  history.replaceState(null, "", urlForState());
+}
+
+/** 画面が変わった時に履歴を積み、ブラウザの「戻る」で前の画面へ戻れるようにする。 */
+function pushUrl(): void {
+  const url = urlForState();
+  if (url !== location.search && url !== location.pathname + location.search) history.pushState(null, "", url);
+}
+
+function parsePoint(text: string | null): LatLon | null {
+  const [lat, lon] = (text ?? "").split(",").map(Number);
+  return text && Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null;
+}
+
+/** URL の内容を画面に映す。起動時と「戻る」「進む」の時に使う。 */
+function applyUrl(): void {
   const q = new URLSearchParams(location.search);
-  const parse = (key: string, name: string): Place | null => {
-    const [lat, lon] = (q.get(key) ?? "").split(",").map(Number);
-    return Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon, name: q.get(name) || "共有された地点" } : null;
-  };
-  const from = parse("from", "fromName");
-  const to = parse("to", "toName");
+  const from = parsePoint(q.get("from"));
+  const to = parsePoint(q.get("to"));
+  const place = parsePoint(q.get("place"));
   const period = q.get("period");
   if (period === "day" || period === "night") state.period = period;
-  if (!from || !to) return false;
-  openDirections({ from, to });
-  return true;
+  if (state.mode === "directions") closeDirections();
+  markers.picked.remove();
+  sheet.hidden = true;
+  state.picked = null;
+  qInput.value = "";
+  if (from && to) {
+    openDirections({
+      from: { ...from, name: q.get("fromName") || "共有された地点" },
+      to: { ...to, name: q.get("toName") || "共有された地点" },
+    });
+  } else if (q.get("mode") === "directions") {
+    openDirections({});
+  } else if (place) {
+    showPlace({ ...place, name: q.get("name") || "共有された地点" });
+  }
+  renderPeriod();
 }
 
 function renderPeriod(): void {
@@ -616,14 +885,34 @@ function renderPeriod(): void {
 
 /* ---- 画面の操作 ---- */
 
-bindSuggest(qInput, showPlace);
-bindSuggest(fromInput, (p) => setEnd("from", p), true);
-bindSuggest(toInput, (p) => setEnd("to", p), true);
+bindSuggest(qInput, (p) => {
+  showPlace(p);
+  pushUrl();
+});
+const clearEnd = (which: End) => (value: string) => {
+  if (!value && state[which]) {
+    setEnd(which, null);
+    clearRoutes();
+  }
+};
+bindSuggest(fromInput, (p) => setEnd("from", p), true, clearEnd("from"));
+bindSuggest(toInput, (p) => setEnd("to", p), true, clearEnd("to"));
 
 for (const form of [searchbar, directions]) form.addEventListener("submit", (e) => e.preventDefault());
 
-$("open-directions").addEventListener("click", () => openDirections(state.picked ? { to: state.picked } : {}));
-$("close-directions").addEventListener("click", closeDirections);
+$("open-directions").addEventListener("click", () => {
+  openDirections(state.picked ? { to: state.picked } : {});
+  pushUrl();
+});
+$("close-directions").addEventListener("click", () => {
+  closeDirections();
+  state.picked = null;
+  markers.picked.remove();
+  qInput.value = "";
+  pushUrl();
+});
+$("guide-stop").addEventListener("click", stopGuide);
+window.addEventListener("popstate", applyUrl);
 $("swap").addEventListener("click", () => {
   const { from, to } = state;
   setEnd("from", to, false);
@@ -653,8 +942,7 @@ Promise.all([loadData(), new Promise<void>((resolve) => map.on("load", () => res
     addLayers();
     ui.inert = false;
     locateButton.disabled = false;
-    readUrl();
-    renderPeriod();
+    applyUrl();
   })
   .catch((err) => {
     console.error(err);
