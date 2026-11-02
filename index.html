@@ -20,6 +20,9 @@
         </button>
       </form>
 
+      <div id="chips" class="chips" role="group" aria-label="ジャンルで探す"></div>
+      <button id="research" type="button" class="research" hidden>この範囲で再検索</button>
+
       <form id="directions" class="card directions" autocomplete="off" hidden>
         <div class="dir-head">
           <strong>徒歩の経路</strong>
@@ -42,6 +45,14 @@
     <button id="locate" type="button" class="locate" aria-label="現在地を表示" title="現在地">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm9 3h-2.100A7 7 0 0 0 13 5.100V3h-2v2.100A7 7 0 0 0 5.100 11H3v2h2.100A7 7 0 0 0 11 18.900V21h2v-2.100A7 7 0 0 0 18.900 13H21v-2zm-9 6a5 5 0 1 1 0-10 5 5 0 0 1 0 10z"/></svg>
     </button>
+    <button id="layers" type="button" class="locate layers" aria-label="地図の種類" title="地図の種類">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 9l10 6 10-6-10-6zm0 14.700L4.300 13 2 14.400 12 20.400l10-6-2.300-1.400L12 17.700z"/></svg>
+    </button>
+    <div id="layer-menu" class="card layer-menu" role="group" aria-label="地図の種類" hidden>
+      <button type="button" data-layer="map" aria-pressed="true">地図</button>
+      <button type="button" data-layer="photo" aria-pressed="false">航空写真</button>
+      <button type="button" data-layer="relief" aria-pressed="false">地形</button>
+    </div>
     <section id="guide" class="card guide" hidden aria-live="polite">
       <p id="guide-next" class="next"></p>
       <p id="guide-rest" class="rest"></p>

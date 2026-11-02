@@ -9,9 +9,11 @@ import "./style.css";
 import { Graph, metres, type Anchor, type LatLon } from "./graph";
 import { AccidentIndex, findRoutes, minutesFor, type Accidents, type Meta, type Period, type Route } from "./routes";
 
-type Place = LatLon & { name: string; kind?: string; ward?: string };
-type PlaceRow = [string, number, number, string, string, string];
+type PlaceInfo = { hours?: string; phone?: string; web?: string; address?: string; operator?: string };
+type Place = LatLon & PlaceInfo & { name: string; kind?: string; ward?: string; genre?: Genre };
+type PlaceRow = [string, number, number, string, string, string, string, string, string, string, string];
 type IndexedPlace = Place & { kind: string; ward: string; n: string; y: string };
+type Genre = { label: string; kinds: string[] };
 type End = "from" | "to";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -27,6 +29,19 @@ const KOBE_CENTER: [number, number] = [135.17, 34.7];
 const MAX_SNAP_M = 500;
 const COLORS = { good: "#188038", mid: "#b06000", bad: "#c5221f", route: "#1a73e8", other: "#9aa0a6" };
 const CURRENT = "現在地";
+const GENRES: Genre[] = [
+  { label: "コンビニ", kinds: ["コンビニ"] },
+  { label: "飲食店", kinds: ["飲食店"] },
+  { label: "カフェ", kinds: ["カフェ"] },
+  { label: "スーパー", kinds: ["スーパー"] },
+  { label: "薬局", kinds: ["薬局"] },
+  { label: "トイレ", kinds: ["トイレ"] },
+  { label: "ATM", kinds: ["ATM", "銀行"] },
+  { label: "駅", kinds: ["駅"] },
+  { label: "病院", kinds: ["病院"] },
+  { label: "交番", kinds: ["警察"] },
+];
+const GENRE_LIMIT = 30;
 
 const state = {
   mode: "browse" as "browse" | "directions",
@@ -36,6 +51,7 @@ const state = {
   period: (new Date().getHours() >= 18 || new Date().getHours() < 6 ? "night" : "day") as Period,
   routes: [] as Route[],
   selected: 0,
+  genre: null as Genre | null,
 };
 
 let graph: Graph;
@@ -52,7 +68,7 @@ const map: MapLibre = new maplibregl.Map({
   zoom: 11,
   attributionControl: { compact: true },
 });
-map.addControl(new maplibregl.NavigationControl(), "bottom-right");
+map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "bottom-right");
 map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
 
 const markers = {
@@ -97,10 +113,10 @@ async function loadData(): Promise<void> {
   accidents = new AccidentIndex(acc);
   meta = m;
   names = roadNames;
-  places = rows.map(([raw, lat, lon, kind, reading, ward]) => {
+  places = rows.map(([raw, lat, lon, kind, reading, ward, hours, phone, web, address, operator]) => {
     // OpenStreetMap の駅名は「灘」のように「駅」が付かないことがある。
     const name = kind === "駅" && !raw.endsWith("駅") ? `${raw}駅` : raw;
-    return { name, lat, lon, kind, ward, n: normalize(name), y: normalize(reading) };
+    return { name, lat, lon, kind, ward, hours, phone, web, address, operator, n: normalize(name), y: normalize(reading) };
   });
 }
 
@@ -118,7 +134,10 @@ function useJapaneseLabels(): void {
 
 function addLayers(): void {
   useJapaneseLabels();
+  addBaseLayers();
   map.addSource("kobe", { type: "geojson", data: "/data/kobe.geojson" });
+  map.addSource("results", { type: "geojson", data: emptyCollection() });
+  map.addSource("accuracy", { type: "geojson", data: emptyCollection() });
   map.addSource("accidents", { type: "geojson", data: emptyCollection() });
   map.addSource("routes", { type: "geojson", data: emptyCollection() });
   map.addLayer({
@@ -155,6 +174,40 @@ function addLayers(): void {
       "circle-stroke-width": 1.5,
     },
   });
+  map.addLayer({
+    id: "accuracy-fill",
+    type: "fill",
+    source: "accuracy",
+    paint: { "fill-color": COLORS.route, "fill-opacity": 0.12 },
+  });
+  map.addLayer({
+    id: "result-dots",
+    type: "circle",
+    source: "results",
+    paint: { "circle-radius": 7, "circle-color": COLORS.bad, "circle-stroke-color": "#ffffff", "circle-stroke-width": 2 },
+  });
+  map.addLayer({
+    id: "result-names",
+    type: "symbol",
+    source: "results",
+    layout: {
+      "text-field": ["get", "name"],
+      "text-size": 12,
+      "text-offset": [0, 1],
+      "text-anchor": "top",
+      "text-font": ["Noto Sans Regular"],
+      "text-optional": true,
+    },
+    paint: { "text-color": COLORS.bad, "text-halo-color": "#ffffff", "text-halo-width": 1.5 },
+  });
+  map.on("click", "result-dots", (e) => {
+    const index = e.features?.[0]?.properties?.index;
+    if (typeof index === "number") {
+      showPlace(lastResults[index]);
+      pushUrl();
+    }
+    e.preventDefault();
+  });
   map.on("click", "route-line", (e) => {
     const index = e.features?.[0]?.properties?.index;
     if (typeof index === "number") selectRoute(index);
@@ -169,11 +222,93 @@ function addLayers(): void {
         [x + 6, y + 6],
       ])
       .find((f) => f.layer.type === "symbol" && f.properties.name);
+    if (!labelled && TOUCH && state.mode === "browse") return closePlace();
     const name = labelled ? String(labelled.properties["name:ja"] ?? labelled.properties.name) : "地図で選んだ地点";
-    onMapPick({ lat: e.lngLat.lat, lon: e.lngLat.lng, name }, labelled !== undefined);
+    const at = { lat: e.lngLat.lat, lon: e.lngLat.lng };
+    onMapPick(labelled ? (matchPlace(name, at) ?? { ...at, name }) : { ...at, name }, labelled !== undefined);
   });
-  map.on("mouseenter", "route-line", () => (map.getCanvas().style.cursor = "pointer"));
-  map.on("mouseleave", "route-line", () => (map.getCanvas().style.cursor = ""));
+  bindLongPress();
+  for (const layer of ["route-line", "result-dots"]) {
+    map.on("mouseenter", layer, () => (map.getCanvas().style.cursor = "pointer"));
+    map.on("mouseleave", layer, () => (map.getCanvas().style.cursor = ""));
+  }
+  map.on("moveend", (e) => {
+    if (state.genre && (e as { originalEvent?: Event }).originalEvent) $("research").hidden = false;
+  });
+}
+
+/** 指が主な操作の端末では、何もない所の短いタップで地点を選ばない。 */
+const TOUCH = window.matchMedia("(pointer: coarse)").matches;
+const LONG_PRESS_MS = 550;
+
+/** 長押しで地点を選ぶ。指が動いたら地図の移動として扱う。 */
+function bindLongPress(): void {
+  let timer = 0;
+  const cancel = () => clearTimeout(timer);
+  map.on("touchstart", (e) => {
+    cancel();
+    if (e.originalEvent.touches.length !== 1) return;
+    timer = window.setTimeout(() => {
+      onMapPick({ lat: e.lngLat.lat, lon: e.lngLat.lng, name: "地図で選んだ地点" }, false);
+    }, LONG_PRESS_MS);
+  });
+  map.on("touchend", cancel);
+  map.on("touchcancel", cancel);
+  map.on("touchmove", cancel);
+  map.on("movestart", cancel);
+}
+
+/** 地図の文字の名前から、詳しい情報を持つ場所を探す。 */
+function matchPlace(name: string, at: LatLon): Place | null {
+  const near = places.filter((p) => p.name === name && metres(p, at) <= 200);
+  near.sort((a, b) => metres(a, at) - metres(b, at));
+  return near[0] ?? null;
+}
+
+const LAYERS = {
+  photo: { label: "航空写真", url: "https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg", maxzoom: 18, opacity: 1 },
+  relief: { label: "地形", url: "https://cyberjapandata.gsi.go.jp/xyz/hillshademap/{z}/{x}/{y}.png", maxzoom: 16, opacity: 0.55 },
+};
+type BaseLayer = keyof typeof LAYERS;
+
+/** 航空写真と地形を地図の文字の下に入れ、切り替えられるようにする。 */
+function addBaseLayers(): void {
+  const firstSymbol = map.getStyle().layers.find((layer) => layer.type === "symbol")?.id;
+  for (const [id, layer] of Object.entries(LAYERS)) {
+    map.addSource(id, {
+      type: "raster",
+      tiles: [layer.url],
+      tileSize: 256,
+      maxzoom: layer.maxzoom,
+      attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noreferrer">国土地理院</a>',
+    });
+    map.addLayer(
+      { id, type: "raster", source: id, layout: { visibility: "none" }, paint: { "raster-opacity": layer.opacity } },
+      firstSymbol,
+    );
+  }
+}
+
+function setBaseLayer(choice: BaseLayer | "map"): void {
+  for (const id of Object.keys(LAYERS)) map.setLayoutProperty(id, "visibility", id === choice ? "visible" : "none");
+  document.querySelectorAll<HTMLButtonElement>("[data-layer]").forEach((b) => {
+    b.setAttribute("aria-pressed", String(b.dataset.layer === choice));
+  });
+}
+
+/** 現在地の誤差を円で表す。 */
+function showAccuracy(p: LatLon, radiusM: number): void {
+  const steps = 48;
+  const k = Math.cos((p.lat * Math.PI) / 180);
+  const ring = Array.from({ length: steps + 1 }, (_, i) => {
+    const a = (i / steps) * 2 * Math.PI;
+    return [p.lon + ((radiusM / 111320) * Math.cos(a)) / k, p.lat + (radiusM / 110940) * Math.sin(a)];
+  });
+  (map.getSource("accuracy") as GeoJSONSource).setData({
+    type: "Feature",
+    properties: {},
+    geometry: { type: "Polygon", coordinates: [ring] },
+  });
 }
 
 function emptyCollection(): GeoJSON.FeatureCollection {
@@ -296,8 +431,126 @@ function searchPlaces(query: string): Place[] {
       seen.add(key);
       return true;
     })
-    .slice(0, 7)
-    .map(({ name, lat, lon, kind, ward }) => ({ name, lat, lon, kind, ward }));
+    .slice(0, 7);
+}
+
+/** 「コンビニ」のような言葉から、ジャンルを探す。 */
+function matchGenres(query: string): Genre[] {
+  const q = normalize(query);
+  return q ? GENRES.filter((g) => normalize(g.label).startsWith(q)) : [];
+}
+
+const RECENT_KEY = "safewalk.recent";
+const RECENT_LIMIT = 6;
+
+function recentPlaces(): Place[] {
+  try {
+    return JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]") as Place[];
+  } catch {
+    return [];
+  }
+}
+
+function remember(place: Place): void {
+  if (place.name === CURRENT) return;
+  const rest = recentPlaces().filter((p) => p.name !== place.name);
+  try {
+    localStorage.setItem(RECENT_KEY, JSON.stringify([place, ...rest].slice(0, RECENT_LIMIT)));
+  } catch {
+    // 履歴を残せない環境でも、検索はそのまま使える。
+  }
+}
+
+let lastResults: Place[] = [];
+
+function placeRows(rows: Place[], from: LatLon, onPick: (p: Place) => void): HTMLOListElement {
+  const list = el("ol", "results");
+  list.append(
+    ...rows.map((place) => {
+      const li = el("li");
+      const button = el("button");
+      button.type = "button";
+      const open = openState(place);
+      button.append(
+        el("span", "name", place.name),
+        el("span", "facts", [place.kind, formatMetres(metres(place, from)), open].filter(Boolean).join("・")),
+      );
+      button.addEventListener("click", () => onPick(place));
+      li.append(button);
+      return li;
+    }),
+  );
+  return list;
+}
+
+function showResultDots(rows: Place[]): void {
+  lastResults = rows;
+  (map.getSource("results") as GeoJSONSource).setData({
+    type: "FeatureCollection",
+    features: rows.map((place, index) => ({
+      type: "Feature",
+      properties: { index, name: place.name },
+      geometry: { type: "Point", coordinates: [place.lon, place.lat] },
+    })),
+  });
+}
+
+/** 今見ている範囲のジャンルの場所を、中心から近い順に出す。 */
+function searchGenre(genre: Genre): void {
+  state.genre = genre;
+  state.picked = null;
+  markers.picked.remove();
+  qInput.value = genre.label;
+  renderChips();
+  $("research").hidden = true;
+  const view = map.getBounds();
+  const center = map.getCenter();
+  const from = { lat: center.lat, lon: center.lng };
+  const ofGenre = places.filter((p) => genre.kinds.includes(p.kind));
+  const inView = ofGenre.filter((p) => view.contains([p.lon, p.lat]));
+  const rows = (inView.length ? inView : ofGenre)
+    .slice()
+    .sort((a, b) => metres(a, from) - metres(b, from))
+    .slice(0, GENRE_LIMIT);
+  showResultDots(rows);
+  const wrap = el("div");
+  wrap.append(el("h2", "sheet-title", inView.length ? `この範囲の${genre.label}` : `近くの${genre.label}（この範囲にはありません）`));
+  wrap.append(
+    rows.length
+      ? placeRows(rows, from, (place) => {
+          showPlace(place);
+          pushUrl();
+        })
+      : el("p", "", `${genre.label}の記録がありません。`),
+  );
+  sheet.replaceChildren(wrap);
+  sheet.hidden = false;
+  if (!inView.length && rows.length) {
+    const all = rows.slice(0, 5).map((p): [number, number] => [p.lon, p.lat]);
+    map.fitBounds(
+      all.reduce((b, c) => b.extend(c), new maplibregl.LngLatBounds(all[0], all[0])),
+      { padding: mapPadding(), maxZoom: 16, duration: 500 },
+    );
+  }
+}
+
+function clearGenre(): void {
+  state.genre = null;
+  showResultDots([]);
+  $("research").hidden = true;
+  renderChips();
+}
+
+function renderChips(): void {
+  $("chips").replaceChildren(
+    ...GENRES.map((genre) => {
+      const chip = el("button", "chip", genre.label);
+      chip.type = "button";
+      chip.setAttribute("aria-pressed", String(state.genre === genre));
+      chip.addEventListener("click", () => searchGenre(genre));
+      return chip;
+    }),
+  );
 }
 
 /** 国土地理院の住所検索。神戸市内の住所だけを採る。 */
@@ -335,6 +588,7 @@ function locateMe(): Promise<Place | null> {
           return resolve(null);
         }
         markers.me.setLngLat([place.lon, place.lat]).addTo(map);
+        showAccuracy(place, coords.accuracy);
         resolve(place);
       },
       () => {
@@ -350,8 +604,11 @@ function locateMe(): Promise<Place | null> {
 function bindSuggest(
   input: HTMLInputElement,
   onPick: (p: Place) => void,
-  offerCurrent = false,
-  onEdit?: (value: string) => void,
+  { offerCurrent = false, offerGenres = false, onEdit }: {
+    offerCurrent?: boolean;
+    offerGenres?: boolean;
+    onEdit?: (value: string) => void;
+  } = {},
 ): void {
   const field = input.parentElement as HTMLElement;
   const list = el("ul", "suggest");
@@ -375,6 +632,8 @@ function bindSuggest(
       if (me) onPick(me);
       return;
     }
+    if (place.genre) return searchGenre(place.genre);
+    remember({ ...place, genre: undefined });
     onPick(place);
   };
 
@@ -385,7 +644,8 @@ function bindSuggest(
         const button = el("button");
         button.type = "button";
         button.setAttribute("aria-selected", String(i === active));
-        button.append(el("span", "", p.name), el("span", "kind", [p.kind, p.ward].filter(Boolean).join("・")));
+        const hint = [p.kind, p.operator, p.ward].filter(Boolean).join("・");
+        button.append(el("span", "", p.name), el("span", "kind", hint));
         button.addEventListener("mousedown", (e) => {
           e.preventDefault();
           choose(p);
@@ -395,7 +655,7 @@ function bindSuggest(
       }),
     );
     if (!items.length && input.value.trim()) {
-      list.replaceChildren(el("li", "empty", "神戸市内で見つかりません（SafeWalk は神戸市内のみ対応です）"));
+      list.replaceChildren(el("li", "empty", "神戸市内で見つかりません（SafeWalk の検索は神戸市内のみです）"));
       list.hidden = false;
       return;
     }
@@ -407,6 +667,10 @@ function bindSuggest(
     const value = input.value.trim();
     const local = searchPlaces(value);
     const head: Place[] = offerCurrent && !value ? [{ name: CURRENT, lat: 0, lon: 0, kind: "位置情報" }] : [];
+    if (!value) head.push(...recentPlaces().map((p) => ({ ...p, kind: "最近" })));
+    if (offerGenres) {
+      head.push(...matchGenres(value).map((genre) => ({ name: `${genre.label}を探す`, lat: 0, lon: 0, kind: "ジャンル", genre })));
+    }
     items = [...head, ...local];
     active = -1;
     render();
@@ -454,6 +718,80 @@ function bindSuggest(
 
 /* ---- 場所の表示 ---- */
 
+const DAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+
+/** 「Mo-Fr 09:00-18:00」形式の営業時間から、今開いているかを求める。読めない時は null。 */
+function isOpen(hours: string, now = new Date()): boolean | null {
+  if (/^24\/7$/.test(hours.trim())) return true;
+  const today = now.getDay();
+  const clock = now.getHours() * 60 + now.getMinutes();
+  let open: boolean | null = null;
+  for (const rule of hours.split(";").map((r) => r.trim()).filter(Boolean)) {
+    const m = rule.match(/^(?:((?:Mo|Tu|We|Th|Fr|Sa|Su)(?:[-,](?:Mo|Tu|We|Th|Fr|Sa|Su))*)\s+)?(off|closed|\d{1,2}:\d{2}-\d{1,2}:\d{2}(?:,\d{1,2}:\d{2}-\d{1,2}:\d{2})*)$/);
+    if (!m) return null;
+    if (m[1] && !m[1].split(",").some((part) => dayInRange(part, today))) continue;
+    if (m[2] === "off" || m[2] === "closed") {
+      open = false;
+      continue;
+    }
+    open = m[2].split(",").some((span) => {
+      const [a, b] = span.split("-").map((t) => {
+        const [h, min] = t.split(":").map(Number);
+        return h * 60 + min;
+      });
+      return b > a ? clock >= a && clock < b : clock >= a || clock < b;
+    });
+  }
+  return open ?? false;
+}
+
+function dayInRange(part: string, day: number): boolean {
+  const [a, b] = part.split("-").map((d) => DAYS.indexOf(d));
+  if (b === undefined) return a === day;
+  return a <= b ? day >= a && day <= b : day >= a || day <= b;
+}
+
+function openState(place: Place): string {
+  if (!place.hours) return "";
+  const open = isOpen(place.hours);
+  return open === null ? "" : open ? "営業中（記録上）" : "営業時間外（記録上）";
+}
+
+function japaneseHours(hours: string): string {
+  const names: Record<string, string> = { Mo: "月", Tu: "火", We: "水", Th: "木", Fr: "金", Sa: "土", Su: "日", PH: "祝" };
+  return hours
+    .replace("24/7", "24時間営業")
+    .replace(/\b(Mo|Tu|We|Th|Fr|Sa|Su|PH)\b/g, (d) => names[d])
+    .replace(/\boff\b/g, "休み");
+}
+
+function infoRow(label: string, value: Node | string): HTMLElement {
+  const row = el("div", "info");
+  const body = el("span");
+  body.append(value);
+  row.append(el("span", "label", label), body);
+  return row;
+}
+
+function closePlace(): void {
+  if (!state.picked && !state.genre) return;
+  state.picked = null;
+  markers.picked.remove();
+  qInput.value = "";
+  sheet.hidden = true;
+  clearGenre();
+  pushUrl();
+}
+
+function externalLink(url: string): HTMLAnchorElement | null {
+  if (!/^https?:\/\//.test(url)) return null;
+  const link = el("a", "", url.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, ""));
+  link.href = url;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  return link;
+}
+
 function showPlace(place: Place): void {
   state.picked = place;
   qInput.value = place.name;
@@ -462,7 +800,7 @@ function showPlace(place: Place): void {
   const wrap = el("div", "place");
   const facts = place.name.startsWith("神戸市")
     ? "地図で選んだ地点"
-    : [place.kind, place.ward ? `神戸市${place.ward}` : "神戸市"].filter(Boolean).join("・");
+    : [place.kind, place.operator, place.ward ? `神戸市${place.ward}` : "神戸市"].filter(Boolean).join("・");
   const go = el("button", "primary", "経路");
   go.type = "button";
   go.addEventListener("click", () => {
@@ -475,9 +813,44 @@ function showPlace(place: Place): void {
     openDirections({ from: place });
     pushUrl();
   });
+  const share = el("button", "secondary", "共有");
+  share.type = "button";
+  share.addEventListener("click", () => copyLink(share));
   const actions = el("div", "actions");
-  actions.append(go, start);
-  wrap.append(el("h2", "", place.name), el("p", "", facts), actions);
+  actions.append(go, start, share);
+  const address = infoRow("住所", place.address || "確認しています…");
+  const info = el("div", "infos");
+  info.append(address);
+  if (!place.address) {
+    addressOf(place).then((text) => {
+      address.lastElementChild!.textContent = text ?? "記録がありません";
+    });
+  }
+  if (place.hours) {
+    const now = openState(place);
+    info.append(infoRow("営業時間", [now, japaneseHours(place.hours)].filter(Boolean).join(" ")));
+  }
+  if (place.phone) {
+    const call = el("a", "", place.phone);
+    call.href = `tel:${place.phone.replace(/[^0-9+]/g, "")}`;
+    info.append(infoRow("電話", call));
+  }
+  const web = place.web ? externalLink(place.web) : null;
+  if (web) info.append(infoRow("サイト", web));
+  const nearby = el("div", "chips inline");
+  nearby.append(
+    ...GENRES.slice(0, 6).map((genre) => {
+      const chip = el("button", "chip", genre.label);
+      chip.type = "button";
+      chip.addEventListener("click", () => {
+        map.jumpTo({ center: [place.lon, place.lat], zoom: Math.max(map.getZoom(), 16), padding: mapPadding() });
+        searchGenre(genre);
+      });
+      return chip;
+    }),
+  );
+  wrap.append(el("h2", "", place.name), el("p", "", facts), actions, info, el("p", "sub-title", "付近を検索"), nearby);
+  if (place.hours || place.phone || place.web) wrap.append(el("p", "note", "営業時間などは OpenStreetMap の記録で、最新とは限りません。"));
   sheet.replaceChildren(wrap);
   sheet.hidden = false;
   map.flyTo({ center: [place.lon, place.lat], zoom: Math.max(map.getZoom(), 15), padding: mapPadding(), duration: 600 });
@@ -499,6 +872,7 @@ function openDirections(ends: Partial<Record<End, Place>>): void {
   directions.hidden = false;
   sheet.hidden = true;
   markers.picked.remove();
+  clearGenre();
   if (ends.from) setEnd("from", ends.from, false);
   if (ends.to) setEnd("to", ends.to, false);
   if (state.from && state.to) search();
@@ -843,16 +1217,18 @@ function accidentDetail(route: Route): HTMLElement {
   }
   const share = el("button", "secondary", "この経路のリンクをコピー");
   share.type = "button";
-  share.addEventListener("click", async () => {
-    try {
-      await navigator.clipboard.writeText(location.href);
-      share.textContent = "コピーしました";
-    } catch {
-      toast("コピーできませんでした。アドレス欄のリンクをお使いください。");
-    }
-  });
+  share.addEventListener("click", () => copyLink(share));
   wrap.append(items, share);
   return wrap;
+}
+
+async function copyLink(button: HTMLButtonElement): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(location.href);
+    button.textContent = "コピーしました";
+  } catch {
+    toast("コピーできませんでした。アドレス欄のリンクをお使いください。");
+  }
 }
 
 function urlForState(): string {
@@ -907,6 +1283,7 @@ function applyUrl(): void {
   sheet.hidden = true;
   state.picked = null;
   qInput.value = "";
+  clearGenre();
   if (from && to) {
     openDirections({
       from: { ...from, name: q.get("fromName") || "共有された地点" },
@@ -915,7 +1292,8 @@ function applyUrl(): void {
   } else if (q.get("mode") === "directions") {
     openDirections({});
   } else if (place) {
-    showPlace({ ...place, name: q.get("name") || "共有された地点" });
+    const name = q.get("name") || "共有された地点";
+    showPlace(matchPlace(name, place) ?? { ...place, name });
   }
   renderPeriod();
 }
@@ -928,9 +1306,26 @@ function renderPeriod(): void {
 
 /* ---- 画面の操作 ---- */
 
-bindSuggest(qInput, (p) => {
-  showPlace(p);
-  pushUrl();
+bindSuggest(
+  qInput,
+  (p) => {
+    clearGenre();
+    showPlace(p);
+    pushUrl();
+  },
+  { offerGenres: true },
+);
+renderChips();
+$("research").addEventListener("click", () => state.genre && searchGenre(state.genre));
+$("layers").addEventListener("click", () => {
+  const menu = $("layer-menu");
+  menu.hidden = !menu.hidden;
+});
+document.querySelectorAll<HTMLButtonElement>("[data-layer]").forEach((b) => {
+  b.addEventListener("click", () => {
+    setBaseLayer(b.dataset.layer as BaseLayer | "map");
+    $("layer-menu").hidden = true;
+  });
 });
 const clearEnd = (which: End) => (value: string) => {
   if (!value && state[which]) {
@@ -938,8 +1333,8 @@ const clearEnd = (which: End) => (value: string) => {
     clearRoutes();
   }
 };
-bindSuggest(fromInput, (p) => setEnd("from", p), true, clearEnd("from"));
-bindSuggest(toInput, (p) => setEnd("to", p), true, clearEnd("to"));
+bindSuggest(fromInput, (p) => setEnd("from", p), { offerCurrent: true, onEdit: clearEnd("from") });
+bindSuggest(toInput, (p) => setEnd("to", p), { offerCurrent: true, onEdit: clearEnd("to") });
 
 for (const form of [searchbar, directions]) form.addEventListener("submit", (e) => e.preventDefault());
 
