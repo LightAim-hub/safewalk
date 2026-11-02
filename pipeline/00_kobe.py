@@ -2,7 +2,7 @@
 
 出力:
   public/data/kobe.geojson  神戸市の行政界
-  public/data/places.json   [名前, 緯度, 経度, 種別] の配列
+  public/data/places.json   [名前, 緯度, 経度, 種別, 読み] の配列
 """
 import json
 from pathlib import Path
@@ -51,7 +51,8 @@ class Reader(osmium.SimpleHandler):
         kind = kind_of(tags)
         s, w, n, e = BBOX
         if name and kind and s <= lat <= n and w <= lon <= e:
-            self.places.append((name, round(lat, 6), round(lon, 6), kind))
+            yomi = tags.get("name:ja-Hira") or tags.get("name:ja-Kana") or tags.get("name:ja_kana") or ""
+            self.places.append((name, round(lat, 6), round(lon, 6), kind, yomi))
 
     def node(self, n):
         if n.location.valid():
@@ -86,15 +87,15 @@ def main():
     shapely.prepare(r.boundary)
     seen = set()
     rows = []
-    for name, lat, lon, kind in r.places:
+    for name, lat, lon, kind, yomi in r.places:
         key = (name, round(lat, 3), round(lon, 3))
         if key not in seen and shapely.contains_xy(r.boundary, lon, lat):
             seen.add(key)
-            rows.append([name, lat, lon, kind])
+            rows.append([name, lat, lon, kind, yomi])
     PLACES.write_text(json.dumps(rows, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(
         f"bounds={[round(v, 3) for v in r.boundary.bounds]} places={len(rows)} "
-        f"{PLACES.stat().st_size/1e6:.2f}MB boundary={BOUNDARY.stat().st_size/1e3:.0f}KB"
+        f"yomi={sum(1 for r in rows if r[4])} {PLACES.stat().st_size/1e6:.2f}MB boundary={BOUNDARY.stat().st_size/1e3:.0f}KB"
     )
 
 

@@ -10,7 +10,7 @@ import { Graph, metres, type LatLon } from "./graph";
 import { AccidentIndex, findRoutes, type Accidents, type Meta, type Period, type Route } from "./routes";
 
 type Place = LatLon & { name: string; kind?: string };
-type PlaceRow = [string, number, number, string];
+type PlaceRow = [string, number, number, string, string];
 type End = "from" | "to";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -184,7 +184,13 @@ function onMapPick(place: Place): void {
 
 /* ---- 検索 ---- */
 
-const normalize = (s: string) => s.normalize("NFKC").toLowerCase().replace(/\s+/g, "");
+/** 全角半角と大小を揃え、カタカナはひらがなに寄せて比べる。 */
+const normalize = (s: string) =>
+  s
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60));
 const KIND_ORDER = ["駅", "地区", "名所", "商業施設", "百貨店", "公園", "大学", "病院", "役所", "博物館", "動物園"];
 
 function searchPlaces(query: string): Place[] {
@@ -197,12 +203,14 @@ function searchPlaces(query: string): Place[] {
   };
   const seen = new Set<string>();
   return places
-    .map(([raw, lat, lon, kind]) => {
+    .map(([raw, lat, lon, kind, reading]) => {
       // OpenStreetMap の駅名は「灘」のように「駅」が付かないことがある。
       const name = kind === "駅" && !raw.endsWith("駅") ? `${raw}駅` : raw;
-      return { n: normalize(name), name, lat, lon, kind };
+      const n = normalize(name);
+      const y = normalize(reading);
+      return { n: y.startsWith(q) && !n.startsWith(q) ? y : n, y, name, lat, lon, kind };
     })
-    .filter((p) => p.n.includes(q))
+    .filter((p) => p.n.includes(q) || p.y.includes(q))
     .sort((a, b) => rank(a.n, a.kind) - rank(b.n, b.kind))
     .filter((p) => {
       const key = `${p.name}:${p.kind}`;
