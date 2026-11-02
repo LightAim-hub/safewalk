@@ -4,37 +4,45 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>SafeWalk</title>
-    <meta name="description" content="公開データから道の安全度を計算し、安全な歩き方を提案する歩行ナビ" />
+    <link rel="icon" href="data:," />
+    <meta name="description" content="神戸市の地図と、安全度付きの徒歩経路" />
   </head>
   <body>
-    <aside class="panel">
-      <header>
-        <h1>SafeWalk</h1>
-        <p>道の安全度で選ぶ、歩行ナビ</p>
-      </header>
+    <main id="map" aria-label="神戸市の地図"></main>
 
-      <form id="search">
-        <label>出発地<input id="from" autocomplete="off" placeholder="駅名・住所、または地図をタップ" /></label>
-        <label>目的地<input id="to" autocomplete="off" placeholder="駅名・住所、または地図をタップ" /></label>
-        <div class="row">
-          <div class="period" role="group" aria-label="歩く時間帯">
-            <button type="button" data-period="day">昼</button>
-            <button type="button" data-period="night">夜</button>
-          </div>
-          <button type="submit" class="go">経路を探す</button>
+    <div class="ui">
+      <form id="searchbar" class="card bar" role="search" autocomplete="off">
+        <div class="field grow">
+          <input id="q" type="search" placeholder="神戸市内を検索" aria-label="場所を検索" />
+        </div>
+        <button id="open-directions" type="button" class="icon" aria-label="経路を調べる" title="経路">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.7 11.3l-9-9a1 1 0 0 0-1.4 0l-9 9a1 1 0 0 0 0 1.4l9 9a1 1 0 0 0 1.4 0l9-9a1 1 0 0 0 0-1.4zM14 14.5V12h-4v3H8v-4a1 1 0 0 1 1-1h5V7.500l3.500 3.500z"/></svg>
+        </button>
+      </form>
+
+      <form id="directions" class="card directions" autocomplete="off" hidden>
+        <div class="dir-head">
+          <strong>徒歩の経路</strong>
+          <button id="close-directions" type="button" class="icon plain" aria-label="経路を閉じる">✕</button>
+        </div>
+        <div class="dir-fields">
+          <div class="field"><input id="from" placeholder="出発地（現在地も選べます）" aria-label="出発地" /></div>
+          <div class="field"><input id="to" placeholder="目的地" aria-label="目的地" /></div>
+          <button id="swap" type="button" class="icon plain swap" aria-label="出発地と目的地を入れ替える">⇅</button>
+        </div>
+        <div class="period" role="group" aria-label="歩く時間帯">
+          <button type="button" data-period="day">昼に歩く</button>
+          <button type="button" data-period="night">夜に歩く</button>
         </div>
       </form>
 
-      <p id="status" role="status"></p>
-      <ol id="routes"></ol>
-      <section id="detail" hidden></section>
+      <section id="sheet" class="card sheet" hidden aria-live="polite"></section>
+    </div>
 
-      <footer>
-        <p>安全度は公開データから計算した<strong>目安</strong>です。その道の安全を保証するものではありません。</p>
-        <p>事故: 警察庁 交通事故統計オープンデータ 2020〜2025年（PDL1.0） / 道路: © OpenStreetMap contributors / 地図: 国土地理院</p>
-      </footer>
-    </aside>
-    <main id="map" aria-label="地図"></main>
+    <button id="locate" type="button" class="locate" aria-label="現在地を表示" title="現在地">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm9 3h-2.100A7 7 0 0 0 13 5.100V3h-2v2.100A7 7 0 0 0 5.100 11H3v2h2.100A7 7 0 0 0 11 18.900V21h2v-2.100A7 7 0 0 0 18.900 13H21v-2zm-9 6a5 5 0 1 1 0-10 5 5 0 0 1 0 10z"/></svg>
+    </button>
+    <p id="toast" class="toast" role="status" hidden></p>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

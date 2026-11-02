@@ -17,9 +17,11 @@ from pathlib import Path
 
 import numpy as np
 import osmium
+import shapely
 
-from area import BBOX
+from area import BBOX, kobe
 
+KOBE = kobe()
 PBF = "data/raw/kansai.osm.pbf"
 ACC = Path("public/data/accidents.json")
 OUT = Path("public/data/graph.bin")
@@ -60,7 +62,10 @@ class Ways(osmium.SimpleHandler):
             if not nd.location.valid():
                 continue
             pts.append((nd.ref, nd.location.lat, nd.location.lon))
-        if len(pts) >= 2 and any(s <= p[1] <= n and west <= p[2] <= e for p in pts):
+        if len(pts) < 2 or not any(s <= p[1] <= n and west <= p[2] <= e for p in pts):
+            return
+        # 市内の点を1つでも持つ道を残す。市境の道が途中で切れないようにするため。
+        if shapely.contains_xy(KOBE, [p[2] for p in pts], [p[1] for p in pts]).any():
             self.ways.append(pts)
 
 

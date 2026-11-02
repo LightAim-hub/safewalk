@@ -1,13 +1,13 @@
 {
   "bbox": [
-    34.61,
-    135.0,
-    34.76,
-    135.29
+    34.55,
+    134.9,
+    34.95,
+    135.38
   ],
-  "nodes": 80449,
-  "edges": 114354,
-  "km": 5735,
-  "riskPerKmDay": 14.7283,
-  "riskPerKmNight": 9.8617
+  "nodes": 98989,
+  "edges": 140337,
+  "km": 7951,
+  "riskPerKmDay": 11.7786,
+  "riskPerKmNight": 7.8493
 }

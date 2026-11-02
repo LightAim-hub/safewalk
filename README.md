@@ -27,13 +27,16 @@ SafeWalk はこの壁を取り払います。
 | --- | --- | --- |
 | 交通事故（2020〜2025年） | [警察庁 交通事故統計情報のオープンデータ](https://www.npa.go.jp/publications/statistics/koutsuu/opendata/index_opendata.html) | 公共データ利用規約 PDL1.0 |
 | 道路網 | [OpenStreetMap](https://www.openstreetmap.org/copyright)（Geofabrik 抽出） | ODbL |
-| 背景地図 | [国土地理院 地理院タイル](https://maps.gsi.go.jp/development/ichiran.html) | 国土地理院コンテンツ利用規約 |
+| 地名・神戸市の行政界 | [OpenStreetMap](https://www.openstreetmap.org/copyright) | ODbL |
+| 背景地図 | [OpenFreeMap](https://openfreemap.org/) / OpenMapTiles / OpenStreetMap | 各提供元の条件 |
+| 住所検索 | [国土地理院 住所検索](https://msearch.gsi.go.jp/) | 国土地理院コンテンツ利用規約 |
 
 ## データの作り直し
 
 ```sh
-python -m venv .venv && .venv/Scripts/pip install pandas osmium numpy
+python -m venv .venv && .venv/Scripts/pip install pandas osmium numpy shapely
 # data/raw に事故データ(honhyo_年.csv)と kansai.osm.pbf を置いてから
+PYTHONPATH=pipeline .venv/Scripts/python pipeline/00_kobe.py
 PYTHONPATH=pipeline .venv/Scripts/python pipeline/01_accidents.py
 PYTHONPATH=pipeline .venv/Scripts/python pipeline/02_graph.py
 ```

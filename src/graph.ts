@@ -65,7 +65,7 @@ export class Graph {
     const [cy, cx] = cell(p.lat, p.lon);
     let best: number | null = null;
     let bestD = Infinity;
-    for (let radius = 0; radius <= 4; radius++) {
+    for (let radius = 0; radius <= 12; radius++) {
       for (let y = cy - radius; y <= cy + radius; y++) {
         for (let x = cx - radius; x <= cx + radius; x++) {
           if (Math.max(Math.abs(y - cy), Math.abs(x - cx)) !== radius) continue;

@@ -7,9 +7,11 @@ import json
 from pathlib import Path
 
 import pandas as pd
+import shapely
 
-from area import BBOX
+from area import kobe
 
+KOBE = kobe()
 RAW = Path("data/raw")
 OUT = Path("public/data/accidents.json")
 YEARS = range(2020, 2026)
@@ -33,8 +35,8 @@ def load_year(year: int) -> pd.DataFrame:
     df = df[df["都道府県コード"] == HYOGO].copy()
     df["lat"] = df["地点緯度（北緯）"].map(lambda v: dms_to_deg(v, 2))
     df["lon"] = df["地点経度（東経）"].map(lambda v: dms_to_deg(v, 3))
-    s, w, n, e = BBOX
-    return df[df.lat.between(s, n) & df.lon.between(w, e)]
+    df = df[df.lat.notna() & df.lon.notna()]
+    return df[shapely.contains_xy(KOBE, df.lon.to_numpy(), df.lat.to_numpy())]
 
 
 def main() -> None:
