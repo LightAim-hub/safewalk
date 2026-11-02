@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+*.secrets*
+.secrets/
+data/raw/
+__pycache__/
+.venv/
+node_modules/
+.DS_Store
+.vercel/
