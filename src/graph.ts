@@ -78,9 +78,10 @@ export class Graph {
           }
         }
       }
-      if (best !== null) return best;
+      // 外側の輪により近い点が残っていないと言える時だけ止める。
+      if (best !== null && bestD <= radius * CELL_MIN_M) return best;
     }
-    return null;
+    return best;
   }
 
   /** 辺ごとの費用で最短経路を求め、辺の列を返す。 */
@@ -133,6 +134,8 @@ export class Graph {
 }
 
 const CELL_DEG = 0.002;
+/** 格子1マスの短い方の辺の長さ(神戸の緯度で経度方向 約183m) */
+const CELL_MIN_M = 180;
 
 function cell(lat: number, lon: number): [number, number] {
   return [Math.floor(lat / CELL_DEG), Math.floor(lon / CELL_DEG)];

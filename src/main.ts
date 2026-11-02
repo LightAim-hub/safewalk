@@ -7,10 +7,11 @@ import maplibregl, {
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./style.css";
 import { Graph, metres, type LatLon } from "./graph";
-import { AccidentIndex, findRoutes, type Accidents, type Meta, type Period, type Route } from "./routes";
+import { AccidentIndex, WALK_M_PER_MIN, findRoutes, type Accidents, type Meta, type Period, type Route } from "./routes";
 
 type Place = LatLon & { name: string; kind?: string };
 type PlaceRow = [string, number, number, string, string];
+type IndexedPlace = Place & { kind: string; n: string; y: string };
 type End = "from" | "to";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -23,7 +24,7 @@ const sheet = $("sheet");
 const toastEl = $("toast");
 
 const KOBE_CENTER: [number, number] = [135.17, 34.7];
-const MAX_SNAP_M = 1500;
+const MAX_SNAP_M = 500;
 const COLORS = { good: "#188038", mid: "#b06000", bad: "#c5221f", route: "#1a73e8", other: "#9aa0a6" };
 const CURRENT = "現在地";
 
@@ -40,7 +41,7 @@ const state = {
 let graph: Graph;
 let accidents: AccidentIndex;
 let meta: Meta;
-let places: PlaceRow[] = [];
+let places: IndexedPlace[] = [];
 
 const map: MapLibre = new maplibregl.Map({
   container: "map",
@@ -87,14 +88,20 @@ async function loadData(): Promise<void> {
   graph = new Graph(bin);
   accidents = new AccidentIndex(acc);
   meta = m;
-  places = rows;
+  places = rows.map(([raw, lat, lon, kind, reading]) => {
+    // OpenStreetMap の駅名は「灘」のように「駅」が付かないことがある。
+    const name = kind === "駅" && !raw.endsWith("駅") ? `${raw}駅` : raw;
+    return { name, lat, lon, kind, n: normalize(name), y: normalize(reading) };
+  });
 }
 
 /** 地図の文字を日本語だけにする。 */
 function useJapaneseLabels(): void {
   const label: ExpressionSpecification = ["coalesce", ["get", "name:ja"], ["get", "name"]];
   for (const layer of map.getStyle().layers) {
-    if (layer.type === "symbol" && map.getLayoutProperty(layer.id, "text-field") !== undefined) {
+    if (layer.type !== "symbol") continue;
+    const field = map.getLayoutProperty(layer.id, "text-field");
+    if (field !== undefined && JSON.stringify(field).includes("name")) {
       map.setLayoutProperty(layer.id, "text-field", label);
     }
   }
@@ -201,17 +208,11 @@ function searchPlaces(query: string): Place[] {
     const match = name === q ? 0 : name.startsWith(q) ? 100 : 200;
     return match + (k < 0 ? 50 : k) + name.length / 100;
   };
+  const sortKey = (p: IndexedPlace) => (p.n.startsWith(q) || !p.y.startsWith(q) ? p.n : p.y);
   const seen = new Set<string>();
   return places
-    .map(([raw, lat, lon, kind, reading]) => {
-      // OpenStreetMap の駅名は「灘」のように「駅」が付かないことがある。
-      const name = kind === "駅" && !raw.endsWith("駅") ? `${raw}駅` : raw;
-      const n = normalize(name);
-      const y = normalize(reading);
-      return { n: y.startsWith(q) && !n.startsWith(q) ? y : n, y, name, lat, lon, kind };
-    })
     .filter((p) => p.n.includes(q) || p.y.includes(q))
-    .sort((a, b) => rank(a.n, a.kind) - rank(b.n, b.kind))
+    .sort((a, b) => rank(sortKey(a), a.kind) - rank(sortKey(b), b.kind))
     .filter((p) => {
       const key = `${p.name}:${p.kind}`;
       if (seen.has(key)) return false;
@@ -280,6 +281,7 @@ function bindSuggest(input: HTMLInputElement, onPick: (p: Place) => void, offerC
   let timer = 0;
 
   const close = () => {
+    token++;
     list.hidden = true;
     active = -1;
   };
@@ -346,6 +348,8 @@ function bindSuggest(input: HTMLInputElement, onPick: (p: Place) => void, offerC
   };
 
   input.addEventListener("keydown", (e) => {
+    // 日本語入力の変換を確定する Enter は、検索の確定にしない。
+    if (e.isComposing || e.keyCode === 229) return;
     if (e.key === "Escape") return close();
     if (e.key === "Enter") {
       e.preventDefault();
@@ -409,16 +413,22 @@ function closeDirections(): void {
   state.mode = "browse";
   document.body.classList.remove("routing");
   state.from = state.to = null;
-  state.routes = [];
   fromInput.value = toInput.value = "";
   markers.from.remove();
   markers.to.remove();
   directions.hidden = true;
   searchbar.hidden = false;
-  sheet.hidden = true;
+  clearRoutes();
+}
+
+/** 表示中の経路を消す。経路を出せない時は、古い経路を残さず理由を出す。 */
+function clearRoutes(message = ""): void {
+  state.routes = [];
   (map.getSource("routes") as GeoJSONSource).setData(emptyCollection());
   (map.getSource("accidents") as GeoJSONSource).setData(emptyCollection());
   history.replaceState(null, "", location.pathname);
+  sheet.replaceChildren(el("p", "", message));
+  sheet.hidden = !message;
 }
 
 function setEnd(which: End, place: Place | null, run = true): void {
@@ -433,22 +443,26 @@ function setEnd(which: End, place: Place | null, run = true): void {
 function search(): void {
   const start = snap(state.from!);
   const goal = snap(state.to!);
-  if (start === null || goal === null) {
-    toast("出発地か目的地の近くに、神戸市内の歩ける道がありません。");
-    return;
-  }
+  if (start === null || goal === null) return clearRoutes("出発地か目的地の近くに、神戸市内の歩ける道がありません。");
+  if (start === goal) return clearRoutes("出発地と目的地が近すぎるため、経路を出せません。");
   state.routes = findRoutes(graph, start, goal, state.period, accidents, meta);
-  if (!state.routes.length) {
-    sheet.replaceChildren(el("p", "", "歩いて行ける経路が見つかりませんでした。"));
-    sheet.hidden = false;
-    return;
-  }
+  if (!state.routes.length) return clearRoutes("歩いて行ける経路が見つかりませんでした。");
+  for (const route of state.routes) connectEnds(route, state.from!, state.to!);
   writeUrl();
   const best = state.routes.reduce((a, b, i, all) => (b.safety > all[a].safety ? i : a), 0);
   selectRoute(best);
   const all = state.routes.flatMap((r) => r.coords);
   const bounds = all.reduce((b, c) => b.extend(c), new maplibregl.LngLatBounds(all[0], all[0]));
   map.fitBounds(bounds, { padding: mapPadding(), duration: 500 });
+}
+
+/** 交差点から実際の地点までの区間を、線と距離に足す。 */
+function connectEnds(route: Route, from: LatLon, to: LatLon): void {
+  const [startLon, startLat] = route.coords[0];
+  const [endLon, endLat] = route.coords[route.coords.length - 1];
+  route.metres += metres(from, { lat: startLat, lon: startLon }) + metres(to, { lat: endLat, lon: endLon });
+  route.minutes = Math.ceil(route.metres / WALK_M_PER_MIN);
+  route.coords = [[from.lon, from.lat], ...route.coords, [to.lon, to.lat]];
 }
 
 function formatMinutes(min: number): string {
@@ -551,19 +565,29 @@ function accidentDetail(route: Route): HTMLElement {
   const share = el("button", "secondary", "この経路のリンクをコピー");
   share.type = "button";
   share.addEventListener("click", async () => {
-    await navigator.clipboard.writeText(location.href);
-    share.textContent = "コピーしました";
+    try {
+      await navigator.clipboard.writeText(location.href);
+      share.textContent = "コピーしました";
+    } catch {
+      toast("コピーできませんでした。アドレス欄のリンクをお使いください。");
+    }
   });
   wrap.append(items, share);
   return wrap;
 }
 
 function writeUrl(): void {
+  // 共有リンクに現在地の正確な座標を載せない。
+  const coords = (p: Place) => {
+    const digits = p.name === CURRENT ? 3 : 5;
+    return `${p.lat.toFixed(digits)},${p.lon.toFixed(digits)}`;
+  };
+  const label = (p: Place) => (p.name === CURRENT ? "現在地の付近" : p.name);
   const q = new URLSearchParams({
-    from: `${state.from!.lat.toFixed(5)},${state.from!.lon.toFixed(5)}`,
-    to: `${state.to!.lat.toFixed(5)},${state.to!.lon.toFixed(5)}`,
-    fromName: state.from!.name,
-    toName: state.to!.name,
+    from: coords(state.from!),
+    to: coords(state.to!),
+    fromName: label(state.from!),
+    toName: label(state.to!),
     period: state.period,
   });
   history.replaceState(null, "", `?${q}`);
@@ -618,10 +642,17 @@ document.querySelectorAll<HTMLButtonElement>("[data-period]").forEach((b) => {
   });
 });
 
+// データが揃うまで操作を受けない。
+const ui = document.querySelector<HTMLElement>(".ui")!;
+const locateButton = $<HTMLButtonElement>("locate");
+ui.inert = true;
+locateButton.disabled = true;
 renderPeriod();
 Promise.all([loadData(), new Promise<void>((resolve) => map.on("load", () => resolve()))])
   .then(() => {
     addLayers();
+    ui.inert = false;
+    locateButton.disabled = false;
     readUrl();
     renderPeriod();
   })

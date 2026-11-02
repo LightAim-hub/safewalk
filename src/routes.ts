@@ -27,7 +27,7 @@ export type Route = {
   accidents: number[];
 };
 
-const WALK_M_PER_MIN = 80;
+export const WALK_M_PER_MIN = 80;
 const NEAR_M = 30;
 /** 事故の重み 1 を、何 m の遠回りに換算するか */
 const METRES_PER_RISK = 30;

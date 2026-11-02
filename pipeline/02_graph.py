@@ -113,6 +113,7 @@ def largest_component(edges):
     for e in edges:
         sizes[find(e[0][0])] += 1
     root = max(sizes, key=sizes.get)
+    print("largest component", sizes[root], "of", len(edges), "edges")
     return [e for e in edges if find(e[0][0]) == root]
 
 
