@@ -13,7 +13,7 @@
 .emg-close { flex: none; min-width: 44px; min-height: 44px; padding: 0 10px; border: 0; background: transparent; color: var(--link); font-size: 0.875rem; }
 .emergency h4 { margin: 10px 0 4px; font-size: 0.8125rem; }
 .emg-calls, .emg-kobans { margin: 0; padding: 0; list-style: none; }
-.emg-calls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.emg-calls { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 6px; }
 .emg-call {
   display: flex;
   min-height: 56px;

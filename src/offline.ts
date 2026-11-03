@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { toast } from "./app";
+import { toast, toastEl } from "./app";
 /**
  * 電波が弱い・無い時の備え(Service Worker の登録と、オフライン表示)。
  * 中身は public/sw.js。使えない端末・プライベートブラウズ・開発中(vite dev)では何もせず、今まで通り通信で動く。
@@ -49,6 +49,8 @@ export function bindOffline(): void {
   // 開発中は登録しない(古い物が残って、直した結果が見えなくなるため)。
   if (!import.meta.env.PROD || !("serviceWorker" in navigator)) return;
   try {
+    // 初めての時に読んだ地図の URL を後で拾うため、記録の枠を広げる(既定の 250 件ではタイルで溢れる)。
+    performance.setResourceTimingBufferSize?.(1000);
     const url = new URL("sw.js", document.baseURI).href;
     const start = () => {
       navigator.serviceWorker
@@ -58,8 +60,22 @@ export function bindOffline(): void {
           const first = !navigator.serviceWorker.controller;
           const worker = reg.installing;
           if (first && worker) {
+            // 端末に残す量が多いので、消されにくくするよう頼む。初めての時だけ(端末によっては確かめる画面が出るため、毎回は頼まない)。
+            navigator.storage?.persist?.().catch(() => {});
             worker.addEventListener("statechange", () => {
-              if (worker.state === "activated") toast("この端末に地図とデータを残しました。次からは電波がなくても開けます");
+              if (worker.state !== "activated") return;
+              // 今の画面が読み込んだ地図は、この仕組みが動く前に取った物なので残っていない。取り直して残すよう頼む。
+              const urls = performance
+                .getEntriesByType("resource")
+                .map((e) => e.name)
+                .filter((u) => u.startsWith("https://tiles.openfreemap.org/"));
+              worker.postMessage({ type: "warm", urls: [...new Set(urls)] });
+              // 他の知らせ(「神戸市の外です」など)が出ている間は上書きせず、消えてから出す。
+              const notify = (tries: number) => {
+                if (!toastEl.hidden && tries > 0) return void window.setTimeout(() => notify(tries - 1), 1500);
+                toast("この端末に地図とデータを残しました。次からは電波がなくても、今見た範囲の地図で開けます");
+              };
+              notify(10);
             });
           }
           // 長く開いたままの画面でも更新に気づけるよう、戻ってきた時に確かめる。
@@ -71,8 +87,6 @@ export function bindOffline(): void {
           });
         })
         .catch((err) => console.warn("オフラインの備えを使えません", err));
-      // 端末に残す量が多いので、消されにくくするよう頼む(断られても動作は変わらない)。
-      navigator.storage?.persist?.().catch(() => {});
     };
     // 初回の読み込みと通信を取り合わないよう、画面が出た後に始める。
     if (document.readyState === "complete") start();

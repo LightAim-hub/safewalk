@@ -48,8 +48,14 @@ export async function loadData(): Promise<void> {
     loadCautions(),
   ]);
   if (!Array.isArray(rows) || !Array.isArray(roadNames)) throw new Error("データの形が正しくありません");
-  const shape = kobe.geometry;
+  // 一部だけ壊れて届いた時に、普通に起動して全部の検索が「市の外」や NaN になるのを防ぐ(読み込み失敗の画面を出す)。
+  const mm = m as unknown as Record<string, unknown>;
+  if (!["riskPerKmDay", "riskPerKmNight"].every((k) => Number.isFinite(mm?.[k] as number))) throw new Error("graph.meta.json の形が正しくありません");
+  if (!Array.isArray(acc?.lat) || !Array.isArray(acc?.lon) || acc.lat.length !== acc.lon.length) throw new Error("accidents.json の形が正しくありません");
+  const shape = kobe?.geometry;
+  if (!shape || (shape.type !== "Polygon" && shape.type !== "MultiPolygon")) throw new Error("kobe.geojson の形が正しくありません");
   kobeRings = (shape.type === "Polygon" ? [shape.coordinates] : shape.coordinates).flat() as [number, number][][];
+  if (!kobeRings.length || kobeRings.some((r) => !Array.isArray(r) || r.length < 4)) throw new Error("kobe.geojson の形が正しくありません");
   graph = new Graph(bin);
   accidents = new AccidentIndex(acc);
   safety = createSafety(cautions, acc);

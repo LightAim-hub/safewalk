@@ -1,3 +1,4 @@
+import type { GeoJSONSource } from "maplibre-gl";
 import { metres, type LatLon } from "./graph";
 import { findRoutes, minutesFor, type Route } from "./routes";
 import { $, CURRENT, state, map, markers, toast, el } from "./app";
@@ -63,6 +64,13 @@ let outside = false;
 export const OUTSIDE_TEXT = "現在地が神戸市の外です";
 /** 案内を始めて最初の位置か。出発地から離れている時の知らせの文を変える。 */
 let firstFix = false;
+/** 続けて経路の外だった回数。GPS が1回だけ跳んだ時に経路を組み替えないよう、2回続いてから探し直す。 */
+let offCount = 0;
+export const OFF_ROUTE_CONFIRM = 2;
+/** 到着したら true。その後は外れの判定も案内もしない(「終了」を押すまで「着きました」のまま)。 */
+let arrivedFlag = false;
+/** これより誤差の大きい位置は、案内の判定に使わない(数km先と判定して経路を組み替えてしまうため)。 */
+export const UNSURE_ACCURACY_M = 300;
 /** 終了の二度押しで、すぐ下の「案内を始める」が押されて再開しないよう、終えてからこの間は始めない。 */
 export const RESTART_GUARD_MS = 600;
 let endedAt = 0;
@@ -419,20 +427,36 @@ export function updateGuide(p: LatLon, accuracy?: number): void {
     return;
   }
   outside = false;
+  if (arrivedFlag) return;
+  // 誤差が大きすぎる位置では、判定も表示も変えない(数km先と判定して経路を組み替えないように)。
+  if (accuracy && accuracy > UNSURE_ACCURACY_M) {
+    showAlert("gps", "位置が不確かです。屋外の開けた場所で少し待つと戻ります", 6000);
+    return;
+  }
   map.easeTo({ center: [p.lon, p.lat], zoom: Math.max(map.getZoom(), 17), duration: 500 });
   const first = firstFix;
   firstFix = false;
   if (distanceToRoute(p, route) > offRouteLimit(accuracy) && !rerouting) {
-    // 選んだ経路へ戻る道ができたら、その新しい経路で続けて案内を出す。できなければ「戻って」の表示で終える。
-    if (!reroute(p, route, first)) return;
-    route = state.routes[state.selected];
-  }
+    // 最初の位置以外は、2回続けて外れた時だけ探し直す(1回だけの跳びで経路を組み替えない)。
+    offCount++;
+    if (first || offCount >= OFF_ROUTE_CONFIRM) {
+      offCount = 0;
+      // 選んだ経路へ戻る道ができたら、その新しい経路で続けて案内を出す。できなければ「戻って」の表示で終える。
+      if (!reroute(p, route, first)) return;
+      route = state.routes[state.selected];
+    } else return;
+  } else offCount = 0;
   if (offStuck) {
     offStuck = false;
     hideAlert("off");
   }
   const end = route.coords[route.coords.length - 1];
-  if (metres(p, { lat: end[1], lon: end[0] }) <= STEP_REACHED_M) {
+  const rest = remainingFrom(p, route);
+  // 終点の近くに来たら着いたとする。出発地と終点が近い周回だけは、経路の終わりまで進んだ時に限る(歩き始めに「着きました」と言わない)。
+  const begin = route.coords[0];
+  const loop = metres({ lat: begin[1], lon: begin[0] }, { lat: end[1], lon: end[0] }) <= STEP_REACHED_M * 2;
+  if (metres(p, { lat: end[1], lon: end[0] }) <= STEP_REACHED_M && (!loop || rest.metresLeft <= STEP_REACHED_M * 2)) {
+    arrivedFlag = true;
     if ($("guide-next").textContent !== "目的地に着きました") speak("目的地に到着しました。お疲れさまでした。");
     put("guide-next", "目的地に着きました");
     showTurn("⚑", "");
@@ -440,7 +464,7 @@ export function updateGuide(p: LatLon, accuracy?: number): void {
     put("guide-rest", "");
     return;
   }
-  const { next, then, metresLeft, metresToNext } = remainingFrom(p, route);
+  const { next, then, metresLeft, metresToNext } = rest;
   if (next && metres(p, { lat: next.at[1], lon: next.at[0] }) <= ANNOUNCE_M) {
     const key = next.at.join(",");
     if (key !== announced) {
@@ -498,6 +522,8 @@ export function startGuide(index: number): void {
   offStuck = false;
   outside = false;
   firstFix = true;
+  offCount = 0;
+  arrivedFlag = false;
   for (const kind of ["notice", "off", "gps", "info"] as AlertKind[]) hideAlert(kind);
   const lengthM = state.routes[index]?.metres ?? 0;
   if (lengthM >= LONG_ROUTE_M) showAlert("info", BATTERY_TEXT, 12000);
@@ -538,7 +564,18 @@ export function toggleEmergency(open?: boolean): void {
   close.addEventListener("click", () => toggleEmergency(false));
   box.replaceChildren(close, emergencyPanel(lastPos, routeToKobanFromGuide, undefined, KOBAN_HEADING_HERE));
   box.hidden = false;
+  if (!escBound) {
+    escBound = true;
+    document.addEventListener("keydown", (e) => {
+      const b = document.getElementById("guide-emg");
+      if (e.key !== "Escape" || !b || b.hidden) return;
+      e.stopPropagation();
+      toggleEmergency(false);
+      document.getElementById("guide-emergency")?.focus();
+    });
+  }
 }
+let escBound = false;
 
 /** 案内を終えて、今いる場所から交番への経路を出す。 */
 function routeToKobanFromGuide(k: KobanHit): void {
@@ -554,6 +591,9 @@ export function stopGuide(): void {
   const wasGuiding = watchId !== null;
   watchId = null;
   if (wasGuiding) {
+    // 案内で出した現在地の点と誤差の円は、終えたら消す(古い場所を今の場所のように見せないため)。
+    markers.me.remove();
+    (map.getSource("accuracy") as GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features: [] });
     endedAt = Date.now();
     document.body.classList.add("guide-cooldown");
     window.setTimeout(() => document.body.classList.remove("guide-cooldown"), RESTART_GUARD_MS);

@@ -241,10 +241,29 @@ export function addStop(place: Place): void {
   if (state.from && state.to) search();
 }
 
-export function searchThrough(): Route | null {
-  const points = [state.from!, ...state.stops.filter((s): s is Place => s !== null), state.to!];
-  const anchors = points.map(snap);
-  if (anchors.some((a) => a === null)) return null;
+export function searchThrough(): Route | null | "near" {
+  const all = [state.from!, ...state.stops.filter((s): s is Place => s !== null), state.to!];
+  const snapped = all.map(snap);
+  if (snapped.some((a) => a === null)) return null;
+  // 前の地点と同じ所(5m 未満)の経由地は飛ばす(長さ0の区間ができ、案内の1つ目が「経由地」になるため)。
+  const points: Place[] = [];
+  const anchors: NonNullable<ReturnType<typeof snap>>[] = [];
+  all.forEach((p, i) => {
+    const a = snapped[i]!;
+    const prev = anchors[anchors.length - 1];
+    const same = prev && metres({ lat: prev.point[1], lon: prev.point[0] }, { lat: a.point[1], lon: a.point[0] }) < 5;
+    if (same && i < all.length - 1) return;
+    if (same) {
+      // 目的地が直前の経由地と同じ時は、その経由地の代わりに目的地を残す。
+      points.pop();
+      anchors.pop();
+      const before = anchors[anchors.length - 1];
+      if (before && metres({ lat: before.point[1], lon: before.point[0] }, { lat: a.point[1], lon: a.point[0] }) < 5) return;
+    }
+    points.push(p);
+    anchors.push(a);
+  });
+  if (anchors.length < 2) return "near";
   const parts = anchors.slice(1).map((a, i) => {
     const options = findRoutes(graph, anchors[i]!, a!, state.period, accidents, meta, names);
     return options[0];
@@ -303,6 +322,7 @@ function runSearch(): void {
   }
   if (state.stops.some(Boolean)) {
     const through = searchThrough();
+    if (through === "near") return clearRoutes("出発地と目的地が近すぎるため、経路を出せません。");
     if (!through) return clearRoutes("経由地を通る経路が見つかりませんでした。");
     state.routes = [through];
     return showRoutes();

@@ -518,7 +518,8 @@ def s_locate(r, arg):
         r.notes.append("位置の前置き: " + r.text_of(".note", 90))
         r.tap(ask.first, "現在地を使う")
         r.sleep(1500)
-    t = r.text_of("#toast", 120) or r.text_of(".locate-note", 120)
+    # 知らせ(#toast)と現在地の説明の札(.locate-note)は同時に出ることがある(初回の「端末に残しました」など)。両方を見る。
+    t = " / ".join(x for x in (r.text_of(".locate-note", 120), r.text_of("#toast", 120)) if x)
     r.notes.append("現在地→" + (t or ("印が出た" if r.pg.locator(".me").count() else "反応なし")))
     if arg and arg not in t:
         raise StepFail("期待と違う", f"『{arg}』を含む知らせが出ない（出た物: {t or 'なし'}）")

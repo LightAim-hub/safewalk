@@ -192,8 +192,13 @@ export function closePlace(): void {
   pushUrl();
 }
 
-export function externalLink(url: string): HTMLAnchorElement | null {
-  if (!/^https?:\/\//.test(url)) return null;
+export function externalLink(raw: string): HTMLAnchorElement | null {
+  // 「arima-ya.com」のように頭の https:// が無い記録もある。見た目が住所(ドメイン)の時だけ補う。
+  let url = raw.trim();
+  if (!/^https?:\/\//.test(url)) {
+    if (!/^[a-z0-9.-]+\.[a-z]{2,}(\/\S*)?$/i.test(url)) return null;
+    url = "https://" + url;
+  }
   const link = el("a", "", url.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, ""));
   link.href = url;
   link.target = "_blank";
@@ -242,9 +247,16 @@ export function showPlace(place: Place): void {
     info.append(infoRow("営業時間", "営業時間の記録なし"));
   }
   if (place.phone) {
-    const call = el("a", "", place.phone);
-    call.href = `tel:${place.phone.replace(/[^0-9+]/g, "")}`;
-    info.append(infoRow("電話", call));
+    // 番号が2つ以上「;」などでつながっている記録がある。1本ずつ別のリンクにする(つなげると存在しない番号になる)。
+    const nums = place.phone.split(/[;；,、/／]/).map((s) => s.trim()).filter((s) => /\d{4,}/.test(s.replace(/\D/g, "")));
+    const box = el("span");
+    nums.forEach((num, i) => {
+      const call = el("a", "", num);
+      call.href = `tel:${num.replace(/[^0-9+]/g, "")}`;
+      if (i) box.append("　");
+      box.append(call);
+    });
+    if (nums.length) info.append(infoRow("電話", box));
   }
   const web = place.web ? externalLink(place.web) : null;
   if (web) info.append(infoRow("サイト", web));

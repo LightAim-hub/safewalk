@@ -824,6 +824,8 @@ body.guiding .ui {
   background: var(--toast-bg);
   color: var(--toast-ink);
   font-size: 0.875rem;
+  /* 知らせは読むだけ。上のボタンに重なっても、押した指は下のボタンへ通す。 */
+  pointer-events: none;
 }
 
 .load-error {

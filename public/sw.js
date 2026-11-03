@@ -45,6 +45,7 @@ self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
       // 1つでも欠けたらこの版は有効にならず、前の版が使われ続ける(次の起動でもう一度入れ直す)。
+      // 途中まで入った入れ物は、次の入れ直しで続きから足すために残す(次に別の版が有効になった時に消える)。
       await precache(APP_CACHE, APP_FILES);
       await precache(DATA_CACHE, DATA_FILES);
       await self.skipWaiting();
@@ -96,8 +97,13 @@ async function cacheFirst(name, req) {
   return res;
 }
 
-/** 通信を優先し、遅い・つながらない時は残した物を返す。 */
+/** 通信を優先し、遅い・つながらない時は残した物を返す。残した物が無い時は、遅くても通信を待つ(途中で切ると地図が描けない)。 */
 async function networkFirst(name, req) {
+  if (!(await caches.match(req, { cacheName: name }))) {
+    const res = await fetch(req);
+    put(name, req, res.clone());
+    return res;
+  }
   try {
     const res = await networkWithTimeout(req);
     put(name, req, res.clone());
@@ -112,7 +118,13 @@ async function networkFirst(name, req) {
 async function sameOrigin(req, url) {
   // ページの移動は、いつも同じ版の index.html を返す(?や#が付いていても)。
   if (req.mode === "navigate") {
-    const target = url.pathname.endsWith("/safety.html") ? abs("safety.html") : abs("./");
+    // 入口(/safewalk/ と index.html)と safety.html だけ。それ以外の道は本来の 404 をそのまま見せる
+    // (index.html を返すと、相対の読み込みがずれて白い画面になる)。
+    const path = url.pathname;
+    const root = new URL(SCOPE).pathname;
+    const isPage = path === root || path === root + "index.html" || path === root + "safety.html";
+    if (!isPage) return fetch(req);
+    const target = path.endsWith("/safety.html") ? abs("safety.html") : abs("./");
     const page = await caches.match(target, { cacheName: APP_CACHE, ignoreSearch: true });
     return page || fetch(req);
   }
@@ -122,6 +134,37 @@ async function sameOrigin(req, url) {
   }
   return fetch(req);
 }
+
+/**
+ * 初めての時は、画面が地図を読み込み終わった後でこの仕組みが動き始めるので、その地図は残っていない。
+ * 画面から「もう読み込んだ地図の URL」を受け取り、取り直して残す(電波なしの2回目でも地図が出るように)。
+ */
+self.addEventListener("message", (event) => {
+  const data = event.data;
+  if (!data || data.type !== "warm" || !Array.isArray(data.urls)) return;
+  event.waitUntil(
+    (async () => {
+      for (const u of data.urls.slice(0, 300)) {
+        let url;
+        try {
+          url = new URL(u);
+        } catch {
+          continue;
+        }
+        if (url.hostname !== "tiles.openfreemap.org" || url.protocol !== "https:") continue;
+        const isTile = /\/\d+\/\d+\/\d+(\.[a-z]+)?$/.test(url.pathname) && !url.pathname.includes("/fonts/");
+        const name = isTile ? TILE_CACHE : MAP_CACHE;
+        if (await caches.match(url.href, { cacheName: name })) continue;
+        try {
+          const res = await fetch(url.href);
+          await put(name, url.href, res);
+        } catch {
+          // 取れなかった物は、次に見た時に残る。
+        }
+      }
+    })(),
+  );
+});
 
 self.addEventListener("fetch", (event) => {
   const req = event.request;

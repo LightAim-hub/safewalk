@@ -211,13 +211,12 @@ export default {
 
     // 回数の制限(検査を通った呼び出しだけを数える)。
     const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
+    // 上限の設定が無い・数字でない時は、全部が素通りになるので通さない。
+    const limits = { daily: Number(env.DAILY_LIMIT), ip10: Number(env.IP_10MIN_LIMIT), ipDay: Number(env.IP_DAY_LIMIT) };
+    if (!Object.values(limits).every((n) => Number.isFinite(n) && n > 0)) return json(503, MSG.limiterDown, origin);
     try {
       const stub = env.LIMITER.get(env.LIMITER.idFromName("global"));
-      const r = await stub.hit(await sha(ip), Date.now(), {
-        daily: Number(env.DAILY_LIMIT),
-        ip10: Number(env.IP_10MIN_LIMIT),
-        ipDay: Number(env.IP_DAY_LIMIT),
-      });
+      const r = await stub.hit(await sha(ip), Date.now(), limits);
       if (!r.ok) {
         const retry = r.reason === "ip10" ? "600" : "3600";
         return json(429, r.reason === "daily" ? MSG.daily : r.reason === "ipDay" ? MSG.ipDay : MSG.ip10, origin, { "retry-after": retry });

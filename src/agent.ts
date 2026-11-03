@@ -383,7 +383,8 @@ export async function runAgent(input: AgentInput, deps: AgentDeps = {}): Promise
       continue;
     }
 
-    if (res.stop_reason !== "end_turn") return failure(`Claude の応答を処理できませんでした(${res.stop_reason})。`, routes, facts, turn, usage);
+    // 内部の値(stop_reason)は画面に出さない。想定外の応答は、他の失敗と同じ文にする。
+    if (res.stop_reason !== "end_turn") return failure(FIXED.failed, routes, facts, turn, usage);
 
     const text = res.content.find((b) => b.type === "text")?.text;
     let raw: Raw;
