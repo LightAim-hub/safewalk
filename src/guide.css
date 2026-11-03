@@ -319,3 +319,67 @@ body.guiding .toast {
 body.guiding .time-tag {
   display: none;
 }
+
+/* 終えた直後の少しの間は、下の「案内を始める」が反応しない(終了の二度押しで再開しないように)。 */
+body.guide-cooldown .start-bar {
+  pointer-events: none;
+}
+
+/* 緊急: 下の帯の小さなボタンと、押すと出る固定の枠。押しただけでは電話はかからない。 */
+#guide .guide-actions button.guide-emergency {
+  padding: 0 10px;
+  border-color: #d93025;
+  color: #d93025;
+  font-weight: 700;
+}
+
+#guide .guide-emg {
+  position: fixed;
+  right: max(8px, env(safe-area-inset-right));
+  bottom: calc(68px + env(safe-area-inset-bottom));
+  left: max(8px, env(safe-area-inset-left));
+  width: auto;
+  max-width: 440px;
+  max-height: calc(100dvh - 160px);
+  margin: 0 auto;
+  padding: 0 0 8px;
+  overflow: auto;
+  border-radius: 12px;
+  background: var(--paper);
+  box-shadow: 0 2px 12px rgb(0 0 0 / 35%);
+  pointer-events: auto;
+}
+
+#guide .guide-emg[hidden] {
+  display: none;
+}
+
+#guide .guide-emg .emergency {
+  margin: 0;
+}
+
+#guide .guide-emg .guide-emg-close {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: block;
+  margin: 0 0 8px auto;
+  width: auto;
+  min-height: 44px;
+  padding: 0 18px;
+}
+
+#guide .guide-emg .emergency {
+  margin: 0 8px;
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  #guide .guide-emg {
+    right: auto;
+    bottom: 8px;
+    left: calc(min(208px, 32vw) + max(8px, env(safe-area-inset-left)) + 8px);
+    width: min(420px, calc(100vw - min(208px, 32vw) - 96px));
+    max-height: calc(100dvh - 16px);
+    margin: 0;
+  }
+}
