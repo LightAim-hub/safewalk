@@ -775,11 +775,13 @@ function detailBody(route: Route, a: Assessment, shortest: Route): HTMLElement[]
 
 export const DETOUR_TEXT = "歩行者が通れない車道や登山道を避けるため、遠回りになっています。登山・ランニングのコースには向きません";
 
-/** 経路が出発地と目的地の直線の1.8倍を超え、直線が2kmを超える時（歩行者が通れない道を避けた遠回り）。 */
+const DETOUR_MIN_STRAIGHT_M = 500;
+
+/** 経路が出発地と目的地の直線の1.8倍を超え、直線が500mを超える時（歩行者が通れない道を避けた遠回り。短すぎる距離では出さない）。 */
 export function isDetour(route: Route): boolean {
   if (!state.from || !state.to) return false;
   const straight = metres(state.from, state.to);
-  return straight > 2000 && route.metres > straight * 1.8;
+  return straight > DETOUR_MIN_STRAIGHT_M && route.metres > straight * 1.8;
 }
 
 /** 選んだ経路の中身。常に見せるのは要約だけ。理由・出典・道順などは「くわしく」にしまう。 */

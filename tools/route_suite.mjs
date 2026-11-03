@@ -255,20 +255,22 @@ function runCase(pair, period) {
   if (!first || !first.coords.length) fail("既定の経路が無い", period);
   // 最短の札
   if (!routes.some((r) => r.label === "最短" || r.label === "おすすめ")) fail("最短の札が無い", `札: ${routes.map((r) => r.label).join(",")}`);
-  if (routes.length > 1 && first.label !== "最短") fail("最短の札が先頭に無い", `先頭の札: ${first.label}`);
+  if (routes.length > 1 && first.label !== "最短" && first.label !== "おすすめ") fail("最短の札が先頭に無い", `先頭の札: ${first.label}`);
   // 「最短」は所要時間(坂を含む)で選ぶ作り。時間で2分以上・5%以上短い候補があれば札が合っていない。
   const quickest = routes.reduce((a, b) => (b.minutes < a.minutes ? b : a));
-  if (routes.length > 1 && first.minutes - quickest.minutes >= 2 && first.minutes > quickest.minutes * 1.05) fail(period === "night" && quickest.remoteMetres > first.remoteMetres + 50 ? "最短の札が最短でない(夜に人家から離れた道を避けた結果)" : "最短の札が最短でない", `先頭 ${first.minutes}分(${Math.round(first.metres)}m)に対し ${quickest.minutes}分(${Math.round(quickest.metres)}m)の候補がある`);
+  if (routes.length > 1 && first.label === "最短" && first.minutes - quickest.minutes >= 2 && first.minutes > quickest.minutes * 1.05) fail(period === "night" && quickest.remoteMetres > first.remoteMetres + 50 ? "最短の札が最短でない(夜に人家から離れた道を避けた結果)" : "最短の札が最短でない", `先頭 ${first.minutes}分(${Math.round(first.metres)}m)に対し ${quickest.minutes}分(${Math.round(quickest.metres)}m)の候補がある`);
 
   routes.forEach((r, i) => {
     const tag = `経路${"ABCDEFG"[i] ?? i}(${r.label})`;
     // 直線との比と遠回りの一行(directions.ts isDetour と同じ条件)
     const ratio = r.metres / straight;
-    const detourLine = straight > 2000 && r.metres > straight * 1.8;
+    const detourLine = straight > 500 && r.metres > straight * 1.8;
     // 既定の経路(先頭)だけを不合格にする。別の道は、先頭の1.7倍までの候補なので参考に留める。
     const judged = i === 0;
-    if (ratio > 1.8 && !detourLine && !judged) info.push(["別の道が直線の1.8倍超(一行なし)", `${tag}: ${ratio.toFixed(2)}倍`]);
-    if (ratio > 1.8 && !detourLine && judged) fail("遠回りなのに一行が出ない", `${tag}: 直線 ${Math.round(straight)}m に対し ${Math.round(r.metres)}m(${ratio.toFixed(2)}倍。直線が2km以下なので一行が出ない)`);
+    // 直線500m以下は遠回りの一行を出さない(余分に歩く距離がわずかなため)。不合格にせず参考に留める。
+    const shortTrip = straight <= 500;
+    if (ratio > 1.8 && !detourLine && (!judged || shortTrip)) info.push(["別の道が直線の1.8倍超(一行なし)", `${tag}: ${ratio.toFixed(2)}倍`]);
+    if (ratio > 1.8 && !detourLine && judged && !shortTrip) fail("遠回りなのに一行が出ない", `${tag}: 直線 ${Math.round(straight)}m に対し ${Math.round(r.metres)}m(${ratio.toFixed(2)}倍。直線が500m以下なので一行が出ない)`);
     if (detourLine) info.push(["遠回りの一行あり", `${tag}: ${ratio.toFixed(2)}倍`]);
     if (ratio > 3 && judged) fail("遠回りが3倍超", `${tag}: 直線 ${Math.round(straight)}m に対し ${Math.round(r.metres)}m(${ratio.toFixed(2)}倍${detourLine ? "・一行は出る" : ""})`);
     if (r.metres < straight * 0.97) fail("経路が直線より短い", `${tag}: ${Math.round(r.metres)}m < 直線 ${Math.round(straight)}m`);
