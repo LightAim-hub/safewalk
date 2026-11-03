@@ -75,10 +75,14 @@ export function bindOffline(): void {
               worker.postMessage({ type: "warm", urls: [...new Set(urls)] });
               // 他の知らせ(「神戸市の外です」など)が出ている間は上書きせず、消えてから出す。
               const notify = (tries: number) => {
-                if (!toastEl.hidden && tries > 0) return void window.setTimeout(() => notify(tries - 1), 1500);
-                toast("この端末に地図とデータを残しました。次からは電波がなくても、今見た範囲の地図で開けます");
+                // 初めての説明の窓が開いている間も待つ(窓の上に重ねない)。
+                // 文字を入れている間も待つ(入力の邪魔をしない)。
+                const typing = document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement;
+                const busy = !toastEl.hidden || document.body.classList.contains("intro-open") || typing;
+                if (busy && tries > 0) return void window.setTimeout(() => notify(tries - 1), 1500);
+                toast("この端末に地図とデータを残しました。次からは電波がなくても、今見た範囲の地図で開けます", { bottom: true });
               };
-              notify(10);
+              notify(40);
             });
           }
           // 長く開いたままの画面でも更新に気づけるよう、戻ってきた時に確かめる。

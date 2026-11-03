@@ -40,6 +40,35 @@ export function openDirections(ends: Partial<Record<End, Place>>): void {
   }
 }
 
+/**
+ * 初めて開いた人が「使ってみる」を押した時。経路の入力を開き、目的地の欄に文字を入れられる状態にする。
+ * 出発地は現在地を入れる（この時だけ許可を尋ねる。押した操作の直後なので）。許可が出ない時は空のまま。
+ */
+export function startFromIntro(): void {
+  openDirections({});
+  // 知らせ(toast)は上の入力欄に重なるので、欄の中の案内の文で伝える(文字を入れると消える)。
+  const before = toInput.placeholder;
+  toInput.placeholder = "目的地を入れてください";
+  toInput.addEventListener("input", () => (toInput.placeholder = before), { once: true });
+  toInput.focus();
+  announce("目的地を入れてください");
+  track("intro_start");
+  // 出発地が空のまま目的地が入ったら、「出発地を入れるか、現在地を使う」を出す(何も起きないように見せない)。
+  fromMissing = true;
+  if (!navigator.geolocation) return;
+  const mine = ++locating;
+  navigator.geolocation.getCurrentPosition(
+    ({ coords }) => {
+      if (mine !== locating || state.mode !== "directions" || state.from || fromInput.value.trim()) return;
+      const place: Place = { lat: coords.latitude, lon: coords.longitude, name: CURRENT };
+      if (snap(place) === null) return;
+      setEnd("from", place);
+    },
+    () => {},
+    { timeout: 10000, maximumAge: 60000 },
+  );
+}
+
 /** 結果の見出し（経路の一覧）へ焦点を移す。案内を終えた後など、押した物が消えた時の行き先。 */
 export function focusResultHeading(): void {
   const heading = sheet.querySelector<HTMLElement>("[data-result-heading]");

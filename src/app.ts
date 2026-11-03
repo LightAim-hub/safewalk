@@ -81,7 +81,9 @@ export function meElement(): HTMLElement {
 }
 
 export let toastTimer = 0;
-export function toast(text: string): void {
+/** bottom: 狭い画面でも下に出す(上の入力欄を覆わない。急ぎでない知らせ用)。 */
+export function toast(text: string, opts: { bottom?: boolean } = {}): void {
+  toastEl.classList.toggle("bottom", !!opts.bottom);
   toastEl.textContent = text;
   toastEl.hidden = false;
   clearTimeout(toastTimer);

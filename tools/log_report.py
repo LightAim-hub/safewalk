@@ -17,7 +17,7 @@ NAMES = {
     "offline": "電波なしで表示", "sw_ready": "端末に控えを残した", "search_none": "検索で見つからない", "place": "場所を開いた",
     "route": "経路を出した", "route_none": "経路が出なかった", "share": "共有", "guide_start": "案内を始めた", "guide_stop": "案内を終えた",
     "guide_arrive": "到着", "guide_reroute": "経路を外れて探し直し", "guide_lost": "位置が取れない", "guide_unsure": "位置が不確か",
-    "emergency": "緊急の枠", "consult": "相談した", "consult_error": "相談の失敗", "consult_replaced": "相談の文の差し替え", "locate_fail": "現在地の失敗",
+    "emergency": "緊急の枠", "intro_start": "初回の「使ってみる」", "consult": "相談した", "consult_error": "相談の失敗", "consult_replaced": "相談の文の差し替え", "locate_fail": "現在地の失敗",
 }
 
 

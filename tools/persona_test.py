@@ -228,6 +228,15 @@ def s_intro_read(r, arg):
     r.sleep(500)
     if r.pg.locator("[aria-labelledby=intro-title]").is_visible():
         raise StepFail("閉じない", "使ってみるを押しても説明が閉じない")
+    # 初めての「使ってみる」は、すぐ経路の入力になり、目的地の欄に文字を入れられる状態になる。
+    try:
+        r.pg.wait_for_function("document.body.classList.contains('routing') && document.activeElement && document.activeElement.id === 'to'", timeout=15000)
+    except Exception:
+        raise StepFail("次の一手が無い", "使ってみるの後、目的地の欄に文字を入れられる状態にならない")
+    r.notes.append("使ってみる→経路の入力（目的地の欄）")
+    # この後の台本は地図の検索から始まるので、経路の入力を閉じて戻る。
+    r.tap(r.pg.locator("#close-directions"), "経路を閉じる")
+    r.sleep(400)
 
 
 def pick_suggest(r, idx, what):

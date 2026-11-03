@@ -207,6 +207,23 @@ function closeIntro(): void {
   introReturn = null;
 }
 
+/** 「使ってみる」を押した後に始める動き（main.ts が経路の入力を渡す。取り込みの循環を避けるため）。 */
+let introStart: (() => void) | null = null;
+export function setIntroStart(fn: () => void): void {
+  introStart = fn;
+}
+
+/** 読み込み中は画面が操作を受けない（inert）ので、使える状態になってから動かす。 */
+function whenReady(fn: () => void): void {
+  let tries = 0;
+  const attempt = (): void => {
+    const ui = document.querySelector(".ui");
+    if (ui && !ui.closest("[inert]") && !(ui as HTMLElement).inert) return fn();
+    if (++tries < 240) window.setTimeout(attempt, 250);
+  };
+  attempt();
+}
+
 /** 「使い方」から開いた時は、使い方の一覧も開いておく。初めて開いた時は閉じておく（説明で画面を埋めない）。 */
 export function openIntro(expanded = true): void {
   if (intro) return;
@@ -220,7 +237,7 @@ export function openIntro(expanded = true): void {
   h.id = "intro-title";
   box.append(
     h,
-    para("神戸市の、歩いて行くための地図です。道ごとに、警察に届いた交通事故の場所（2020〜2025年）と、夜の歩きやすさを見られます。今の工事や混み具合は入っていません。"),
+    para("神戸市の、歩いて行くための地図です。経路ごとに、交通事故の記録（2020〜2025年）と夜の歩きやすさを見られます。"),
   );
   const how = el("details", "intro-how");
   how.open = expanded;
@@ -231,21 +248,18 @@ export function openIntro(expanded = true): void {
   english.lang = "en";
   how.append(tips, english);
   box.append(how, para("安全を保証するものではありません。歩くときは、まわりをよく見てください。", "intro-warn"));
-  if (inAppBrowser()) box.append(para("LINE や X などのアプリの中では、現在地がうまく使えないことがあります。Safari や Chrome で開くと確実です。", "intro-app"));
+  // アプリの中で開いた時の注意は、下の帯の1か所だけに出す（ここには出さない）。
   const row = el("div", "note-actions");
-  const ex = el("button", "secondary", "例を見る（三宮駅→北野）");
-  ex.type = "button";
-  ex.addEventListener("click", () => {
-    writeSeen();
-    location.assign(location.pathname + EXAMPLE_URL);
-  });
   const go = el("button", "primary", "使ってみる");
   go.type = "button";
+  // 初めて開いた時は、押したらすぐ経路の入力にする（地図と検索欄だけでは次の一手が分からないため）。
+  const first = !expanded;
   go.addEventListener("click", () => {
     writeSeen();
     closeIntro();
+    if (first) whenReady(() => introStart?.());
   });
-  row.append(go, ex);
+  row.append(go);
   box.append(row);
   document.addEventListener("keydown", introKey, true);
   document.addEventListener("focusin", introFocus, true);

@@ -1087,3 +1087,9 @@ body.rotated .maplibregl-ctrl-compass {
   border-style: dashed;
   color: var(--link);
 }
+
+/* 急ぎでない知らせは、狭い画面でも下に出す(上の入力欄を覆わない)。 */
+.toast.bottom {
+  top: auto;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+}

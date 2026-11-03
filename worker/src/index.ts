@@ -289,7 +289,7 @@ const LOG_TYPES = new Set([
   "open", "ready", "load_error", "slow", "js_error", "offline", "sw_ready",
   "search", "search_none", "place", "route", "route_none", "period", "share",
   "guide_start", "guide_stop", "guide_arrive", "guide_reroute", "guide_lost", "guide_unsure",
-  "emergency", "consult", "consult_error", "consult_replaced", "locate", "locate_fail", "menu",
+  "emergency", "consult", "consult_error", "consult_replaced", "locate", "locate_fail", "menu", "intro_start",
 ]);
 const LOG_MAX_BODY = 16_000;
 const LOG_MAX_EVENTS = 60;
