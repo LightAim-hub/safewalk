@@ -2,12 +2,13 @@ import maplibregl, { type GeoJSONSource } from "maplibre-gl";
 import { metres, type LatLon } from "./graph";
 import { findRoutes, joinRoutes, minutesFor, type Period, type Route } from "./routes";
 import { showAccidents, accidentDetail } from "./accidents-ui";
-import { $, qInput, fromInput, toInput, searchbar, directions, sheet, COLORS, GENRES, state, map, markers, stopMarkers, toast, scoreColor, el, mapPadding } from "./app";
+import { $, qInput, fromInput, toInput, searchbar, directions, sheet, COLORS, GENRES, state, map, markers, stopMarkers, toast, scoreColor, el } from "./app";
 import { graph, accidents, meta, places, names, emptyCollection, snap } from "./data";
 import { startGuide, stopGuide } from "./guide";
 import { popup } from "./place";
 import { placeRows, showResultDots, clearGenre, bindSuggest } from "./search";
 import { type Place, type Genre, type End } from "./types";
+import "./directions.css";
 import { replaceUrl, pushUrl, renderPeriod } from "./url";
 
 export function openDirections(ends: Partial<Record<End, Place>>): void {
@@ -168,7 +169,7 @@ export function showRoutes(): void {
   selectRoute(state.period === "night" ? safestIndex(state.routes) : 0);
   const all = state.routes.flatMap((r) => r.coords);
   const bounds = all.reduce((b, c) => b.extend(c), new maplibregl.LngLatBounds(all[0], all[0]));
-  map.fitBounds(bounds, { padding: mapPadding(), duration: 500 });
+  map.fitBounds(bounds, { padding: routePadding(), duration: 500 });
 }
 
 /** 交差点から実際の地点までの区間を、線と距離に足す。 */
@@ -186,29 +187,76 @@ export function formatMinutes(min: number): string {
 
 export const timeTags: maplibregl.Marker[] = [];
 
-/** 他の経路や札からいちばん離れた地点を、札の置き場所にする。 */
-export function tagPosition(index: number): [number, number] {
-  const coords = state.routes[index].coords;
-  const others = state.routes.flatMap((route, i) => {
-    if (i === index) return [];
-    const stride = Math.max(1, Math.floor(route.coords.length / 80));
-    return route.coords.filter((_, k) => k % stride === 0);
-  });
-  const placed = timeTags.map((tag) => tag.getLngLat().toArray() as [number, number]);
-  const stride = Math.max(1, Math.floor(coords.length / 80));
-  let best = coords[Math.floor(coords.length / 2)];
-  let bestScore = -1;
-  for (let i = stride; i < coords.length - stride; i += stride) {
-    const [lon, lat] = coords[i];
-    const near = (list: [number, number][], weight: number) =>
-      list.reduce((min, [x, y]) => Math.min(min, metres({ lat, lon }, { lat: y, lon: x }) * weight), Infinity);
-    const score = Math.min(near(others, 1), near(placed, 0.5));
-    if (score > bestScore) {
-      bestScore = score;
-      best = coords[i];
-    }
+/** 画面の上に重なっている入力欄・一覧・シートを避けた、地図の見える範囲。 */
+export function routePadding(): maplibregl.PaddingOptions {
+  const MARK = 46; // 印の高さ。先端が地点で、上に伸びる
+  const rect = (node: Element | null) => (node && !(node as HTMLElement).hidden ? node.getBoundingClientRect() : null);
+  const form = rect(directions);
+  const sh = rect(sheet);
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  if (vw <= 720) {
+    const grip = document.querySelector(".grip");
+    const gripBox = sh && grip && getComputedStyle(grip).display !== "none" ? grip.getBoundingClientRect() : null;
+    const top = (form ? form.bottom : 0) + MARK + 8;
+    const covered = sh ? vh - (gripBox ?? sh).top + 20 : 40;
+    // 地図が狭くなり過ぎないよう、上下の余白を縮める。
+    const scale = Math.min(1, (vh - 140) / Math.max(top + covered, 1));
+    return { top: top * scale, bottom: covered * scale, left: 36, right: 36 };
   }
-  return best;
+  const left = Math.max(form?.right ?? 0, sh?.right ?? 0) + 40;
+  return { top: 24 + MARK, bottom: 60, left: Math.min(left, vw * 0.6), right: 60 };
+}
+
+type Box = { x1: number; y1: number; x2: number; y2: number };
+const overlaps = (a: Box, b: Box, gap = 4) => a.x1 < b.x2 + gap && a.x2 > b.x1 - gap && a.y1 < b.y2 + gap && a.y2 > b.y1 - gap;
+
+/** 印（出発地・目的地・経由地・現在地）の、画面上の範囲。 */
+function pinBoxes(): Box[] {
+  return [markers.from, markers.to, markers.me, ...stopMarkers].filter((m) => m.getLngLat()).map((m) => {
+    const { x, y } = map.project(m.getLngLat());
+    return { x1: x - 16, y1: y - 46, x2: x + 16, y2: y + 4 };
+  });
+}
+
+/**
+ * 札の置き場所を決める。他の経路から離れ、見える範囲の中にあり、
+ * 他の札や印と重ならない地点を選ぶ。置く順は、選んでいる経路が先。
+ */
+export function layoutTimeTags(): void {
+  if (timeTags.length !== state.routes.length || document.body.classList.contains("guiding")) return;
+  const pad = routePadding();
+  const width = map.getContainer().clientWidth;
+  const height = map.getContainer().clientHeight;
+  const visible = (x: number, y: number) =>
+    x >= pad.left! && x <= width - pad.right! && y >= pad.top! && y <= height - pad.bottom!;
+  const samples = state.routes.map((route) => {
+    const stride = Math.max(1, Math.floor(route.coords.length / 120));
+    return route.coords.filter((_, k) => k % stride === 0).map((c) => ({ c, ...map.project(c) }));
+  });
+  const placed: Box[] = pinBoxes();
+  const order = [state.selected, ...state.routes.map((_, i) => i).filter((i) => i !== state.selected)];
+  for (const i of order) {
+    const tag = timeTags[i].getElement();
+    const w = (tag.offsetWidth || 46) / 2;
+    const h = (tag.offsetHeight || 24) / 2;
+    const others = samples.filter((_, k) => k !== i).flat();
+    // 優先度: 重ならず見える範囲 > 重ならない > 見える範囲 > どこでも。その中で他の経路から遠い所。
+    // 線の真上で足りない時は、線の横にずらして置く。
+    const shifts: [number, number][] = [[0, 0], [0, -2 * h - 2], [0, 2 * h + 2], [2 * w + 4, 0], [-2 * w - 4, 0]];
+    let best = { c: samples[i][0].c, shift: shifts[0], box: { x1: 0, y1: 0, x2: 0, y2: 0 }, rank: -1, score: -1 };
+    for (const { c, x, y } of samples[i]) {
+      for (const shift of shifts) {
+        const [px, py] = [x + shift[0], y + shift[1]];
+        const box = { x1: px - w, y1: py - h, x2: px + w, y2: py + h };
+        const rank = (placed.some((p) => overlaps(p, box)) ? 0 : 2) + (visible(px, py) ? 1 : 0);
+        const away = others.reduce((min, o) => Math.min(min, Math.hypot(o.x - px, o.y - py)), 120) - (shift[0] || shift[1] ? 30 : 0);
+        if (rank > best.rank || (rank === best.rank && away > best.score)) best = { c, shift, box, rank, score: away };
+      }
+    }
+    timeTags[i].setLngLat(best.c).setOffset(best.shift);
+    placed.push(best.box);
+  }
 }
 
 /** 地図上の経路に、所要時間の札を付ける。 */
@@ -220,8 +268,9 @@ export function drawTimeTags(): void {
       e.stopPropagation();
       selectRoute(i);
     });
-    timeTags.push(new maplibregl.Marker({ element: tag }).setLngLat(tagPosition(i)).addTo(map));
+    timeTags.push(new maplibregl.Marker({ element: tag }).setLngLat(route.coords[0]).addTo(map));
   });
+  layoutTimeTags();
 }
 
 export function routeList(): HTMLOListElement {
@@ -383,14 +432,14 @@ export function formatMetres(m: number): string {
 
 export function stepList(route: Route): HTMLElement {
   const wrap = el("details", "detail");
-  wrap.append(el("summary", "", `曲がる場所の案内 ${route.steps.length}か所`));
+  wrap.append(el("summary", "", `道順の案内 ${route.steps.length}件`));
   const list = el("ol", "steps");
   for (const step of route.steps) {
     const li = el("li");
     const button = el("button");
     button.type = "button";
     button.append(el("span", "", step.text), el("span", "dist", formatMetres(step.metres)));
-    button.addEventListener("click", () => map.flyTo({ center: step.at, zoom: 17, padding: mapPadding() }));
+    button.addEventListener("click", () => map.flyTo({ center: step.at, zoom: 17, padding: routePadding() }));
     li.append(button);
     list.append(li);
   }
@@ -400,6 +449,8 @@ export function stepList(route: Route): HTMLElement {
 
 
 export function bindDirectionsUi(): void {
+  // 拡大・縮小で札どうしの距離が変わるので、置き直す。
+  map.on("zoomend", layoutTimeTags);
   const clearEnd = (which: End) => (value: string) => {
     if (!value && state[which]) {
       setEnd(which, null);
