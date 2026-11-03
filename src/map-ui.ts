@@ -108,6 +108,45 @@ export function showMorePois(): void {
   }
 }
 
+/** 式の中の ["get", 名前] を、無い物でも数として読める形（無ければ既定の数）にする。 */
+function withNumberDefault(expr: unknown, defaults: Record<string, number>): unknown {
+  if (!Array.isArray(expr)) return expr;
+  if (expr.length === 2 && expr[0] === "get" && typeof expr[1] === "string" && expr[1] in defaults) {
+    return ["coalesce", ["get", expr[1]], defaults[expr[1]]];
+  }
+  return expr.map((e) => withNumberDefault(e, defaults));
+}
+
+/**
+ * 背景地図の層の filter は、数のはずの rank・ref_length が無い点で「数のはずが null」の警告を出し続ける。
+ * 無い時の数は、今まで（警告のうえで外れていた）と同じ結果になる値にする
+ * （rank は >=1 に入らない 0、ref_length は <=6 に入らない 99）。
+ * 絵（sprite）に無い種類（atm・office・gate など）の店の層は、警告の代わりに小さな点で代える。
+ */
+export function quietPoiLayers(): void {
+  const defaults = { rank: 0, ref_length: 99 };
+  for (const layer of map.getStyle().layers) {
+    if (layer.type !== "symbol") continue;
+    if (layer.filter && /"(rank|ref_length)"/.test(JSON.stringify(layer.filter))) {
+      map.setFilter(layer.id, withNumberDefault(layer.filter, defaults) as ExpressionSpecification);
+    }
+    const icon = layer.layout?.["icon-image"];
+    if (icon && /^poi_r\d+$/.test(layer.id)) {
+      map.setLayoutProperty(layer.id, "icon-image", ["coalesce", ["image", icon as ExpressionSpecification], ["image", "dot_11"]]);
+    }
+  }
+}
+
+/** 建物の高さが無い建物でも、数として読めるようにする（無ければ 0）。 */
+export function quietBuildings(): void {
+  const layer = map.getStyle().layers.find((l) => l.id === "building-3d");
+  if (!layer || layer.type !== "fill-extrusion") return;
+  for (const prop of ["fill-extrusion-height", "fill-extrusion-base"] as const) {
+    const value = layer.paint?.[prop];
+    if (value) map.setPaintProperty("building-3d", prop, withNumberDefault(value, { render_height: 0, render_min_height: 0 }));
+  }
+}
+
 export function addLayers(): void {
   map.setMaxZoom(MAX_ZOOM);
   useJapaneseLabels();
@@ -301,9 +340,6 @@ export function addBaseLayers(): void {
 
 export function setBaseLayer(choice: BaseLayer | "map"): void {
   for (const id of Object.keys(LAYERS)) map.setLayoutProperty(id, "visibility", id === choice ? "visible" : "none");
-  document.querySelectorAll<HTMLButtonElement>("[data-layer]").forEach((b) => {
-    b.setAttribute("aria-pressed", String(b.dataset.layer === choice));
-  });
 }
 
 /** 現在地の誤差を円で表す。 */
@@ -489,7 +525,26 @@ export function syncClearButton(): void {
   $("clear-q").hidden = !qInput.value;
 }
 
+/**
+ * 場所を開く時の flyTo / jumpTo の padding は、地図の中心の余白として残る。
+ * その上に fitBounds の padding が足されて「Map cannot fit within canvas」になるので、
+ * fitBounds には余白を渡す側の値だけを使わせる（残っている余白は 0 に戻す）。
+ */
+function fitWithoutStalePadding(): void {
+  const fit = map.fitBounds.bind(map);
+  map.fitBounds = ((bounds, options, eventData) => {
+    if (options?.padding !== undefined) map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
+    return fit(bounds, options, eventData);
+  }) as typeof map.fitBounds;
+}
+
 export function bindMapUi(): void {
+  fitWithoutStalePadding();
+  // 背景の style が読めたらすぐ（最初の描画の前に）、警告の元になる式を直す。
+  map.once("style.load", () => {
+    quietPoiLayers();
+    quietBuildings();
+  });
   // 検索欄を空にしたら、開いている場所・ジャンルの一覧とピンも閉じる。
   qInput.addEventListener("input", () => {
     if (!qInput.value.trim()) closePlace();
@@ -502,16 +557,12 @@ export function bindMapUi(): void {
     qInput.focus();
   });
   new MutationObserver(syncClearButton).observe(sheet, { childList: true, attributes: true, attributeFilter: ["hidden"] });
-  $("layers").addEventListener("click", () => {
-    const menu = $("layer-menu");
-    menu.hidden = !menu.hidden;
-  });
-  document.querySelectorAll<HTMLButtonElement>("[data-layer]").forEach((b) => {
-    b.addEventListener("click", () => {
-      setBaseLayer(b.dataset.layer as BaseLayer | "map");
-      $("layer-menu").hidden = true;
-    });
-  });
+  // 北向きに戻すボタンは、地図を回した・傾けた時だけ出す。
+  const syncRotated = () => document.body.classList.toggle("rotated", Math.abs(map.getBearing()) > 0.5 || map.getPitch() > 0.5);
+  map.on("rotate", syncRotated);
+  map.on("pitch", syncRotated);
+  map.on("rotateend", syncRotated);
+  map.on("pitchend", syncRotated);
   bindGrip();
   bindJapaneseControls();
   bindNarrowLayout();

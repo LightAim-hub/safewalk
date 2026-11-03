@@ -1,0 +1,164 @@
+/* ≡ から下に開く一覧。外側（地図）を押すと閉じる。 */
+.menu-back {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgb(32 33 36 / 28%);
+}
+
+.menu-back[hidden] {
+  display: none;
+}
+
+.menu-sheet {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  width: min(520px, 100%);
+  /* 地図を隠しすぎない高さ。入りきらない分は中でスクロールする。 */
+  max-height: min(62dvh, 560px);
+  padding: 0 16px max(16px, env(safe-area-inset-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-radius: 16px 16px 0 0;
+}
+
+@media (min-width: 721px) {
+  .menu-back {
+    justify-content: flex-end;
+    padding: 0 16px 16px;
+  }
+
+  .menu-sheet {
+    border-radius: 16px;
+    padding-bottom: 16px;
+  }
+}
+
+.menu-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 -16px;
+  padding: 4px 8px 4px 16px;
+  background: var(--paper);
+}
+
+.menu-head h2 {
+  margin: 0;
+  font-size: 1.125rem;
+}
+
+.menu-close,
+.menu-row,
+.menu-emg,
+.menu-find {
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font-size: 1rem;
+}
+
+.menu-close {
+  color: var(--link);
+  font-weight: 600;
+}
+
+.menu-emg {
+  width: 100%;
+  border: 2px solid #d93025;
+  background: var(--paper);
+  color: #d93025;
+  font-weight: 700;
+  text-align: left;
+}
+
+.menu-emg::after {
+  content: "▾";
+  float: right;
+}
+
+.menu-emg[aria-expanded="true"]::after {
+  content: "▴";
+}
+
+.menu-emg-box .emergency {
+  margin: 0;
+}
+
+.menu-find {
+  width: 100%;
+}
+
+.menu-sec {
+  display: grid;
+  gap: 4px;
+}
+
+.menu-sec h3 {
+  margin: 8px 0 0;
+  color: var(--sub);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.menu-seg {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.menu-seg button {
+  min-height: 44px;
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.menu-seg button[aria-pressed="true"] {
+  border-color: var(--link);
+  background: var(--tint);
+  color: var(--link);
+  font-weight: 600;
+}
+
+.menu-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  text-decoration: none;
+}
+
+.menu-row:hover,
+.menu-sources[open] > summary {
+  background: var(--wash);
+}
+
+.menu-sources summary {
+  cursor: pointer;
+}
+
+.menu-sources ul {
+  margin: 4px 0;
+  padding: 0 0 0 28px;
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.menu-note {
+  margin: 0;
+  padding: 0 14px;
+  color: var(--sub);
+  font-size: 0.875rem;
+}
