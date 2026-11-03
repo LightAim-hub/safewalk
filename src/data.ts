@@ -3,6 +3,7 @@ import { AccidentIndex, type Accidents, type Meta } from "./routes";
 import { MAX_SNAP_M } from "./app";
 import { normalize } from "./search";
 import { loadCautions, createSafety, type Safety } from "./safety";
+import type { AgentContext } from "./agent-tools";
 import { type PlaceRow, type IndexedPlace } from "./types";
 
 /** データの置き場所。サブパス（GitHub Pages の /safewalk/）でも動くよう、ページの位置から求める。 */
@@ -62,4 +63,9 @@ export function snap(p: LatLon): Anchor | null {
   if (!inKobe(p)) return null;
   const road = graph.nearestRoad(p);
   return road && road.metres <= MAX_SNAP_M ? road : null;
+}
+
+/** Claude の道具(src/agent-tools.ts)に渡す文脈。loadData の後に呼ぶ。 */
+export function agentContext(): AgentContext {
+  return { graph, accidents, meta, names, safety, places, snap };
 }
