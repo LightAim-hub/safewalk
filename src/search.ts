@@ -145,7 +145,8 @@ export function searchPlaces(query: string): Place[] {
       match = reading === kana ? 0 : p.y.startsWith(kana) ? 100 : 200;
     }
     // 読みだけで当たった駅・地区以外の場所(三呑み屋など)は、駅・地区より下げる。
-    if (k < 0 && key === p.y && !p.n.includes(q)) match += 100;
+    // 略称（ファミマ→ファミリーマート）で当たった店は対象外。
+    if (k < 0 && !brand && key === p.y && !p.n.includes(q)) match += 100;
     const minor = MINOR_KINDS.includes(p.kind) && !kindNamed(p.kind) ? 150 : 0;
     const asked = kindNamed(p.kind) ? -150 : 0;
     const main = p.kind === "駅" && MAIN_OPERATORS.some((o) => p.operator?.includes(o)) ? -0.3 : 0;
