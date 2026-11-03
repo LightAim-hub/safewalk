@@ -1093,3 +1093,8 @@ body.rotated .maplibregl-ctrl-compass {
   top: auto;
   bottom: calc(24px + env(safe-area-inset-bottom, 0px));
 }
+
+/* 候補の一覧が出ている間は、右上の「≡」を隠す（候補の右端に重ならないように）。 */
+body:has(.suggest:not([hidden]) li) .menu-btn {
+  visibility: hidden;
+}
