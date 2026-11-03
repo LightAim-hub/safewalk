@@ -235,7 +235,10 @@ export function layoutTimeTags(): void {
     return route.coords.filter((_, k) => k % stride === 0).map((c) => ({ c, ...map.project(c) }));
   });
   const placed: Box[] = pinBoxes();
-  const order = [state.selected, ...state.routes.map((_, i) => i).filter((i) => i !== state.selected)];
+  // 選んでいる番号が、経路を出し直した後の本数を超えていることがある。
+  const order = [state.selected, ...state.routes.map((_, i) => i).filter((i) => i !== state.selected)].filter(
+    (i) => i < timeTags.length,
+  );
   for (const i of order) {
     const tag = timeTags[i].getElement();
     const w = (tag.offsetWidth || 46) / 2;
