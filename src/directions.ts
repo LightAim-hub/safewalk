@@ -11,7 +11,7 @@ import { popup } from "./place";
 import { placeRows, showResultDots, clearGenre, bindSuggest, focusQuietly } from "./search";
 import { locateMe, SHEET_STOPS } from "./map-ui";
 import { type Place, type Genre, type End } from "./types";
-import { detectDisaster, detectEmergency, disasterPanel, DISASTER_NOTICE, emergencyPanel } from "./emergency";
+import { detectDisaster, detectEmergency, disasterPanel, bosaiLink, DISASTER_NOTICE, emergencyPanel } from "./emergency";
 import type { KobanHit } from "./koban";
 import "./directions.css";
 import { replaceUrl, pushUrl, renderPeriod, shareRoute, inServiceArea } from "./url";
@@ -20,6 +20,7 @@ export function openDirections(ends: Partial<Record<End, Place>>): void {
   // 押した物（経路ボタン・場所の「経路」）がこの後に消える時は、焦点を出発地の欄へ移す。
   const pressed = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
   state.mode = "directions";
+  fromMissing = false;
   document.body.classList.add("routing");
   searchbar.hidden = true;
   directions.hidden = false;
@@ -53,10 +54,15 @@ function fillCurrentFrom(): void {
 
 /** 送られてきた経路を開いたのに、現在地が使えない時の理由（出発地が空のままだと何も出ないため）。 */
 function sharedWithoutPlace(reason: string, offerCurrent = false): void {
-  if (pending?.banner && state.mode === "directions" && !state.routes.length) {
-    clearRoutes(`送られてきた経路です。${reason}`, offerCurrent);
-  }
+  if (state.mode !== "directions" || state.routes.length) return;
+  if (pending?.banner) return clearRoutes(`送られてきた経路です。${reason}`, offerCurrent);
+  // 目的地だけ入っていて出発地が空の時、何も起きないように見えない。理由と「現在地を使う」を出す。
+  fromMissing = true;
+  if (state.to && !state.from) clearRoutes(reason, offerCurrent);
 }
+
+/** 現在地を出発地に入れられなかった（目的地が入ったら、理由を出す）。 */
+let fromMissing = false;
 
 /**
  * 現在地を、空の出発地（または目的地）に入れる。url.ts が「to=me」を開く時にも使う。
@@ -132,6 +138,7 @@ function disclaimerBar(): HTMLElement {
 /** 表示中の経路を消す。経路を出せない時は、古い経路を残さず理由を出す。offerCurrent は「現在地を使う」ボタンを添える。 */
 export function clearRoutes(message = "", offerCurrent = false): void {
   resetAgent();
+  periodSwitched = false;
   state.routes = [];
   timeTags.splice(0).forEach((tag) => tag.remove());
   (map.getSource("routes") as GeoJSONSource).setData(emptyCollection());
@@ -153,12 +160,16 @@ export const isGuiding = (): boolean => document.body.classList.contains("guidin
 /** force は案内そのもの（探し直し・終了）が出発地を替える時だけ使う。 */
 export function setEnd(which: End, place: Place | null, run = true, force = false): void {
   if (isGuiding() && !force) return;
+  periodSwitched = false;
   state[which] = place;
   const input = which === "from" ? fromInput : toInput;
   input.value = place?.name ?? "";
   if (place) markers[which].setLngLat([place.lon, place.lat]).addTo(map);
   else markers[which].remove();
   if (run && state.from && state.to) search();
+  else if (run && which === "to" && place && !state.from && fromMissing && state.mode === "directions") {
+    clearRoutes("出発地を入れるか、「現在地を使う」を選んでください。", true);
+  }
 }
 
 export const MAX_STOPS = 3;
@@ -556,8 +567,10 @@ const OLD_BEST = "事故の記録が少ない道";
 
 /** 経路の札。「記録が少ない道」と言えるのは、段階が「比較的記録が少ない」の時だけ。 */
 export function routeLabel(route: Route, a: Assessment): string {
-  if (route.label !== OLD_BEST) return route.label;
-  return a.accident.tier === "low" ? "事故の記録が少ない道" : "別の道";
+  if (route.label === OLD_BEST && a.accident.tier === "low") return OLD_BEST;
+  // 「別の道」だけでは、どの道か分からない。主な道の名前があれば「◯◯経由」にする。
+  if (route.label === OLD_BEST || route.label === "別の道") return route.via ? `${route.via}経由` : "別の道";
+  return route.label;
 }
 
 /** 一覧に出す理由(2つまで)。段階が不明の時は理由を出し、夜は夜の歩きやすさの言葉を出す。 */
@@ -696,6 +709,10 @@ export function fold(key: string, label: string, body: Node[], className = ""): 
   return box;
 }
 
+/** 昼夜を切り替えた直後だけ、一覧の下に出す一行（件数も本数も変わるため）。経路や出発地・目的地を替えたら消す。 */
+const PERIOD_NOTE = "夜は夜の事故だけを数えます。昼と夜の件数は比べられません。本数も変わることがあります。";
+let periodSwitched = false;
+
 /** 件数の意味（夜は夜の記録だけを数えている）。 */
 const countMeaning = () => (state.period === "night" ? "夜の事故の記録" : "事故の記録");
 
@@ -743,7 +760,10 @@ function detailBody(route: Route, a: Assessment, shortest: Route): HTMLElement[]
     for (const line of a.night.lines) list.append(el("li", "", line));
     nodes.push(list, el("p", "basis", "店は、地図データに営業時間がある店だけです。"));
   }
-  if (a.accident.tier !== "unknown") nodes.push(el("h4", "", "集計の条件・出典"), el("p", "basis", `${countBasis()}出典は警察庁オープンデータです。`));
+  if (a.accident.tier !== "unknown") {
+    nodes.push(el("h4", "", "集計の条件・出典"), el("p", "basis", `${countBasis()}出典は警察庁オープンデータです。`));
+    nodes.push(el("p", "basis", "段階は神戸市の道との比較です。街灯と人通りのデータは入っていません。"));
+  }
   const stations = stationsNear(route);
   const where = [route.via ? `${route.via} 経由` : "", stations.length ? `近くの駅 ${stations.join("・")}` : ""].filter(Boolean);
   if (where.length) nodes.push(el("p", "where", where.join("　")));
@@ -753,7 +773,7 @@ function detailBody(route: Route, a: Assessment, shortest: Route): HTMLElement[]
   return nodes;
 }
 
-export const DETOUR_TEXT = "歩行者が通れない車道や登山道を避けるため、遠回りになっています";
+export const DETOUR_TEXT = "歩行者が通れない車道や登山道を避けるため、遠回りになっています。登山・ランニングのコースには向きません";
 
 /** 経路が出発地と目的地の直線の1.8倍を超え、直線が2kmを超える時（歩行者が通れない道を避けた遠回り）。 */
 export function isDetour(route: Route): boolean {
@@ -794,7 +814,7 @@ function routePanel(route: Route, index: number, cmp: Comparison, shortest: Rout
     }
   }
   panel.append(fold("detail", "くわしく", detailBody(route, a, shortest), "more-detail"));
-  panel.append(el("p", "note", "階段や段差は考えていません。ベビーカーや車いすの方は、現地で確かめてください。"));
+  panel.append(el("p", "note", "階段を通ることがあります。段差は考えていません。ベビーカーや車いすの方は、現地で確かめてください。"));
   return panel;
 }
 
@@ -913,6 +933,7 @@ export function selectRoute(index: number, force = false): void {
     ...notes,
     routeList(),
     el("p", "rec-meaning", `件数は、${countMeaning()}（歩行者・自転車が関わるもの）`),
+    ...(periodSwitched ? [el("p", "rec-meaning period-note", PERIOD_NOTE)] : []),
     routePanel(route, index, cmp, shortest),
     agentSection(),
     startBar,
@@ -1153,7 +1174,7 @@ export function agentSection(): HTMLElement {
         /* 覚えられないだけ */
       }
     });
-    const head = el("summary", "", "Claude に相談");
+    const head = el("summary", "", "Claude に相談（例: 坂が少ない道がいい）");
     // 開いたら、入力欄が下の固定ボタンの裏に隠れないよう、見える所まで送る。
     head.addEventListener("click", () => {
       window.setTimeout(() => {
@@ -1192,6 +1213,7 @@ export function agentSection(): HTMLElement {
     // 入力欄の直下に常に出す。災害の文は開いた中に置く。
     const privacy = el("p", "agent-privacy", "氏名・住所・持病は入れないでください（入力した文と、出発地・目的地の名前が Claude に送られます）。");
     const scope = el("p", "agent-privacy", DISASTER_NOTICE);
+    scope.append(" ", bosaiLink());
     agentNode.append(form, privacy, presets, scope, agentOut);
   }
   renderAgent();
@@ -1312,6 +1334,13 @@ export function formatMetres(m: number): string {
   return m < 1000 ? `${Math.round(m / 10) * 10}m` : `${(m / 1000).toFixed(1)}km`;
 }
 
+/** 長い直進の一行（「道なりに進む 2.0km」を「この先2.0kmは曲がりません」に）。長い直進でなければ null。道の名前の括弧は残す。 */
+export const LONG_STRAIGHT_M = 500;
+export function longStraight(step: { text: string; metres: number }): string | null {
+  if (!step.text.startsWith("道なりに進む") || step.metres < LONG_STRAIGHT_M) return null;
+  return `この先${formatMetres(step.metres)}は曲がりません${step.text.slice("道なりに進む".length)}`;
+}
+
 export function stepList(route: Route): HTMLElement {
   const wrap = el("details", "detail");
   wrap.append(el("summary", "", `道順の案内 ${route.steps.length}件`));
@@ -1320,7 +1349,9 @@ export function stepList(route: Route): HTMLElement {
     const li = el("li");
     const button = el("button");
     button.type = "button";
-    button.append(el("span", "", step.text), el("span", "dist", formatMetres(step.metres)));
+    const straight = longStraight(step);
+    button.append(el("span", "", straight ?? step.text));
+    if (!straight) button.append(el("span", "dist", formatMetres(step.metres)));
     button.addEventListener("click", () => map.flyTo({ center: step.at, zoom: 17, padding: routePadding() }));
     li.append(button);
     list.append(li);
@@ -1398,6 +1429,7 @@ export function bindDirectionsUi(): void {
   });
   document.querySelectorAll<HTMLButtonElement>("[data-period]").forEach((b) => {
     b.addEventListener("click", () => {
+      if (state.period !== b.dataset.period && state.routes.length) periodSwitched = true;
       state.period = b.dataset.period as Period;
       renderPeriod();
       if (state.from && state.to) search();

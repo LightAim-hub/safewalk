@@ -35,6 +35,8 @@ export const FIXED = {
   failed: "Claude の説明を表示できませんでした。経路の一覧と記録は、そのままご利用いただけます。",
   noRoute: "経路を調べられませんでした。",
   timeout: "Claude の返事が時間内に届きませんでした。通信の状態を確かめて、もう一度お試しください。",
+  /** Claude 側の 5xx。状態の番号は出さない。 */
+  down: "Claude がいま使えません。少し置いてからもう一度。経路の一覧と記録はそのまま使えます。",
   unavailable: "Claude への相談は、今は使えません。経路の一覧と記録は、そのままご利用いただけます。",
   /** 特定の他人の行動を調べる使い方などで Claude が断った時。経路は選ばない。 */
   declined: "この相談には、経路を選ぶ形ではお答えできません。経路の一覧と記録は、そのままご利用いただけます。",
@@ -276,7 +278,7 @@ async function postWith(
     }
     // Worker が付けた日本語の文だけを画面に出す。それ以外は固定の文。
     const jp = /[ぁ-んァ-ヶ一-龠]/.test(message) ? message : "";
-    throw new RelayError(jp || `Claude の呼び出しに失敗しました(${res.status})。`);
+    throw new RelayError(jp || (res.status >= 500 ? FIXED.down : `Claude の呼び出しに失敗しました(${res.status})。`));
   }
   try {
     return (await res.json()) as ApiResponse;
