@@ -11,6 +11,8 @@ import urllib.parse
 from playwright.sync_api import sync_playwright
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:4173/"
+# 初回の説明は既読にして始める（説明そのものの確認は別に行う）。
+SEEN = "try { localStorage.setItem('safewalk.intro.seen', '1') } catch (e) {}"
 ARGS = ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"]
 
 ROUTES = [
@@ -39,6 +41,7 @@ def main():
         b = p.chromium.launch(args=ARGS)
         ctx = b.new_context(viewport={"width": 1280, "height": 800}, locale="ja-JP",
                             geolocation={"latitude": 34.6947, "longitude": 135.1955}, permissions=["geolocation"])
+        ctx.add_init_script(SEEN)
         pg = ctx.new_page()
         pg.on("pageerror", lambda e: errors.append(str(e)[:200]))
         pg.on("console", lambda m: errors.append(m.text[:200]) if m.type == "error" else None)
@@ -83,6 +86,7 @@ def main():
         ctx.close()
 
         m = b.new_context(viewport={"width": 390, "height": 844}, locale="ja-JP", has_touch=True, is_mobile=True)
+        m.add_init_script(SEEN)
         pg = m.new_page()
         pg.on("pageerror", lambda e: errors.append(str(e)[:200]))
         pg.goto(BASE)
