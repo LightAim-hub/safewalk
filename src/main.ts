@@ -77,7 +77,13 @@ const map: MapLibre = new maplibregl.Map({
   style: "https://tiles.openfreemap.org/styles/liberty",
   center: KOBE_CENTER,
   zoom: 11,
-  attributionControl: { compact: true },
+  attributionControl: {
+    compact: true,
+    customAttribution: [
+      '交通事故: <a href="https://www.npa.go.jp/publications/statistics/koutsuu/opendata/index_opendata.html" target="_blank" rel="noopener">警察庁オープンデータ</a>を加工して作成',
+      '住所・標高・航空写真: <a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">国土地理院</a>',
+    ],
+  },
 });
 map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "bottom-right");
 map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
