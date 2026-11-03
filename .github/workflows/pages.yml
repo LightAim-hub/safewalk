@@ -1,8 +1,7 @@
 name: GitHub Pages に公開
 
+# Pages の有効化は永川さんの操作待ち。それまでは手動の実行だけにする。
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
