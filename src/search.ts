@@ -431,6 +431,22 @@ export async function searchPostcode(code: string): Promise<Place[]> {
   return (await lookupPostcode(code)).places;
 }
 
+/** 候補の一覧を持つ入力欄の番号（一覧の id を欄ごとに分ける）。 */
+let suggestCount = 0;
+
+/**
+ * 候補の一覧を開かずに、入力欄へ焦点を移す（押した物が消えた後の焦点の行き先に使う）。
+ * 欄に焦点が当たると普通は候補が開くが、他の欄を覆うので、ここでは開かない。矢印の下か文字を打てば開く。
+ */
+export function focusQuietly(input: HTMLInputElement): void {
+  input.dataset.quiet = "1";
+  try {
+    input.focus();
+  } finally {
+    delete input.dataset.quiet;
+  }
+}
+
 /** 入力欄に候補の一覧を付ける。Enter で候補を確定する。 */
 export function bindSuggest(
   input: HTMLInputElement,
@@ -444,7 +460,30 @@ export function bindSuggest(
   const field = input.parentElement as HTMLElement;
   const list = el("ul", "suggest");
   list.hidden = true;
-  field.append(list);
+  const listId = `suggest-${++suggestCount}`;
+  list.id = listId;
+  // 読み上げ・キーボードの読み取りには、入力欄を combobox、一覧を listbox として伝える（見た目と操作は変えない）。
+  list.setAttribute("aria-label", input.getAttribute("aria-label") ?? "候補");
+  input.setAttribute("role", "combobox");
+  input.setAttribute("aria-autocomplete", "list");
+  input.setAttribute("aria-controls", listId);
+  input.setAttribute("aria-expanded", "false");
+  // 「検索しています」「見つかりません」は画面の一覧にも出るが、読み上げには status で伝える。
+  const status = el("p", "sr-only");
+  status.setAttribute("role", "status");
+  field.append(list, status);
+  const say = (text: string) => {
+    if (status.textContent !== text) status.textContent = text;
+  };
+  /** 一覧の状態を、入力欄の属性に写す。 */
+  const syncAria = () => {
+    const open = !list.hidden && items.length > 0;
+    input.setAttribute("aria-expanded", String(open));
+    if (open && active >= 0) input.setAttribute("aria-activedescendant", `${listId}-${active}`);
+    else input.removeAttribute("aria-activedescendant");
+    if (open) list.setAttribute("role", "listbox");
+    else list.removeAttribute("role");
+  };
   let items: Place[] = [];
   let active = -1;
   let token = 0;
@@ -463,6 +502,8 @@ export function bindSuggest(
     list.style.removeProperty("top");
     pending = false;
     active = -1;
+    say("");
+    syncAria();
   };
 
   const choose = async (place: Place) => {
@@ -521,13 +562,19 @@ export function bindSuggest(
   const render = () => {
     if (!focused()) {
       list.hidden = true;
+      say("");
+      syncAria();
       return;
     }
     const value = input.value.trim();
     const rows = items.map((p, i) => {
       const li = el("li");
+      li.setAttribute("role", "presentation");
       const button = el("button");
       button.type = "button";
+      button.id = `${listId}-${i}`;
+      button.tabIndex = -1;
+      button.setAttribute("role", "option");
       button.setAttribute("aria-selected", String(i === active));
       const hint = [p.kind, p.operator, p.ward].filter(Boolean).join("・");
       button.append(el("span", "", p.name), el("span", "kind", hint));
@@ -538,25 +585,29 @@ export function bindSuggest(
       li.append(button);
       return li;
     });
+    let note = "";
     if (!items.length && value && pending) {
-      rows.push(el("li", "empty", "検索しています…"));
+      note = "検索しています…";
     } else if (!items.length && value) {
       // 見つからない知らせは、この一か所だけに出す（下の知らせには出さない）。
-      rows.push(
-        el(
-          "li",
-          "empty",
-          unavailable
-            ? "神戸市内の場所が見つかりません（住所検索は今使えませんでした。SafeWalk の検索は神戸市内のみです）"
-            : "神戸市内で見つかりません（SafeWalk の検索は神戸市内のみです）",
-        ),
-      );
+      note = unavailable
+        ? "神戸市内の場所が見つかりません（住所検索は今使えませんでした。SafeWalk の検索は神戸市内のみです）"
+        : "神戸市内で見つかりません（SafeWalk の検索は神戸市内のみです）";
     } else if (unavailable && value) {
-      rows.push(el("li", "empty", "住所検索は今使えないため、手元の候補だけを出しています。"));
+      note = "住所検索は今使えないため、手元の候補だけを出しています。";
     }
+    if (note) {
+      // 読み上げには下の status が伝える。一覧の中の同じ文は、二重に読まれないよう隠す。
+      const li = el("li", "empty", note);
+      li.setAttribute("aria-hidden", "true");
+      rows.push(li);
+    }
+    say(note);
     list.replaceChildren(...rows);
     list.hidden = rows.length === 0;
     if (!list.hidden) position();
+    syncAria();
+    if (active >= 0) list.querySelector(`[id="${listId}-${active}"]`)?.scrollIntoView({ block: "nearest" });
   };
 
   /** 手元の候補だけを今すぐ並べる。 */
@@ -606,6 +657,8 @@ export function bindSuggest(
     timer = window.setTimeout(refresh, 120);
   });
   input.addEventListener("focus", () => {
+    // focusQuietly で移した時は、候補を開かない。
+    if (input.dataset.quiet) return;
     input.select();
     refresh();
   });
@@ -643,6 +696,8 @@ export function bindSuggest(
     }
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     e.preventDefault();
+    // 候補が閉じている時（Esc の後・焦点を移した直後）の矢印の下は、開き直す。
+    if (list.hidden) return void refresh();
     if (!items.length) return;
     active = (active + (e.key === "ArrowDown" ? 1 : items.length - 1 + (active < 0 ? 1 : 0))) % items.length;
     render();
