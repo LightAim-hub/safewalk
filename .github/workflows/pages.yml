@@ -27,6 +27,20 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      # 公開の前の検査。1つでも失敗したら、この先(build・公開)へ進まない。
+      - name: 型の検査(画面側)
+        run: npx tsc --noEmit
+      - name: Claude の相談の試験(模擬。鍵も通信も不要)
+        run: node worker/test/agent_mock_test.mjs
+      - name: Worker の依存を入れる
+        run: npm ci
+        working-directory: worker
+      - name: 型の検査(Worker)
+        run: npx tsc --noEmit
+        working-directory: worker
+      - name: 中継の試験(手元の wrangler dev と模擬の上流。鍵は不要)
+        run: node worker/test/relay_test.mjs
+        timeout-minutes: 5
       - run: npm run build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
