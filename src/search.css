@@ -1,0 +1,9 @@
+/* 候補の種類・手がかりが長くても、名前を折り返さない。名前の下に小さく並べる。 */
+.suggest li button {
+  flex-direction: column;
+  gap: 2px;
+}
+
+.suggest li button .kind {
+  line-height: 1.3;
+}
