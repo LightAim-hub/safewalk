@@ -36,8 +36,9 @@
     .note { padding: 10px 12px; border-radius: 8px; background: var(--note); color: var(--note-ink); }
     table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 14px; }
     th, td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
-    th { color: var(--sub); font-weight: 600; white-space: nowrap; }
-    td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    th { color: var(--sub); font-weight: 600; }
+    td.num { font-variant-numeric: tabular-nums; }
+    @media (max-width: 520px) { table { font-size: 12.5px; } th, td { padding: 6px 4px; } }
     a { color: var(--blue); }
     @media (prefers-color-scheme: dark) {
       :root { --ink: #e8eaed; --sub: #9aa0a6; --line: #3c4043; --paper: #202124; --wash: #121212; --blue: #8ab4f8; --note: #3b3321; --note-ink: #f1d9a0; }
