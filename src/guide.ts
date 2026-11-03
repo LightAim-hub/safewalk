@@ -5,6 +5,7 @@ import { snap, safety } from "./data";
 import { assess, newGuideState, nextNotice, type GuideState, type RouteAlert } from "./safety";
 import { setEnd, renderStops, selectRoute, formatMetres } from "./directions";
 import { showAccuracy } from "./map-ui";
+import { chosenVoiceName, loadVoices, onVoiceChange, primeVoice, say, stopSpeaking, turnSpeech, type SayKind } from "./voice";
 
 export const OFF_ROUTE_M = 60;
 export const STEP_REACHED_M = 20;
@@ -30,13 +31,16 @@ let noticeRoute: Route | null = null;
 let noticeAlerts: RouteAlert[] = [];
 let noticeTimer = 0;
 
-export function speak(text: string, queue = false): void {
-  if (!voiceOn || !("speechSynthesis" in window)) return;
-  // 曲がり角の案内を切らないよう、知らせは読み上げ中なら後ろに並べる。
-  if (!queue) speechSynthesis.cancel();
-  const line = new SpeechSynthesisUtterance(text);
-  line.lang = "ja-JP";
-  speechSynthesis.speak(line);
+/** 声を出す。kind の違い(曲がる案内は割り込む・知らせは待つ)は voice.ts の SayKind を参照。 */
+export function speak(text: string, kind: SayKind | boolean = "turn"): void {
+  if (!voiceOn) return;
+  say(text, kind === true ? "notice" : kind === false ? "turn" : kind);
+}
+
+/** 音声ボタンの title に、使っている声の名前を出す(押さなくても、長押し・カーソルで確かめられる)。 */
+export function showVoiceName(): void {
+  const name = chosenVoiceName();
+  $("guide-voice").title = name ? `使っている声: ${name}` : "使っている声: 端末の既定の日本語";
 }
 
 /** 案内中は画面が消えないようにする。対応しない端末ではそのまま続ける。 */
@@ -228,7 +232,7 @@ export function checkNotice(p: LatLon, route: Route): void {
   box.hidden = false;
   window.clearTimeout(noticeTimer);
   noticeTimer = window.setTimeout(() => (box.hidden = true), NOTICE_SHOW_MS);
-  speak(text, true);
+  speak(text, "notice");
 }
 
 export function updateGuide(p: LatLon, accuracy?: number): void {
@@ -245,7 +249,7 @@ export function updateGuide(p: LatLon, accuracy?: number): void {
   }
   const end = route.coords[route.coords.length - 1];
   if (metres(p, { lat: end[1], lon: end[0] }) <= STEP_REACHED_M) {
-    if ($("guide-next").textContent !== "目的地に着きました") speak("目的地に着きました");
+    if ($("guide-next").textContent !== "目的地に着きました") speak("目的地に到着しました。お疲れさまでした。");
     $("guide-next").textContent = "目的地に着きました";
     showTurn("⚑", "");
     $("guide-then").textContent = "";
@@ -257,7 +261,7 @@ export function updateGuide(p: LatLon, accuracy?: number): void {
     const key = next.at.join(",");
     if (key !== announced) {
       announced = key;
-      speak(`まもなく、${next.text.replace(/（.*）/, "")}`);
+      speak(turnSpeech(next.text, metres(p, { lat: next.at[1], lon: next.at[0] })));
     }
   }
   checkNotice(p, route);
@@ -275,6 +279,7 @@ export function startGuide(index: number): void {
     return;
   }
   selectRoute(index);
+  primeVoice();
   document.body.classList.add("guiding");
   $("guide").hidden = false;
   $("guide-next").textContent = "現在地を確認しています…";
@@ -326,7 +331,7 @@ export function stopGuide(): void {
   stopCompass();
   wakeLock?.release();
   wakeLock = null;
-  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  stopSpeaking();
 }
 
 /** 案内の枠に、矢印・距離・次の次の案内・位置が取れない時の警告を足す。HTML は別の担当なので、ここで作る。 */
@@ -358,13 +363,16 @@ export function buildGuideParts(): void {
 
 export function bindGuideUi(): void {
   buildGuideParts();
+  showVoiceName();
+  onVoiceChange(showVoiceName);
+  void loadVoices();
   $("guide-stop").addEventListener("click", stopGuide);
   $("guide-voice").addEventListener("click", () => {
     voiceOn = !voiceOn;
     $("guide-voice").setAttribute("aria-pressed", String(voiceOn));
     $("guide-voice").textContent = voiceOn ? "音声 オン" : "音声 オフ";
-    if (voiceOn) speak("音声案内をオンにしました");
-    else speechSynthesis?.cancel();
+    if (voiceOn) speak("音声案内をオンにしました", "toggle");
+    else stopSpeaking();
   });
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && watchId !== null) keepScreenOn();
