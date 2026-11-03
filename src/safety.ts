@@ -9,7 +9,8 @@
  *   nextNotice(...)            案内中、位置が更新されるたびに呼ぶ。出す知らせがあれば文を返す。
  *
  * 言葉の決まり: 「安全」「安心」「危険」と % は使わない(アプリ名 SafeWalk と、下の免責の定数を除く)。
- * 犯罪は「この道で犯罪 N 件」と言わない。ひったくりは町丁目単位の記録であることを文に入れる。
+ * 犯罪は「この道で犯罪 N 件」と言わない。町名・件数・色・地図の印は画面に出さない(夜の経路の費用に小さく足すだけ。src/routes.ts)。
+ * ひったくりは、該当する道の近くを通る時だけ、行動の注意(荷物は車道と反対の手で)を出す。
  */
 import { metres, type LatLon } from "./graph";
 import type { Accidents, Period, Route } from "./routes";
@@ -29,7 +30,9 @@ export const TIER_LABEL: Record<Tier, string> = {
 /** データの出典の表示。説明ページや情報ボタンに足す。 */
 export const SAFETY_SOURCES = [
   "交通事故: 警察庁「交通事故統計情報のオープンデータ」（本票 2020〜2025年）を神戸市内で抜き出して加工",
-  "ひったくり: 兵庫県警察の犯罪発生状況（2018〜2025年）、兵庫県オープンデータカタログ、CC BY 2.1 JP。町丁目ごとの件数に加工して利用しており、兵庫県が作成した物ではありません",
+  "ひったくり・車上ねらい: 兵庫県警察の犯罪発生状況（2018〜2025年）、兵庫県オープンデータカタログ、CC BY 2.1 JP。町丁目ごとの件数を、人口あたりの率にして夜の経路の選び方に使うなど加工しており、兵庫県が作成した物ではありません",
+  "深夜の滞在人口: 国土交通省「全国の人流オープンデータ」（2019年）を加工して作成",
+  "夜間光: 衛星 VIIRS 夜間光 年平均（2023〜2025年、Earth Observation Group、CC BY 4.0）を加工して作成",
   "町丁目の境界: 総務省統計局 e-Stat 2020年国勢調査 小地域（町丁・字等）境界を加工",
   "深夜営業の店: OpenStreetMap の営業時間の記録（© OpenStreetMap contributors）",
 ];
@@ -62,6 +65,8 @@ export const SAFETY_RULES = {
   noticeGapMs: 3 * 60 * 1000,
   /** 同じ種類の知らせは、さらにこれだけ空ける(ms) */
   noticeKindGapMs: 12 * 60 * 1000,
+  /** ひったくりの注意を出す町丁目の最小の記録数(2018〜2025年の合計)。1件だけの所では出さない。 */
+  snatchMinTown: 2,
 };
 
 type Hot = [lat: number, lon: number, all: number, night: number];
@@ -279,6 +284,7 @@ export function assess(s: Safety, route: Route, period: Period): Assessment {
     lines.push(
       shops > 0 ? `深夜営業の店 ${shops}軒（経路から${SAFETY_RULES.shopNearM}m以内）` : "深夜営業の店は記録にありません",
     );
+    lines.push("夜は人通りと明かりの多い道を優先しています");
     nightPart = { remoteMetres: route.remoteMetres, lateShops: shops, lines };
   }
 
@@ -317,28 +323,29 @@ function cautionsFor(s: Safety, route: Route, pts: [number, number][], period: P
   make("bike", "自転車との事故", "周りの自転車に注意してください");
   make("ped", "歩行者の事故", "横断と車に注意してください");
 
-  // ひったくり: 経路が通る町丁目
+  // ひったくり: 記録のある町丁目を通る時だけ、行動の注意を1つ出す。町名・件数は画面に出さない。
   const towns = new Map<number, number>();
   for (const [lon, lat] of densify(route.coords, 25)) {
     const t = townAt(s, lon, lat);
-    if (t >= 0) towns.set(t, (towns.get(t) ?? 0) + 1);
+    if (t >= 0 && s.cautions.towns[t].n >= SAFETY_RULES.snatchMinTown) towns.set(t, (towns.get(t) ?? 0) + 1);
   }
-  const [h0, h1] = s.cautions.hittakuriPeriod;
   const alerts: RouteAlert[] = [];
   for (const t of towns.keys()) {
     const town = s.cautions.towns[t];
-    list.push({
-      kind: "snatch",
-      count: town.n,
-      text: `${town.name}では${h0}〜${h1}年に、ひったくりの記録が${town.n}件あります（町丁目ごとの記録で、この道の上とは限りません）。持ち物は車道と反対側に持ってください`,
-    });
     alerts.push({
       id: `town:${town.ward}${town.name}`,
       kind: "snatch",
       at: null,
       town: t,
       count: town.n,
-      text: "この地区でひったくりの記録があります。持ち物は車道と反対側に持ってください",
+      text: "この付近では、荷物は車道と反対の手で持ってください",
+    });
+  }
+  if (alerts.length) {
+    list.push({
+      kind: "snatch",
+      count: Math.max(...alerts.map((a) => a.count)),
+      text: "ひったくりに備えて、荷物は車道と反対の手で持ってください。この経路には、備えたい区間があります",
     });
   }
   list.sort((a, b) => b.count - a.count);

@@ -7,6 +7,10 @@
 //   --pairs=N      組の数(既定 420。出発地と目的地の組。昼と夜で2倍探す)
 //   --seed=N       乱数の種(既定 20261104。同じ種なら同じ組になる)
 //   --quiet        組ごとの差分を省き、要約だけ出す
+//   --graph=FILE   public/data/graph.bin の代わりに別の graph.bin を読む(前後の比較用。--update と一緒に使わない)
+//   --dump=FILE    全経路の道・距離・札を JSON に書き出す(前後の比較用。tools/route_suite_compare.mjs で比べる)
+//   --graph=FILE   public/data/graph.bin の代わりに別の graph.bin を読む(前後の比較用。記録の更新はしないこと)
+//   --dump=FILE    全経路の道・距離・札を JSON に書き出す(前後の比較用)
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -52,7 +56,7 @@ const M = await import(pathToFileURL(out).href);
 // ---------------------------------------------------------------- 本物のデータ(src/data.ts と同じ作り)
 const dataPath = (f) => path.join(root, "public/data", f);
 const json = (f) => JSON.parse(fs.readFileSync(dataPath(f), "utf8"));
-const bin = fs.readFileSync(dataPath("graph.bin"));
+const bin = fs.readFileSync(typeof args.graph === "string" ? path.resolve(args.graph) : dataPath("graph.bin"));
 const graph = new M.Graph(bin.buffer.slice(bin.byteOffset, bin.byteOffset + bin.byteLength));
 const accJson = json("accidents.json");
 const accidents = new M.AccidentIndex(accJson);
@@ -300,6 +304,13 @@ function runCase(pair, period) {
       } else if (!Number.isFinite(a.accident.perKm)) fail("段階が計算できない", `${tag}: 1kmあたり ${a.accident.perKm}`);
       if (period === "night" && !a.night) fail("夜の評価が無い", tag);
       r._tier = a.accident.tier;
+      // 画面に出る言葉: 町名・件数を出さない・禁止語を使わない。ひったくりの注意は一般的な言い方だけ。
+      const texts = [...a.cautions.map((c) => c.text), ...a.alerts.map((x) => x.text), ...(a.night?.lines ?? [])];
+      for (const t of texts) if (/安全|安心|危険|%|％/.test(t)) fail("禁止語が画面の言葉にある", `${tag}: ${t}`);
+      for (const c of a.cautions.filter((x) => x.kind === "snatch")) {
+        info.push(["ひったくりの注意あり", `${tag}`]);
+        if (/[0-9０-９]|町|丁目/.test(c.text)) fail("ひったくりの注意に町名・件数が出る", `${tag}: ${c.text}`);
+      }
     } catch (e) {
       fail("段階が計算できない", `${tag}: 例外 ${e.message}`);
     }
@@ -458,6 +469,21 @@ if (!fs.existsSync(BASELINE)) {
   } else if (changed.length || newFail.length || fixed.length) {
     say("  (記録を今回の結果に更新するには --update)");
   }
+}
+if (typeof args.dump === "string") {
+  const dump = Object.fromEntries(
+    results.map((c) => [
+      key(c),
+      {
+        type: c.type,
+        from: c.from,
+        to: c.to,
+        period: c.period,
+        routes: c.routes.map((r) => ({ label: r.label, metres: Math.round(r.metres), minutes: r.minutes, edges: r.edges, via: r.via, coords: r.coords.map(([lo, la]) => [Math.round(lo * 1e5) / 1e5, Math.round(la * 1e5) / 1e5]) })),
+      },
+    ]),
+  );
+  fs.writeFileSync(path.resolve(args.dump), JSON.stringify(dump));
 }
 console.log(lines.join("\n"));
 
