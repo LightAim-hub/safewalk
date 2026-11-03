@@ -742,7 +742,8 @@ def init_scripts(p):
         s.append("try { delete window.speechSynthesis; } catch (e) {} try { delete Window.prototype.speechSynthesis; } catch (e) {} if ('speechSynthesis' in window) Object.defineProperty(window, 'speechSynthesis', {get: undefined, set: undefined, configurable: true});")
     else:
         s.append(
-            """if (!window.speechSynthesis) { const v = [{name: 'Kyoko', lang: 'ja-JP', default: true, localService: true, voiceURI: 'Kyoko'}];
+            # 本物の読み上げは使わない(Windows では --mute-audio でも OS の声で鳴り、PC のスピーカーから聞こえてしまう)。どの端末でも音の出ない偽物に差し替える。
+            """{ const v = [{name: 'Kyoko', lang: 'ja-JP', default: true, localService: true, voiceURI: 'Kyoko'}];
               Object.defineProperty(window, 'speechSynthesis', {value: {speaking: false, pending: false, paused: false, getVoices: () => v,
                 speak(u) { setTimeout(() => u.onend && u.onend({}), 50); }, cancel() {}, pause() {}, resume() {}, addEventListener() {}, removeEventListener() {}, onvoiceschanged: null}, configurable: true});
               window.SpeechSynthesisUtterance = function (t) { this.text = t; }; }"""
@@ -1038,7 +1039,7 @@ def summarize(results, url):
         "- 文字の大きさは、画面の幅を縮めて拡大した見え方にする模擬。OS の文字サイズ設定・VoiceOver・TalkBack そのものではない（名前・Tab 順の検査まで）。",
         "- 回線: Chromium は CDP の Slow 3G（500kbps・遅延400ms）。遅い回線の iPhone の人は、WebKit では回線を絞れないので、iPhone の画面設定の Chromium で動かす（Safari の挙動ではない）。「途中で切れる」は最初の通信を一度切る模擬、電波なしは set_offline。",
         "- 電波なしの再起動: Chromium(70)は起動したが、WebKit(36・82)は起動しなかった。Playwright の WebKit が Service Worker 経由の読み込みを set_offline で止める可能性があり、実機の Safari で同じかは未確認。",
-        "- 音声: WebKit に speechSynthesis が無いので、音声ありの人は偽の物を差す。読み上げの聞こえ方は見ない。",
+        "- 音声: どの端末でも音の出ない偽の speechSynthesis を差す（本物は PC のスピーカーで鳴るため）。読み上げの聞こえ方は見ない。",
         "- Claude への相談は fetch を差し替えた偽の返事（中継の Worker・CORS・本物の応答は通らない）。本物の応答の質・遅さ・失敗は見ない。",
         "- 地図の絵（WebGL）は swiftshader のソフト描画。見た目の崩れは目で見るスクショ頼み。",
     ]
