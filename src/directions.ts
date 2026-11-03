@@ -1142,7 +1142,11 @@ function agentResultView(result: AgentResult, disaster: boolean): HTMLElement[] 
     nodes.push(el("h3", "", "注意書き"), ul);
   }
   if (result.caveats) nodes.push(el("p", "agent-caveats", `記録の限界: ${result.caveats}`));
-  if (result.replaced.length) nodes.push(el("p", "agent-hint", "確認を通らなかった一部の文は、固定の文に差し替えました。"));
+  if (result.replaced.length) {
+    nodes.push(el("p", "agent-hint", "確認を通らなかった一部の文は、固定の文に差し替えました。"));
+    // どの欄が・なぜ落ちたかを開発者向けの記録に残す(画面には出さない。原因を追うため)。
+    console.info("[SafeWalk 相談] 差し替え", result.replaced);
+  }
   nodes.push(el("p", "agent-disclaimer", `${result.disclaimer}。`));
   return nodes;
 }

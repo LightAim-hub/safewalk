@@ -310,6 +310,8 @@ const thinking = { type: "thinking", thinking: "", signature: "sig-abc" };
   check("理由: 道具の結果に無い数字は、これまで通り落とす", !out2.reasons.some((r) => r.text.includes("99分")));
 }
 
+check("要約: 経路の本数(3本)は使ってよい数字", M.validateOutput({ summary: "3本の中で経路Aがいちばん短いです。", chosenRouteIndex: 0, reasons: [], caveats: [] }, new Map([["r0.distance", "経路A: 距離 2.7km"]]), 3, []).summary.startsWith("3本"));
+
 fs.rmSync(path.dirname(out), { recursive: true, force: true });
 // Worker に固定した system と tools が、ブラウザ側(agent.ts・agent-tools.ts)と同じ
 console.log("  (messages の最大 " + maxMessagesChars + " 字 / Worker の上限 80000 字)");

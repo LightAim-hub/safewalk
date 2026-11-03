@@ -144,7 +144,8 @@ type Raw = { declined?: unknown; summary?: unknown; chosenRouteIndex?: unknown; 
  */
 export function validateOutput(raw: Raw, facts: Map<string, string>, routeCount: number, extraAllowed: string[]): Checked {
   const replaced: string[] = [];
-  const base = new Set<string>([...extraAllowed.flatMap(numbersIn), ...FIXED_NUMBERS]);
+  // 経路の本数(「3本の中で」)は道具の結果の文に書かれていないことがあるので、使ってよい数字に入れる。
+  const base = new Set<string>([...extraAllowed.flatMap(numbersIn), ...FIXED_NUMBERS, String(routeCount)]);
   const all = new Set<string>(base);
   for (const t of facts.values()) numbersIn(t).forEach((n) => all.add(n));
 
