@@ -10,6 +10,8 @@ import { startGuide, stopGuide } from "./guide";
 import { popup } from "./place";
 import { placeRows, showResultDots, clearGenre, bindSuggest } from "./search";
 import { type Place, type Genre, type End } from "./types";
+import { detectDisaster, detectEmergency, disasterPanel, DISASTER_NOTICE, emergencyPanel } from "./emergency";
+import type { KobanHit } from "./koban";
 import "./directions.css";
 import { replaceUrl, pushUrl, renderPeriod, shareRoute } from "./url";
 
@@ -196,7 +198,11 @@ export function search(): void {
   const start = snap(state.from!);
   const goal = snap(state.to!);
   showResultDots([]);
-  if (start === null || goal === null) return clearRoutes("出発地か目的地の近くに、神戸市内の歩ける道がありません。");
+  if (start === null || goal === null) {
+    // どちらが神戸市の外（または道から遠い）かを名指しする。
+    const far = [start === null ? `出発地（${state.from!.name}）` : "", goal === null ? `目的地（${state.to!.name}）` : ""].filter(Boolean);
+    return clearRoutes(`${far.join("と")}の近くに、神戸市内の歩ける道がありません。神戸市の外か、道から遠い場所です。`);
+  }
   if (state.stops.some(Boolean)) {
     const through = searchThrough();
     if (!through) return clearRoutes("経由地を通る経路が見つかりませんでした。");
@@ -593,6 +599,20 @@ function routePanel(route: Route, index: number, cmp: Comparison, shortest: Rout
   return panel;
 }
 
+/** 「経路を送る」で何がリンクに入るか。自宅などの名前つきの地点は位置と名前が入り、現在地は入らない。 */
+export function sendNoteText(from: Place | null, to: Place | null): string {
+  const short = (n: string) => (n.length > 16 ? `${n.slice(0, 16)}…` : n);
+  const named = [from, to].filter((p): p is Place => !!p && p.name !== CURRENT);
+  const current = [from, to].some((p) => p?.name === CURRENT);
+  if (!named.length) return "「経路を送る」のリンクには、現在地の位置は入りません。";
+  const list = named.map((p) => `「${short(p.name)}」`).join("と");
+  return `「経路を送る」のリンクには、${list}の位置と名前が入ります。${current ? "現在地は入りません。" : "自宅などの場合は、送る相手を確かめてください。"}`;
+}
+
+function sendNote(): HTMLElement {
+  return el("p", "send-note", sendNoteText(state.from, state.to));
+}
+
 export function selectRoute(index: number): void {
   state.selected = index;
   (map.getSource("routes") as GeoJSONSource).setData({
@@ -634,6 +654,7 @@ export function selectRoute(index: number): void {
     alongDetail(route),
     accidentDetail(route),
     safetyNote(),
+    sendNote(),
     startBar,
   );
   sheet.hidden = false;
@@ -649,8 +670,12 @@ export function selectRoute(index: number): void {
 /** 候補の事情。押すとそのまま送る。 */
 export const AGENT_PRESETS = ["子どもが一人で帰る", "荷物が多い", "終電後に長く歩く", "坂が少ない道がいい"];
 
-type AgentUi = { busy: boolean; progress: string; result: AgentResult | null; error: string };
-let agentUi: AgentUi = { busy: false, progress: "", result: null, error: "" };
+type AgentUi = { busy: boolean; progress: string; result: AgentResult | null; error: string; emergency: boolean; disaster: boolean };
+const idleAgent = (): AgentUi => ({ busy: false, progress: "", result: null, error: "", emergency: false, disaster: false });
+let agentUi: AgentUi = idleAgent();
+/** 緊急・災害の枠(1回の相談につき1つ作り、描き直しても同じ物を使う)。 */
+let emergencyNode: HTMLElement | null = null;
+let disasterNode: HTMLElement | null = null;
 /** 経路を出し直したら古い答えを捨てるための番号。待っている間に変わったら、返ってきた答えは使わない。 */
 let agentRun = 0;
 let agentNode: HTMLElement | null = null;
@@ -667,7 +692,7 @@ const TOOL_PROGRESS: Record<string, string> = {
 
 function resetAgent(): void {
   agentRun++;
-  agentUi = { busy: false, progress: "", result: null, error: "" };
+  agentUi = idleAgent();
   if (agentNode) renderAgent();
 }
 
@@ -705,7 +730,9 @@ async function askClaude(text: string): Promise<void> {
   if (agentUi.busy || !state.from || !state.to || !state.routes.length) return;
   const run = ++agentRun;
   const { from, to } = state;
-  agentUi = { busy: true, progress: "事情を Claude に伝えています…", result: null, error: "" };
+  agentUi = { ...idleAgent(), busy: true, progress: "事情を Claude に伝えています…", emergency: detectEmergency(text), disaster: detectDisaster(text) };
+  emergencyNode = agentUi.emergency ? emergencyPanel(state.from, routeToKoban) : null;
+  disasterNode = agentUi.disaster ? disasterPanel() : null;
   renderAgent();
   let result: AgentResult | null = null;
   try {
@@ -724,17 +751,20 @@ async function askClaude(text: string): Promise<void> {
     result = null;
   }
   if (run !== agentRun) return;
-  if (!result) agentUi = { busy: false, progress: "", result: null, error: FIXED.failed };
-  else if (!result.ok) agentUi = { busy: false, progress: "", result: null, error: result.error ?? FIXED.failed };
-  else agentUi = { busy: false, progress: "", result, error: "" };
-  const chosen = agentUi.result?.chosenRouteIndex;
+  const flags = { emergency: agentUi.emergency, disaster: agentUi.disaster };
+  if (!result) agentUi = { ...idleAgent(), ...flags, error: FIXED.failed };
+  else if (!result.ok) agentUi = { ...idleAgent(), ...flags, error: result.error ?? FIXED.failed };
+  else agentUi = { ...idleAgent(), ...flags, result };
+  const chosen = agentUi.result?.declined ? null : agentUi.result?.chosenRouteIndex;
   if (agentUi.result && chosen != null && sameRoutes(agentUi.result)) selectRoute(chosen);
   else renderAgent();
   // 答えの先頭(まとめの文)が見えるようにする。
-  agentNode?.scrollIntoView({ block: "start" });
+  (agentUi.emergency && emergencyNode ? emergencyNode : agentNode)?.scrollIntoView({ block: "start" });
 }
 
-function agentResultView(result: AgentResult): HTMLElement[] {
+function agentResultView(result: AgentResult, disaster: boolean): HTMLElement[] {
+  // 断った時は経路を選ばず、固定の文だけを出す。
+  if (result.declined) return [el("p", "agent-summary", result.summary), el("p", "agent-disclaimer", `${result.disclaimer}。`)];
   const nodes: HTMLElement[] = [el("p", "agent-summary", result.summary)];
   const chosen = result.chosenRouteIndex;
   if (chosen != null && state.routes[chosen] && sameRoutes(result)) {
@@ -755,7 +785,8 @@ function agentResultView(result: AgentResult): HTMLElement[] {
     reasons.append(li);
   }
   nodes.push(el("h3", "", "理由"), reasons);
-  if (result.cautions.length) {
+  // 災害の相談では、事故・ひったくりの注意書きを並べない。
+  if (result.cautions.length && !disaster) {
     const ul = el("ul", "cautions");
     ul.append(...result.cautions.map((c) => el("li", "caution", c.text)));
     nodes.push(el("h3", "", "注意書き"), ul);
@@ -766,6 +797,16 @@ function agentResultView(result: AgentResult): HTMLElement[] {
   return nodes;
 }
 
+/** 緊急の枠が今いる場所(出発地)から近い交番へ経路を出す。 */
+function routeToKoban(k: KobanHit): void {
+  const place: Place = { name: k.name, lat: k.lat, lon: k.lon, kind: "警察" };
+  setEnd("to", place, true); // 経路を出し直すと相談の表示が消えるので、緊急の枠だけ戻す
+  if (emergencyNode) {
+    agentUi.emergency = true;
+    renderAgent();
+  }
+}
+
 function renderAgent(): void {
   if (!agentNode || !agentOut || !agentInput) return;
   const blocked = state.stops.some(Boolean);
@@ -773,9 +814,18 @@ function renderAgent(): void {
   agentInput.disabled = agentUi.busy || blocked;
   agentNode.setAttribute("aria-busy", String(agentUi.busy));
   if (blocked) return void agentOut.replaceChildren(el("p", "agent-hint", "経由地がある時は、Claude への相談は使えません。"));
-  if (agentUi.busy) return void agentOut.replaceChildren(el("p", "agent-progress", agentUi.progress));
-  if (agentUi.error) return void agentOut.replaceChildren(el("p", "agent-error", agentUi.error));
-  agentOut.replaceChildren(...(agentUi.result ? agentResultView(agentUi.result) : []));
+  // 緊急・災害の枠は、Claude の答えより上に固定で出す。
+  const fixed: HTMLElement[] = [];
+  if (agentUi.emergency && emergencyNode) fixed.push(emergencyNode);
+  if (agentUi.disaster && disasterNode) fixed.push(disasterNode);
+  const body = agentUi.busy
+    ? [el("p", "agent-progress", agentUi.progress)]
+    : agentUi.error
+      ? [el("p", "agent-error", agentUi.error)]
+      : agentUi.result
+        ? agentResultView(agentUi.result, agentUi.disaster)
+        : [];
+  agentOut.replaceChildren(...fixed, ...body);
 }
 
 /** 「事情を伝えて道を選んでもらう」入口と、答え。選び直しで作り直されても同じ物を返す。 */
@@ -811,7 +861,9 @@ export function agentSection(): HTMLElement {
     }
     agentOut = el("div", "agent-out");
     agentOut.setAttribute("aria-live", "polite");
-    agentNode.append(form, presets, agentOut);
+    const privacy = el("p", "agent-privacy", "氏名・住所・持病は入れないでください（入力した文は Claude に送られます）。");
+    const scope = el("p", "agent-privacy", DISASTER_NOTICE);
+    agentNode.append(form, privacy, scope, presets, agentOut);
   }
   renderAgent();
   return agentNode;
