@@ -19,6 +19,8 @@ export interface Env {
   IP_10MIN_LIMIT: string;
   IP_DAY_LIMIT: string;
   ENABLE_FALLBACKS?: string;
+  /** 回数の上限(1端末ごと)から外す回線。secret に入れる(リポジトリに書かない)。カンマ区切り。IPv6 は先頭 64 ビットで比べる。 */
+  UNLIMITED_IPS?: string;
 }
 
 const ALLOWED_ORIGINS = [
@@ -214,6 +216,11 @@ export default {
     // 上限の設定が無い・数字でない時は、全部が素通りになるので通さない。
     const limits = { daily: Number(env.DAILY_LIMIT), ip10: Number(env.IP_10MIN_LIMIT), ipDay: Number(env.IP_DAY_LIMIT) };
     if (!Object.values(limits).every((n) => Number.isFinite(n) && n > 0)) return json(503, MSG.limiterDown, origin);
+    // 登録した回線(作り手の家)は1端末ごとの上限から外す。全体の1日の上限には数え、それは超えない(費用の上限を守るため)。
+    if (isUnlimited(ip, env.UNLIMITED_IPS)) {
+      limits.ip10 = Number.MAX_SAFE_INTEGER;
+      limits.ipDay = Number.MAX_SAFE_INTEGER;
+    }
     try {
       const stub = env.LIMITER.get(env.LIMITER.idFromName("global"));
       const r = await stub.hit(await sha(ip), Date.now(), limits);
@@ -248,6 +255,28 @@ export default {
     });
   },
 };
+
+/** IPv6 を8組の4桁に直す(省略の :: を戻す)。IPv4 はそのまま返す。 */
+function expandIp(ip: string): string {
+  const v = ip.trim().toLowerCase();
+  if (!v.includes(":")) return v;
+  const [head, tail = ""] = v.split("::");
+  const a = head ? head.split(":") : [];
+  const b = v.includes("::") ? (tail ? tail.split(":") : []) : [];
+  const fill = v.includes("::") ? Array(Math.max(0, 8 - a.length - b.length)).fill("0") : [];
+  return [...a, ...fill, ...b].map((g) => g.padStart(4, "0")).join(":");
+}
+
+/** 上限から外す回線か。IPv4 は完全一致、IPv6 は同じ家の端末どうしで変わらない先頭 64 ビット(4組)で比べる。 */
+export function isUnlimited(ip: string, list: string | undefined): boolean {
+  if (!list || !ip || ip === "unknown") return false;
+  const key = (x: string) => {
+    const e = expandIp(x);
+    return e.includes(":") ? e.split(":").slice(0, 4).join(":") : e;
+  };
+  const me = key(ip);
+  return list.split(/[\s,]+/).filter(Boolean).some((x) => key(x) === me);
+}
 
 // ---------------------------------------------------------------- 回数の数え方
 
