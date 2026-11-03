@@ -134,7 +134,12 @@ export function clearRoutes(message = "", offerCurrent = false): void {
   sheet.hidden = !shown;
 }
 
-export function setEnd(which: End, place: Place | null, run = true): void {
+/** 案内中か。案内中は、地図や一覧の操作で出発地・経路を替えない（案内が古い経路のまま進むのを防ぐ）。 */
+export const isGuiding = (): boolean => document.body.classList.contains("guiding");
+
+/** force は案内そのもの（探し直し・終了）が出発地を替える時だけ使う。 */
+export function setEnd(which: End, place: Place | null, run = true, force = false): void {
+  if (isGuiding() && !force) return;
   state[which] = place;
   const input = which === "from" ? fromInput : toInput;
   input.value = place?.name ?? "";
@@ -224,6 +229,7 @@ export function searchThrough(): Route | null {
 }
 
 export function search(): void {
+  if (isGuiding()) return;
   // 先に畳んでから経路を収める（上の欄の高さが変わるため）。経路が出なかった時は開いたままにする。
   const fold = canFold();
   if (fold) setFolded(true);
@@ -283,6 +289,7 @@ function runSearch(): void {
 }
 
 export function showRoutes(): void {
+  if (isGuiding()) return;
   for (const route of state.routes) connectEnds(route, state.from!, state.to!);
   replaceUrl();
   // 昼も夜も Google マップと同じく最短を選ぶ。送られてきた経路を開いた時だけ、送り主が選んだ経路を選ぶ。
@@ -642,11 +649,17 @@ export function stationsNear(route: Route): string[] {
 
 const OPEN_KEY = "safewalk.ui.open";
 const openMemo: Record<string, boolean> = (() => {
+  const memo: Record<string, boolean> = {};
   try {
-    return JSON.parse(localStorage.getItem(OPEN_KEY) ?? "{}") as Record<string, boolean>;
+    // 手で書き換えられた・古い形の値でも落ちないよう、真偽の値だけを取り出す。
+    const saved: unknown = JSON.parse(localStorage.getItem(OPEN_KEY) ?? "{}");
+    if (saved && typeof saved === "object" && !Array.isArray(saved)) {
+      for (const [key, value] of Object.entries(saved)) if (typeof value === "boolean") memo[key] = value;
+    }
   } catch {
-    return {};
+    /* 読めなければ全部閉じた状態 */
   }
+  return memo;
 })();
 
 /** 文字ラベル付きの開閉。押せる高さは 44px 以上（directions.css の .fold > summary）。開いた状態は次の描き直しでも覚える。 */
@@ -670,11 +683,14 @@ const countMeaning = () => (state.period === "night" ? "夜の事故の記録" :
 
 /** 選んだ経路の注意（長い距離・家が少ない道を先に、事故の記録からの注意をその後ろに）。 */
 function cautionTexts(route: Route, a: Assessment): { text: string; kind: string }[] {
-  // 事故の注意の件数は、経路から50m以内で数える（一覧は30m以内）。数え方が違うことを添える。
-  const range = `（経路から${SAFETY_RULES.cautionNearM}m以内で数えた件数。一覧の件数は30m以内です）`;
+  // 事故の注意の件数は、1種類だけを経路から50m以内で数える。一覧の件数（歩行者と自転車・30m以内）と別の数だと書く。
+  const range = (c: { kind: string }) =>
+    `（${c.kind === "bike" ? "自転車" : "歩行者"}の事故だけ・経路から${SAFETY_RULES.cautionNearM}m以内で数えた件数です。一覧の${
+      a.accident.tier === "unknown" ? "件数" : `${a.accident.count}件`
+    }は歩行者と自転車を30m以内で数えています）`;
   return [
     ...routeWarnings(route).map((p) => ({ text: p.textContent ?? "", kind: "warn" })),
-    ...a.cautions.map((c) => ({ text: c.kind === "snatch" ? c.text : `${c.text}${range}`, kind: `caution-${c.kind}` })),
+    ...a.cautions.map((c) => ({ text: c.kind === "snatch" ? c.text : `${c.text}${range(c)}`, kind: `caution-${c.kind}` })),
   ];
 }
 
@@ -719,6 +735,15 @@ function detailBody(route: Route, a: Assessment, shortest: Route): HTMLElement[]
   return nodes;
 }
 
+export const DETOUR_TEXT = "歩行者が通れない車道や登山道を避けるため、遠回りになっています";
+
+/** 経路が出発地と目的地の直線の1.8倍を超え、直線が2kmを超える時（歩行者が通れない道を避けた遠回り）。 */
+export function isDetour(route: Route): boolean {
+  if (!state.from || !state.to) return false;
+  const straight = metres(state.from, state.to);
+  return straight > 2000 && route.metres > straight * 1.8;
+}
+
 /** 選んだ経路の中身。常に見せるのは要約だけ。理由・出典・道順などは「くわしく」にしまう。 */
 function routePanel(route: Route, index: number, cmp: Comparison, shortest: Route): HTMLElement {
   const a = assessment(route);
@@ -728,6 +753,7 @@ function routePanel(route: Route, index: number, cmp: Comparison, shortest: Rout
   const tier = el("p", `tierline tier-${a.accident.tier}`);
   if (a.accident.tier === "unknown") {
     tier.append(el("strong", "", `${TIER_MARK.unknown} 記録の段階は出せません`));
+    if (a.unknown) tier.append(el("span", "meaning", `理由: ${a.unknown}`));
   } else {
     tier.append(
       el("strong", "", `${TIER_MARK[a.accident.tier]} ${a.accident.label}`),
@@ -738,6 +764,7 @@ function routePanel(route: Route, index: number, cmp: Comparison, shortest: Rout
     else if (cmp.same) tier.append(el("span", "same", "ほかの経路とほぼ同じ"));
   }
   panel.append(tier);
+  if (isDetour(route)) panel.append(el("p", "detour", DETOUR_TEXT));
 
   const cautions = cautionTexts(route, a);
   if (cautions.length) {
@@ -814,7 +841,10 @@ function confirmSend(button: HTMLButtonElement): void {
   ok.focus();
 }
 
-export function selectRoute(index: number): void {
+export function selectRoute(index: number, force = false): void {
+  // 案内中は経路を替えない。範囲外の番号も受けない。
+  if (isGuiding() && !force) return;
+  if (index < 0 || index >= state.routes.length) return;
   state.selected = index;
   (map.getSource("routes") as GeoJSONSource).setData({
     type: "FeatureCollection",
@@ -828,7 +858,8 @@ export function selectRoute(index: number): void {
   showAccidents(route, false);
   drawTimeTags();
   const a = assessment(route);
-  const shortest = state.routes.reduce((x, y) => (y.metres < x.metres ? y : x), state.routes[0]);
+  // 「最短」の札が付いた経路を基準にする（札と「最短より+◯m」の基準をそろえる）。無ければ一番短い経路。
+  const shortest = state.routes.find((r) => r.label === "最短") ?? state.routes.reduce((x, y) => (y.metres < x.metres ? y : x), state.routes[0]);
   const cmp = compareRoutes(state.routes.map(assessment));
   // 案内ボタンは画面の下に固定し、何を始めるのかを書く。
   const start = el("button", "primary start", `案内を始める（${formatMinutes(route.minutes)}・${shortLabel(route, a)}）`);
@@ -927,8 +958,12 @@ const TOOL_PROGRESS: Record<string, string> = {
   places_along: "経路の沿いの場所を数えています…",
 };
 
+let agentAbort: AbortController | null = null;
+
 function resetAgent(): void {
   agentRun++;
+  agentAbort?.abort();
+  agentAbort = null;
   agentUi = idleAgent();
   if (agentNode) renderAgent();
 }
@@ -965,7 +1000,9 @@ function sameRoutes(result: AgentResult): boolean {
 
 async function askClaude(text: string): Promise<void> {
   if (agentUi.busy || !state.from || !state.to || !state.routes.length) return;
+  agentAbort?.abort();
   const run = ++agentRun;
+  const abort = (agentAbort = new AbortController());
   const { from, to } = state;
   agentUi = { ...idleAgent(), busy: true, progress: "事情を Claude に伝えています…", disaster: detectDisaster(text) };
   disasterNode = agentUi.disaster ? disasterPanel() : null;
@@ -983,12 +1020,13 @@ async function askClaude(text: string): Promise<void> {
         // 一覧と同じ数字・同じ段階で調べさせる(一覧の経路は connectEnds で出発地・目的地までの区間を足してある)。
         ctx: { ...agentContext(), afterFind: (routes) => routes.forEach((r) => connectEnds(r, from, to)) },
       },
-      { fetchImpl: trackedFetch(run) },
+      { fetchImpl: trackedFetch(run), signal: abort.signal },
     );
   } catch {
     result = null;
   }
   if (run !== agentRun) return;
+  agentAbort = null;
   const flags = { disaster: agentUi.disaster };
   if (!result) agentUi = { ...idleAgent(), ...flags, error: FIXED.failed };
   else if (!result.ok) agentUi = { ...idleAgent(), ...flags, error: result.error ?? FIXED.failed };
@@ -1037,9 +1075,19 @@ function agentResultView(result: AgentResult, disaster: boolean): HTMLElement[] 
 
 /** 緊急の枠が今いる場所(出発地)から近い交番へ経路を出す。 */
 function routeToKoban(k: KobanHit): void {
-  const place: Place = { name: k.name, lat: k.lat, lon: k.lon, kind: "警察" };
-  setEnd("to", place, true); // 緊急の枠は経路を出し直しても残る。交番への経路が見える位置（一覧の上）へ戻す。
+  toKoban(k);
   sheet.scrollTop = 0;
+}
+
+/** 交番へは、いちばん近い道で行く。経由地は外す（経由地を回ってから交番へ向かわない）。 */
+export function toKoban(k: KobanHit): void {
+  const place: Place = { name: k.name, lat: k.lat, lon: k.lon, kind: "警察" };
+  if (state.stops.length) {
+    state.stops = [];
+    renderStops();
+  }
+  // 緊急の枠は経路を出し直しても残る。交番への経路が見える位置（一覧の上）へは routeToKoban が戻す。
+  setEnd("to", place, true);
 }
 
 function renderAgent(): void {
