@@ -1,0 +1,1333 @@
+{
+ "_steps": {
+  "手順の書き方": "script は文字列の並び。「手順」または「手順:引数」。「A||B」は A が通らなければ B を試す(回り道)。台本の最後が、その人の目的の画面。",
+  "手順": {
+   "open": "公開版を開き、起動を待つ",
+   "intro_read": "初回の説明を読んで『使ってみる』",
+   "search:語[#番号]": "検索欄に打って候補を選ぶ→場所の画面",
+   "kb_search:語": "Tab で検索欄へ→打つ→↓→Enter",
+   "to_place": "場所の画面の『経路』",
+   "from:語 / to:語": "経路の欄に入れて候補を選ぶ",
+   "routes": "経路の一覧と免責の表示を確かめる",
+   "period:day|night": "昼夜の切り替え",
+   "pick_route:N": "N番目(0始まり)の経路を選ぶ",
+   "details": "『くわしく』を開く",
+   "guide": "案内を始める",
+   "walk:N": "位置をN回動かす",
+   "offroute:m": "経路からmメートル外す",
+   "stop": "案内を終わる",
+   "guide_emg / guide_emg_close": "案内中の緊急の枠を開く/閉じる",
+   "voice_toggle": "案内の音声ボタン",
+   "menu / menu_close": "≡メニューを開く/閉じる",
+   "menu_emg / menu_koban / menu_route": "メニューの緊急→近い交番→経路を出す",
+   "menu_help": "使い方",
+   "menu_map:名前": "地図の種類",
+   "back / back_menu": "ブラウザの戻る",
+   "locate[:期待語]": "現在地ボタン(出た知らせに期待語が有るか)",
+   "genre:名前 / genre_pick": "ジャンルのチップ→一覧の先頭",
+   "link:名前,day|night[,sh][,me]": "共有リンクで直接開く",
+   "send": "経路を送る",
+   "claude:文[~期待語]": "Claude に相談(返事は模擬)",
+   "maptap": "地図の真ん中をタップ(観察のみ)",
+   "warm / offline:on|off / reload": "2回目の備え→電波なし→再起動",
+   "blip:秒": "電波が一瞬切れる",
+   "a11y": "名前の無い・小さい操作部品を数える",
+   "tab_walk": "Tab で30回進む",
+   "page:パス": "別のページを開く"
+  },
+  "経路の名前": {
+   "kitano": "三宮→北野",
+   "kobe": "三宮→神戸駅",
+   "harbor": "三宮→ハーバーランド",
+   "maya": "摩耶山→南麓",
+   "arima": "有馬→三宮"
+  },
+  "項目": "dev=端末(Playwright の機種名) browser=webkit|chromium orient=landscape dark font=%(100=標準) net=normal|slow3g|flaky|offline2 geo=allow|deny|none voice=yes|no claude=ok|503|abort|declined intro=初回の説明を出す start=sannomiya|kobe_sta|osaka"
+ },
+ "personas": [
+  {
+   "id": 1,
+   "label": "62歳女性・住民・初めて開く",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "intro": true,
+   "script": [
+    "open",
+    "intro_read",
+    "search:神戸駅",
+    "to_place",
+    "routes"
+   ]
+  },
+  {
+   "id": 2,
+   "label": "28歳男性・留学生(英語)",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "open",
+    "search:Sannomiya Station||三宮駅",
+    "to_place",
+    "routes"
+   ]
+  },
+  {
+   "id": 3,
+   "label": "45歳女性・台湾の観光客",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "script": [
+    "open",
+    "search:kobe airport||神戸空港",
+    "to_place",
+    "routes"
+   ]
+  },
+  {
+   "id": 4,
+   "label": "70歳男性・住民・電話とLINEだけ",
+   "dev": "iPhone SE",
+   "browser": "webkit",
+   "font": 130,
+   "script": [
+    "open",
+    "search:三宮",
+    "to_place",
+    "routes",
+    "guide",
+    "walk:3",
+    "stop"
+   ]
+  },
+  {
+   "id": 5,
+   "label": "35歳女性・友人と観光",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "open",
+    "search:中華街||南京町",
+    "to_place",
+    "routes"
+   ]
+  },
+  {
+   "id": 6,
+   "label": "50歳男性・家族で水族館",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "script": [
+    "open",
+    "search:須磨水族園||須磨海浜水族園",
+    "to_place",
+    "routes",
+    "period:day"
+   ]
+  },
+  {
+   "id": 7,
+   "label": "33歳女性・看護師・夜勤明け",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "dark": true,
+   "script": [
+    "open",
+    "genre:病院",
+    "genre_pick",
+    "to_place",
+    "routes"
+   ]
+  },
+  {
+   "id": 8,
+   "label": "40歳男性・位置情報に慎重",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "open",
+    "locate"
+   ]
+  },
+  {
+   "id": 9,
+   "label": "27歳女性・位置を断った",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "geo": "deny",
+   "script": [
+    "open",
+    "search:北野",
+    "to_place",
+    "routes"
+   ]
+  },
+  {
+   "id": 10,
+   "label": "55歳男性・営業・三宮から神戸駅",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "link:kobe,day",
+    "routes",
+    "details"
+   ]
+  },
+  {
+   "id": 11,
+   "label": "41歳男性・昼夜の数を見比べる",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "link:kobe,day",
+    "routes",
+    "period:night",
+    "routes"
+   ]
+  },
+  {
+   "id": 12,
+   "label": "60歳女性・家族に経路を送る",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "geo": "none",
+   "script": [
+    "link:kobe",
+    "routes",
+    "send"
+   ]
+  },
+  {
+   "id": 13,
+   "label": "30歳女性・ベビーカー",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "script": [
+    "link:kitano",
+    "routes",
+    "details"
+   ]
+  },
+  {
+   "id": 14,
+   "label": "68歳男性・案内で歩く",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "font": 130,
+   "orient": "landscape",
+   "script": [
+    "link:kitano,night",
+    "routes",
+    "guide",
+    "walk:4",
+    "stop"
+   ]
+  },
+  {
+   "id": 15,
+   "label": "29歳女性・案内中に寄り道",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "link:kitano",
+    "routes",
+    "guide",
+    "walk:2",
+    "offroute:120",
+    "stop"
+   ]
+  },
+  {
+   "id": 16,
+   "label": "36歳男性・会社のPC",
+   "dev": "Desktop Chrome",
+   "browser": "chromium",
+   "script": [
+    "open",
+    "search:神戸駅",
+    "to_place",
+    "routes",
+    "send"
+   ]
+  },
+  {
+   "id": 17,
+   "label": "52歳女性・Claudeに相談(失敗する)",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "claude": "503",
+   "script": [
+    "link:kobe,night",
+    "routes",
+    "claude:坂が少ない道がいい"
+   ]
+  },
+  {
+   "id": 18,
+   "label": "24歳女性・終電後・緊急の言葉",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "dark": true,
+   "claude": "ok",
+   "script": [
+    "link:kitano,night",
+    "routes",
+    "claude:助けて 追われている~110"
+   ]
+  },
+  {
+   "id": 19,
+   "label": "66歳男性・山歩き・電波が弱い",
+   "dev": "iPhone 13",
+   "browser": "chromium",
+   "net": "slow3g",
+   "script": [
+    "link:maya",
+    "routes"
+   ]
+  },
+  {
+   "id": 20,
+   "label": "31歳男性・大阪から出張",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "start": "osaka",
+   "script": [
+    "open",
+    "locate:神戸市の外"
+   ]
+  },
+  {
+   "id": 21,
+   "label": "21歳女性・中国の留学生",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "dark": true,
+   "script": [
+    "open",
+    "search:元町駅",
+    "to_place",
+    "routes",
+    "menu",
+    "menu_close"
+   ]
+  },
+  {
+   "id": 22,
+   "label": "38歳男性・ベトナム出身・工場勤務",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "script": [
+    "open",
+    "genre:コンビニ",
+    "genre_pick",
+    "to_place",
+    "routes"
+   ]
+  },
+  {
+   "id": 23,
+   "label": "26歳男性・韓国の観光客",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "open",
+    "search:メリケンパーク",
+    "to_place",
+    "routes",
+    "guide",
+    "walk:3",
+    "stop"
+   ]
+  },
+  {
+   "id": 24,
+   "label": "47歳男性・全盲・VoiceOver",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "open",
+    "a11y",
+    "search:三宮",
+    "to_place",
+    "routes",
+    "a11y"
+   ]
+  },
+  {
+   "id": 25,
+   "label": "58歳女性・弱視・文字を大きく",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "font": 200,
+   "script": [
+    "open",
+    "search:神戸駅",
+    "to_place",
+    "routes",
+    "guide",
+    "walk:3",
+    "stop"
+   ]
+  },
+  {
+   "id": 26,
+   "label": "73歳女性・老眼",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "font": 150,
+   "script": [
+    "link:kobe",
+    "routes",
+    "details"
+   ]
+  },
+  {
+   "id": 27,
+   "label": "69歳男性・老眼鏡を忘れた",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "font": 150,
+   "script": [
+    "link:kobe",
+    "routes",
+    "period:day"
+   ]
+  },
+  {
+   "id": 28,
+   "label": "77歳女性・iPad・ゆっくり読む",
+   "dev": "iPad (gen 7)",
+   "browser": "webkit",
+   "font": 130,
+   "script": [
+    "open",
+    "search:王子動物園",
+    "to_place",
+    "routes"
+   ]
+  },
+  {
+   "id": 29,
+   "label": "19歳女性・大学生・終電後",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "dark": true,
+   "orient": "landscape",
+   "script": [
+    "open",
+    "search:元町駅",
+    "to_place",
+    "routes",
+    "period:night",
+    "pick_route:1",
+    "guide",
+    "walk:3",
+    "guide_emg",
+    "guide_emg_close",
+    "stop"
+   ]
+  },
+  {
+   "id": 30,
+   "label": "23歳女性・ひとり暮らし",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "link:kitano,night",
+    "routes",
+    "pick_route:1",
+    "guide",
+    "walk:3",
+    "stop"
+   ]
+  },
+  {
+   "id": 31,
+   "label": "30歳女性・夜の外回り・電波が途中で切れる",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "flaky",
+   "script": [
+    "link:harbor,night",
+    "routes",
+    "pick_route:0",
+    "guide",
+    "walk:2",
+    "blip:4",
+    "walk:2",
+    "stop"
+   ]
+  },
+  {
+   "id": 32,
+   "label": "22歳女性・留学生",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "open",
+    "search:元町",
+    "to_place",
+    "routes",
+    "period:night"
+   ]
+  },
+  {
+   "id": 33,
+   "label": "55歳女性・中学生の娘がいる親",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "link:kitano,night",
+    "routes",
+    "send"
+   ]
+  },
+  {
+   "id": 34,
+   "label": "48歳男性・高校生の息子がいる親",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "script": [
+    "link:kitano,night",
+    "routes",
+    "send"
+   ]
+  },
+  {
+   "id": 35,
+   "label": "62歳男性・遠方の母を見守る",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "open",
+    "search:神戸駅",
+    "to_place",
+    "routes",
+    "send"
+   ]
+  },
+  {
+   "id": 36,
+   "label": "32歳男性・住民・2回目は電波なし",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "offline2",
+   "script": [
+    "open",
+    "warm",
+    "offline:on",
+    "reload",
+    "search:神戸駅",
+    "to_place",
+    "routes",
+    "guide",
+    "walk:3",
+    "stop"
+   ]
+  },
+  {
+   "id": 37,
+   "label": "27歳女性・住民",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "claude": "ok",
+   "script": [
+    "link:kitano,night",
+    "routes",
+    "claude:夜に一人で帰る"
+   ]
+  },
+  {
+   "id": 38,
+   "label": "45歳男性・住民",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "geo": "deny",
+   "script": [
+    "link:kobe",
+    "routes",
+    "period:night"
+   ]
+  },
+  {
+   "id": 39,
+   "label": "39歳男性・昼夜を切り替える",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "link:kitano,night",
+    "routes",
+    "period:day",
+    "routes",
+    "period:night",
+    "routes"
+   ]
+  },
+  {
+   "id": 40,
+   "label": "26歳女性・iPhone SE・小さくて押しにくい",
+   "dev": "iPhone SE",
+   "browser": "webkit",
+   "script": [
+    "link:kitano",
+    "routes",
+    "period:day",
+    "period:night"
+   ]
+  },
+  {
+   "id": 41,
+   "label": "31歳男性・英語表記で探す",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "open",
+    "search:jr sannomiya||三ノ宮駅",
+    "to_place",
+    "routes"
+   ]
+  },
+  {
+   "id": 42,
+   "label": "44歳女性・病院を夜に探す",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "open",
+    "search:病院 夜||病院",
+    "to_place",
+    "routes"
+   ]
+  },
+  {
+   "id": 43,
+   "label": "58歳男性・言葉で探す",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "script": [
+    "open",
+    "search:神戸 ランチ||神戸駅",
+    "to_place",
+    "routes"
+   ]
+  },
+  {
+   "id": 44,
+   "label": "41歳女性・郵便番号で探す",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "open",
+    "search:650-0001||search:三宮駅",
+    "to_place",
+    "routes"
+   ]
+  },
+  {
+   "id": 45,
+   "label": "36歳男性・コンビニを探す",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "open",
+    "search:コンビニ||セブン",
+    "to_place",
+    "routes"
+   ]
+  },
+  {
+   "id": 46,
+   "label": "53歳女性・トイレを探す",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "script": [
+    "open",
+    "search:トイレ",
+    "to_place",
+    "routes"
+   ]
+  },
+  {
+   "id": 47,
+   "label": "28歳男性・スタバを探す",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "open",
+    "search:スタバ",
+    "to_place",
+    "routes"
+   ]
+  },
+  {
+   "id": 48,
+   "label": "42歳女性・車いす",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "script": [
+    "link:kobe",
+    "routes",
+    "details"
+   ]
+  },
+  {
+   "id": 49,
+   "label": "71歳男性・杖で歩く",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "font": 130,
+   "script": [
+    "open",
+    "search:三宮",
+    "to_place",
+    "routes",
+    "details"
+   ]
+  },
+  {
+   "id": 50,
+   "label": "35歳女性・ベビーカー",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "script": [
+    "link:kitano",
+    "routes",
+    "details",
+    "pick_route:1"
+   ]
+  },
+  {
+   "id": 51,
+   "label": "51歳男性・雨の日",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "open",
+    "search:元町駅",
+    "to_place",
+    "routes"
+   ]
+  },
+  {
+   "id": 52,
+   "label": "63歳女性・日傘",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "script": [
+    "open",
+    "search:南京町",
+    "to_place",
+    "routes"
+   ]
+  },
+  {
+   "id": 53,
+   "label": "40歳男性・経路を選ぶ",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "link:kobe",
+    "routes",
+    "pick_route:2"
+   ]
+  },
+  {
+   "id": 54,
+   "label": "46歳男性・通勤・電波が途中で切れる",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "flaky",
+   "script": [
+    "open",
+    "search:新神戸駅",
+    "to_place",
+    "routes"
+   ]
+  },
+  {
+   "id": 55,
+   "label": "34歳女性・位置を断った",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "geo": "deny",
+   "script": [
+    "open",
+    "search:神戸駅",
+    "to_place",
+    "routes",
+    "menu",
+    "menu_close"
+   ]
+  },
+  {
+   "id": 56,
+   "label": "57歳男性・ハーバーランドへ",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "script": [
+    "open",
+    "search:ハーバーランド",
+    "to_place",
+    "routes"
+   ]
+  },
+  {
+   "id": 57,
+   "label": "29歳男性・六甲山",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "open",
+    "search:六甲山",
+    "to_place",
+    "routes"
+   ]
+  },
+  {
+   "id": 58,
+   "label": "38歳女性・有馬温泉へ歩く",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "link:arima,night",
+    "routes"
+   ]
+  },
+  {
+   "id": 59,
+   "label": "55歳男性・ランナー",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "script": [
+    "open",
+    "search:メリケンパーク",
+    "to_place",
+    "routes",
+    "pick_route:0"
+   ]
+  },
+  {
+   "id": 60,
+   "label": "32歳女性・案内で歩く",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "orient": "landscape",
+   "script": [
+    "link:kitano",
+    "routes",
+    "guide",
+    "walk:5",
+    "stop"
+   ]
+  },
+  {
+   "id": 61,
+   "label": "25歳男性・音声が鳴らない",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "link:kitano",
+    "routes",
+    "guide",
+    "voice_toggle",
+    "walk:2",
+    "stop"
+   ]
+  },
+  {
+   "id": 62,
+   "label": "47歳女性・音声が使えない端末",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "voice": "no",
+   "orient": "landscape",
+   "script": [
+    "link:kitano",
+    "routes",
+    "guide",
+    "voice_toggle",
+    "walk:3",
+    "stop"
+   ]
+  },
+  {
+   "id": 63,
+   "label": "44歳男性・道なりが続く",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "link:kobe",
+    "routes",
+    "guide",
+    "walk:5",
+    "stop"
+   ]
+  },
+  {
+   "id": 64,
+   "label": "65歳女性・交差点の案内を見たい",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "script": [
+    "link:kobe",
+    "routes",
+    "details"
+   ]
+  },
+  {
+   "id": 65,
+   "label": "33歳女性・夜に案内で歩く",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "dark": true,
+   "script": [
+    "link:kitano,night",
+    "routes",
+    "guide",
+    "walk:5",
+    "stop"
+   ]
+  },
+  {
+   "id": 66,
+   "label": "37歳男性・ビル街でGPSがずれる・電波が途中で切れる",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "flaky",
+   "script": [
+    "link:kobe",
+    "routes",
+    "guide",
+    "offroute:80",
+    "blip:3",
+    "stop"
+   ]
+  },
+  {
+   "id": 67,
+   "label": "24歳女性・案内で歩く",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "link:kobe",
+    "routes",
+    "guide",
+    "walk:3",
+    "stop"
+   ]
+  },
+  {
+   "id": 68,
+   "label": "59歳男性・案内で歩く",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "script": [
+    "link:kobe",
+    "routes",
+    "guide",
+    "walk:3",
+    "stop"
+   ]
+  },
+  {
+   "id": 69,
+   "label": "41歳女性・案内中に緊急を押した",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "link:kitano,night",
+    "routes",
+    "guide",
+    "walk:2",
+    "guide_emg",
+    "guide_emg_close",
+    "stop"
+   ]
+  },
+  {
+   "id": 70,
+   "label": "67歳男性・交番を探す・電波なし",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "net": "offline2",
+   "script": [
+    "open",
+    "warm",
+    "offline:on",
+    "reload",
+    "menu",
+    "menu_emg",
+    "menu_koban"
+   ]
+  },
+  {
+   "id": 71,
+   "label": "30歳女性・近い交番へ",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "open",
+    "menu",
+    "menu_emg",
+    "menu_koban",
+    "menu_route",
+    "routes"
+   ]
+  },
+  {
+   "id": 72,
+   "label": "27歳男性・Claudeに相談",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "claude": "ok",
+   "script": [
+    "link:kobe",
+    "routes",
+    "claude:近道がいい"
+   ]
+  },
+  {
+   "id": 73,
+   "label": "56歳女性・荷物が多い",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "claude": "ok",
+   "script": [
+    "link:kobe,night",
+    "routes",
+    "claude:荷物が多い"
+   ]
+  },
+  {
+   "id": 74,
+   "label": "35歳男性・他人の帰り道を調べたい",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "claude": "declined",
+   "script": [
+    "link:kitano,night",
+    "routes",
+    "claude:彼女の帰り道を先回りしたい"
+   ]
+  },
+  {
+   "id": 75,
+   "label": "48歳男性・経路の違いを見る",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "link:kobe",
+    "routes",
+    "pick_route:1",
+    "pick_route:2"
+   ]
+  },
+  {
+   "id": 76,
+   "label": "31歳女性・別の道を知りたい",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "script": [
+    "link:kobe",
+    "routes",
+    "details"
+   ]
+  },
+  {
+   "id": 77,
+   "label": "68歳男性・詳しい理由を見る",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "link:kitano",
+    "routes",
+    "details"
+   ]
+  },
+  {
+   "id": 78,
+   "label": "25歳女性・初めて使う",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "intro": true,
+   "script": [
+    "open",
+    "intro_read",
+    "maptap",
+    "search:三宮",
+    "to_place",
+    "routes"
+   ]
+  },
+  {
+   "id": 79,
+   "label": "52歳男性・地図を押してみる",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "script": [
+    "open",
+    "maptap",
+    "search:北野",
+    "to_place",
+    "routes"
+   ]
+  },
+  {
+   "id": 80,
+   "label": "38歳女性・ジャンルで探す",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "open",
+    "maptap",
+    "genre:カフェ",
+    "genre_pick"
+   ]
+  },
+  {
+   "id": 81,
+   "label": "45歳男性・毎日同じ道・2回目は電波なし",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "offline2",
+   "script": [
+    "open",
+    "warm",
+    "offline:on",
+    "reload",
+    "search:神戸駅",
+    "to_place",
+    "routes"
+   ]
+  },
+  {
+   "id": 82,
+   "label": "34歳女性・共有リンクを電波なしで開く",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "offline2",
+   "script": [
+    "open",
+    "warm",
+    "offline:on",
+    "link:kobe,day",
+    "routes"
+   ]
+  },
+  {
+   "id": 83,
+   "label": "36歳男性・地下鉄の中",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "net": "slow3g",
+   "script": [
+    "open",
+    "search:神戸駅",
+    "to_place",
+    "routes"
+   ]
+  },
+  {
+   "id": 84,
+   "label": "42歳女性・通信量が少ない",
+   "dev": "iPhone 13",
+   "browser": "chromium",
+   "net": "slow3g",
+   "script": [
+    "open",
+    "search:神戸駅",
+    "to_place",
+    "routes"
+   ]
+  },
+  {
+   "id": 85,
+   "label": "55歳女性・古いAndroid・遅い回線",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "net": "slow3g",
+   "font": 130,
+   "geo": "none",
+   "script": [
+    "open",
+    "search:北野",
+    "to_place",
+    "routes"
+   ]
+  },
+  {
+   "id": 86,
+   "label": "53歳男性・キーボードで操作",
+   "dev": "Desktop Chrome",
+   "browser": "chromium",
+   "script": [
+    "open",
+    "kb_search:神戸駅",
+    "to_place",
+    "routes"
+   ]
+  },
+  {
+   "id": 87,
+   "label": "46歳女性・スクリーンリーダー",
+   "dev": "Desktop Chrome",
+   "browser": "chromium",
+   "script": [
+    "open",
+    "a11y",
+    "kb_search:北野",
+    "to_place",
+    "routes",
+    "a11y"
+   ]
+  },
+  {
+   "id": 88,
+   "label": "37歳男性・Tabで進む",
+   "dev": "Desktop Chrome",
+   "browser": "chromium",
+   "script": [
+    "link:kitano",
+    "routes",
+    "tab_walk"
+   ]
+  },
+  {
+   "id": 89,
+   "label": "58歳女性・使い方を見たい",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "open",
+    "menu",
+    "menu_help"
+   ]
+  },
+  {
+   "id": 90,
+   "label": "27歳男性・計算の説明を見たい",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "open",
+    "page:safety.html"
+   ]
+  },
+  {
+   "id": 91,
+   "label": "40歳女性・航空写真にする",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "script": [
+    "open",
+    "menu",
+    "menu_map:航空写真",
+    "menu_close"
+   ]
+  },
+  {
+   "id": 92,
+   "label": "35歳男性・注意の付き方を見る",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "link:kitano,night",
+    "routes",
+    "details"
+   ]
+  },
+  {
+   "id": 93,
+   "label": "29歳女性・夜の画面",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "dark": true,
+   "script": [
+    "link:kitano,night",
+    "routes"
+   ]
+  },
+  {
+   "id": 94,
+   "label": "52歳男性・位置を断った",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "geo": "deny",
+   "script": [
+    "link:kobe,night",
+    "routes"
+   ]
+  },
+  {
+   "id": 95,
+   "label": "30歳男性・言葉の意味で探す",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "open",
+    "search:神戸 ベビーカー||神戸駅"
+   ]
+  },
+  {
+   "id": 96,
+   "label": "72歳女性・iPadでゆっくり歩く",
+   "dev": "iPad (gen 7)",
+   "browser": "webkit",
+   "font": 130,
+   "orient": "landscape",
+   "script": [
+    "open",
+    "search:神戸駅",
+    "to_place",
+    "routes",
+    "guide",
+    "walk:4",
+    "stop"
+   ]
+  },
+  {
+   "id": 97,
+   "label": "56歳男性・案内中に戻る",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "link:kitano",
+    "routes",
+    "guide",
+    "back"
+   ]
+  },
+  {
+   "id": 98,
+   "label": "43歳女性・メニューで戻る",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "geo": "none",
+   "script": [
+    "open",
+    "menu",
+    "back_menu"
+   ]
+  },
+  {
+   "id": 99,
+   "label": "59歳女性・LINEで受け取った",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "script": [
+    "link:kitano,night,sh",
+    "routes"
+   ]
+  },
+  {
+   "id": 100,
+   "label": "31歳男性・出張・共有リンクを開く",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "script": [
+    "link:kobe,sh,me",
+    "routes"
+   ]
+  }
+ ]
+}
