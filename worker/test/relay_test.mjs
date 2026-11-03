@@ -6,6 +6,8 @@ import http from "node:http";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import fs from "node:fs";
+import os from "node:os";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(here, "..");
@@ -76,11 +78,12 @@ const wrangler = spawn(
     "dev",
     "--port", String(WORKER_PORT),
     "--ip", "127.0.0.1",
+    "--persist-to", fs.mkdtempSync(path.join(os.tmpdir(), "relay-state-")), // 毎回まっさらな回数の記録で始める
     "--var", `UPSTREAM_URL:http://127.0.0.1:${MOCK_PORT}/v1/messages`,
     "--var", "ALLOW_TEST_UPSTREAM:1",
     "--var", "ANTHROPIC_API_KEY:dummy-key-for-local-test-only",
     "--var", "IP_10MIN_LIMIT:5",
-    "--var", "DAILY_LIMIT:8",
+    "--var", "DAILY_LIMIT:9",
     "--var", "IP_DAY_LIMIT:60",
   ],
   { cwd: root, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, WRANGLER_SEND_METRICS: "false", CI: "1" } },
@@ -134,6 +137,20 @@ try {
   check("stream・fallbacks・metadata を落とす", up && !("stream" in up.body) && !("fallbacks" in up.body) && !("metadata" in up.body));
   check("応答に CORS が付く", r.headers.get("access-control-allow-origin") === OK_ORIGIN);
 
+  // agent.ts が実際に送る形(output_config・strict の道具・tool_use の履歴)を通す
+  r = await call(goodBody({
+    max_tokens: 6000,
+    output_config: { effort: "medium", format: { type: "json_schema", schema: { type: "object", properties: {}, additionalProperties: false } } },
+    tools: [{ name: "find_routes", description: "d", strict: true, input_schema: { type: "object", properties: {}, required: [], additionalProperties: false } }],
+    messages: [
+      { role: "user", content: "x" },
+      { role: "assistant", content: [{ type: "thinking", thinking: "", signature: "s" }, { type: "tool_use", id: "t1", name: "find_routes", input: {} }] },
+      { role: "user", content: [{ type: "tool_result", tool_use_id: "t1", content: "{}" }] },
+    ],
+  }), { ip: "9.9.9.9" });
+  check("agent.ts の形の要求を通す", r.status === 200 && seen.at(-1).body.output_config.effort === "medium" && seen.at(-1).body.messages.length === 3, r.text);
+  seen.pop();
+
   // --- 上流の混雑
   r = await call(goodBody({ messages: [{ role: "user", content: "MODE429" }] }));
   check("上流 429 -> 503 と日本語の文", r.status === 503 && /混み合って/.test(r.json?.error?.message ?? ""), r.text);
@@ -148,9 +165,9 @@ try {
   await call(goodBody());
   check("  429 の呼び出しは上流へ行かない", seen.length === before);
 
-  // --- 1日の全体(8回まで。ここまでで5回)
+  // --- 1日の全体(9回まで。ここまでで6回)
   for (let i = 0; i < 3; i++) r = await call(goodBody(), { ip: "2.2.2.2" });
-  check("別の IP は通る(全体で8回目)", r.status === 200, r.text);
+  check("別の IP は通る(全体で9回目)", r.status === 200, r.text);
   r = await call(goodBody(), { ip: "3.3.3.3" });
   check("全体の上限 -> 429(1日)", r.status === 429 && /今日の Claude/.test(r.json?.error?.message ?? ""), r.text);
   check("  上流への実際の呼び出しは 8 回", seen.length === 8, String(seen.length));
