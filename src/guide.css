@@ -314,3 +314,8 @@ body.guiding .toast {
     left: calc(50% + 100px);
   }
 }
+
+/* 案内中は、経路を選ぶための所要時間の札を隠す。 */
+body.guiding .time-tag {
+  display: none;
+}
