@@ -33,7 +33,8 @@ const mapReady = new Promise<void>((resolve, reject) => {
   map.on("load", () => resolve());
   map.on("error", (e) => {
     // 読み込み前に、地図の様式(style)が読めなかった時だけ失敗とする。個々のタイルの失敗では止めない。
-    if (!map.isStyleLoaded()) reject(e.error ?? new Error("地図を読み込めません"));
+    // タイルの失敗には sourceId が付く。それは様式の失敗として扱わない。
+    if (!("sourceId" in e && e.sourceId) && !map.isStyleLoaded()) reject(e.error ?? new Error("地図を読み込めません"));
   });
   setTimeout(() => reject(new Error("地図の読み込みに時間がかかっています")), LOAD_LIMIT_MS);
 });

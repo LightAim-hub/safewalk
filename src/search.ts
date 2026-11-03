@@ -129,7 +129,9 @@ export function searchPlaces(query: string): Place[] {
   const brand = ALIASES.get(q);
   const kindNamed = (kind: string) => q.length >= 2 && (normalize(kind).includes(q) || q.includes(normalize(kind)));
   // ローマ字(sannomiya)は、読みにだけ当てる。英語の店名などで全部は変換できない言葉は使わない。
+  // 長音はローマ字で書かないことが多い（kobe=こうべ、rokko=ろっこう）。読みの側の「う」を落として比べる。
   const kana = /^[a-z']{3,}$/.test(q) ? romajiToKana(q) : null;
+  const yomi = (p: IndexedPlace) => (kana ? p.y.replace(/([おこそとのほもよろごぞどぼぽょくすつぬふむゆるぐずづぶぷゅ])う/g, "$1") : p.y);
   const rank = (p: IndexedPlace) => {
     const name = withoutKobe(p.n);
     let key = name.startsWith(q) || !p.y.startsWith(q) ? name : p.y;
@@ -140,9 +142,10 @@ export function searchPlaces(query: string): Place[] {
     // 略称で探した時は、略称と同じ名前の別の場所（セブンという名のカフェなど）より、正式な名前の店を上にする。
     if (brand) match = p.n.startsWith(brand) ? 0 : p.n.includes(brand) ? 100 : 300 + match;
     // ローマ字から変えた読みだけで当たった物。駅・地区などは読みの一致で並べ、ほかの場所は名前で当たった物より下げる。
-    if (kana && !p.n.includes(q) && !p.y.includes(q) && p.y.includes(kana)) {
-      const reading = p.kind === "駅" ? p.y.replace(/えき$/, "") : p.y;
-      match = reading === kana ? 0 : p.y.startsWith(kana) ? 100 : 200;
+    if (kana && !p.n.includes(q) && !p.y.includes(q) && (p.y.includes(kana) || yomi(p).includes(kana))) {
+      const y = p.y.includes(kana) ? p.y : yomi(p);
+      const reading = p.kind === "駅" ? y.replace(/えき$/, "") : y;
+      match = reading === kana ? 0 : y.startsWith(kana) ? 100 : 200;
     }
     // 読みだけで当たった駅・地区以外の場所(三呑み屋など)は、駅・地区より下げる。
     // 略称（ファミマ→ファミリーマート）で当たった店は対象外。
@@ -154,7 +157,7 @@ export function searchPlaces(query: string): Place[] {
   };
   const seen = new Set<string>();
   return places
-    .filter((p) => p.n.includes(q) || p.y.includes(q) || (brand && p.n.includes(brand)) || (kana && KIND_ORDER.includes(p.kind) && p.y.includes(kana)))
+    .filter((p) => p.n.includes(q) || p.y.includes(q) || (brand && p.n.includes(brand)) || (kana && KIND_ORDER.includes(p.kind) && (p.y.includes(kana) || yomi(p).includes(kana))))
     .map((p) => ({ p, score: rank(p) }))
     .sort((a, b) => a.score - b.score)
     .map(({ p }) => p)

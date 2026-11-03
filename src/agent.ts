@@ -225,9 +225,33 @@ class RelayError extends Error {}
 
 async function post(body: unknown, deps: AgentDeps): Promise<ApiResponse> {
   const f = deps.fetchImpl ?? fetch;
+  // AbortSignal.any・timeout が無い古い端末（iOS 17.3 以前など）でも、時間切れと中断の両方を効かせる。
+  const ctl = new AbortController();
+  const timeout = { aborted: false };
+  const timer = setTimeout(() => {
+    timeout.aborted = true;
+    ctl.abort();
+  }, deps.timeoutMs ?? AGENT_TIMEOUT_MS);
+  const stop = () => ctl.abort();
+  if (deps.signal?.aborted) ctl.abort();
+  else deps.signal?.addEventListener("abort", stop, { once: true });
+  const signal = ctl.signal;
+  try {
+    return await postWith(f, body, deps, signal, timeout);
+  } finally {
+    clearTimeout(timer);
+    deps.signal?.removeEventListener("abort", stop);
+  }
+}
+
+async function postWith(
+  f: typeof fetch,
+  body: unknown,
+  deps: AgentDeps,
+  signal: AbortSignal,
+  timeout: { aborted: boolean },
+): Promise<ApiResponse> {
   let res: Response;
-  const timeout = AbortSignal.timeout(deps.timeoutMs ?? AGENT_TIMEOUT_MS);
-  const signal = deps.signal && "any" in AbortSignal ? AbortSignal.any([deps.signal, timeout]) : (deps.signal ?? timeout);
   try {
     res = await f(deps.endpoint ?? AGENT_ENDPOINT, {
       method: "POST",
