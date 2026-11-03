@@ -199,7 +199,8 @@ export function validateOutput(raw: Raw, facts: Map<string, string>, routeCount:
   const cl = Array.isArray(raw.cautions) ? raw.cautions : [];
   for (const id of cl) {
     if (typeof id !== "string" || !/\.(caution|warn)\.\d+$/.test(id) || !facts.has(id)) {
-      replaced.push(`cautions: 注意書きの ID ではない(${String(id).slice(0, 40)})`);
+      // 返ってきた ID の中身は残さない(相談の文が写されていた時に、記録へ入らないように)。
+      replaced.push("cautions: 注意書きの ID ではない");
       continue;
     }
     if (!cautions.some((c) => c.id === id)) cautions.push({ id, text: facts.get(id)! });
