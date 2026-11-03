@@ -139,7 +139,34 @@ export function showLocateFail(kind: LocateFail): void {
 let intro: HTMLElement | null = null;
 let introReturn: HTMLElement | null = null;
 
+const FOCUSABLE = 'a[href], button:not([disabled]), input, summary, [tabindex]:not([tabindex="-1"])';
+
+/** 説明が開いている間だけ、Esc で閉じ、Tab を説明の中に閉じ込める（背後の地図へ抜けない）。 */
+function introKey(e: KeyboardEvent): void {
+  if (!intro) return;
+  if (e.key === "Escape") {
+    e.preventDefault();
+    writeSeen();
+    return closeIntro();
+  }
+  if (e.key !== "Tab") return;
+  const list = [...intro.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((n) => n.offsetParent !== null);
+  if (!list.length) return;
+  const active = document.activeElement;
+  if (!intro.contains(active) || (e.shiftKey && active === list[0]) || (!e.shiftKey && active === list[list.length - 1])) {
+    e.preventDefault();
+    (e.shiftKey && intro.contains(active) ? list[list.length - 1] : list[0]).focus();
+  }
+}
+
+/** クリックなどで説明の外にフォーカスが出たら、中へ戻す。 */
+function introFocus(e: FocusEvent): void {
+  if (intro && e.target instanceof Node && !intro.contains(e.target)) (intro.querySelector<HTMLElement>("button.primary") ?? intro).focus();
+}
+
 function closeIntro(): void {
+  document.removeEventListener("keydown", introKey, true);
+  document.removeEventListener("focusin", introFocus, true);
   intro?.remove();
   intro = null;
   document.body.classList.remove("intro-open");
@@ -178,12 +205,8 @@ export function openIntro(): void {
   });
   row.append(go, ex);
   box.append(row);
-  box.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      writeSeen();
-      closeIntro();
-    }
-  });
+  document.addEventListener("keydown", introKey, true);
+  document.addEventListener("focusin", introFocus, true);
   wrap.append(box);
   document.body.append(wrap);
   document.body.classList.add("intro-open");
@@ -204,6 +227,12 @@ function bannerForInApp(): void {
   document.body.append(bar);
 }
 
+/** いまの画面（地図・経路・案内）。 */
+function screenName(): string {
+  const c = document.body.classList;
+  return c.contains("guiding") ? "guiding" : c.contains("routing") ? "routing" : "browse";
+}
+
 /** 起動時に呼ぶ。初めてなら説明を出し、「使い方」ボタンで開き直せるようにする。 */
 export function bindOnboarding(): void {
   const help = document.createElement("button");
@@ -216,6 +245,14 @@ export function bindOnboarding(): void {
   help.addEventListener("click", openIntro);
   document.body.append(help);
   bannerForInApp();
+  // 経路の画面・案内に変わったら、位置情報のメモは畳む（一覧と「案内を始める」を覆わない）。
+  let screen = screenName();
+  new MutationObserver(() => {
+    const now = screenName();
+    if (now === screen) return;
+    screen = now;
+    closeNote();
+  }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
   const q = new URLSearchParams(location.search);
   // 共有された地点や経路を開いた時、intro=0 の時は出さない。
   const shared = location.search.length > 1;

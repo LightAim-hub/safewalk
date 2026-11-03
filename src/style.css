@@ -246,7 +246,7 @@ summary {
 .suggest .kind {
   flex: none;
   color: var(--sub);
-  font-size: 0.75rem;
+  font-size: 0.875rem;
 }
 
 .directions {
@@ -338,7 +338,7 @@ summary {
 
 .chip {
   flex: none;
-  min-height: 2.25rem;
+  min-height: 2.75rem;
   padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -550,7 +550,7 @@ body.routing .chips:not(.inline) {
 .safety small {
   display: block;
   color: var(--sub);
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   font-weight: 400;
 }
 
@@ -562,7 +562,7 @@ body.routing .chips:not(.inline) {
 .via {
   grid-column: 1 / -1;
   color: var(--sub);
-  font-size: 0.75rem;
+  font-size: 0.875rem;
 }
 
 .warn {
@@ -629,7 +629,7 @@ body.routing .chips:not(.inline) {
 .note {
   margin: 12px 0 0;
   color: var(--sub);
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   line-height: 1.6;
 }
 
@@ -747,34 +747,15 @@ body.guiding .ui {
   fill: currentColor;
 }
 
-.layers {
+.help {
+  bottom: 284px;
+}
+
+.menu-btn {
   bottom: 232px;
-}
-
-.layer-menu {
-  position: fixed;
-  right: 64px;
-  bottom: 232px;
-  z-index: 3;
-  display: grid;
-  gap: 2px;
-  padding: 6px;
-}
-
-.layer-menu button {
-  min-height: 2.75rem;
-  padding: 0 14px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-}
-
-.layer-menu button[aria-pressed="true"] {
-  background: var(--tint);
-  color: var(--link);
-  font-weight: 600;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .me {
@@ -921,19 +902,14 @@ body.guiding .ui {
     bottom: auto;
   }
 
-  .layers {
-    top: calc(5.5rem + 76px);
-    bottom: auto;
-  }
-
-  .layer-menu {
-    top: calc(5.5rem + 76px);
-    right: 62px;
-    bottom: auto;
-  }
-
   body.routing .locate {
     display: none;
+  }
+
+  /* 経路の画面では、上の入力欄の下に ≡ だけを残す（説明の開き直しは ≡ の中）。位置は menu.ts が測る。 */
+  body.routing .menu-btn {
+    display: grid;
+    top: var(--below-directions, 16rem);
   }
 
   .toast {
@@ -956,10 +932,6 @@ body.guiding .ui {
     border-radius: 22px;
   }
 
-  .layer-menu button {
-    min-height: 2.75rem;
-  }
-
   .time-tag {
     padding: 8px 12px;
   }
@@ -970,12 +942,13 @@ body.guiding .ui {
     top: calc(5.5rem + 40px);
   }
 
-  .layers {
+  .menu-btn {
     top: calc(5.5rem + 92px);
   }
 
-  .layer-menu {
-    top: calc(5.5rem + 92px);
+  .help {
+    top: calc(5.5rem + 144px);
+    bottom: auto;
   }
 }
 
@@ -1049,14 +1022,39 @@ body.guiding .ui {
     bottom: auto;
   }
 
-  .layers {
+  .menu-btn {
     top: 68px;
     bottom: auto;
   }
 
-  .layer-menu {
-    top: 68px;
-    right: 64px;
+  .help {
+    top: 124px;
     bottom: auto;
   }
+}
+
+/* 拡大・縮小は PC だけ。スマホは指でつまんで拡大する。 */
+@media (pointer: coarse), (max-width: 720px) {
+  .maplibregl-ctrl-zoom-in,
+  .maplibregl-ctrl-zoom-out {
+    display: none;
+  }
+
+  body:not(.rotated) .maplibregl-ctrl-bottom-right .maplibregl-ctrl-group {
+    display: none;
+  }
+}
+
+/* 北向きに戻すボタンは、地図を回したり傾けたりした時だけ出す（map-ui.ts が body に rotated を付ける）。 */
+.maplibregl-ctrl-compass {
+  display: none;
+}
+
+body.rotated .maplibregl-ctrl-compass {
+  display: block;
+}
+
+.chip-more {
+  border-style: dashed;
+  color: var(--link);
 }

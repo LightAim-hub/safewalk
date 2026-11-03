@@ -203,16 +203,37 @@ export function clearGenre(): void {
   renderChips();
 }
 
+/**
+ * 最初に並べるジャンル。歩いている途中に「いま要る」物（買う・食べる・体調・乗る）を先頭に置く。
+ * 利用の回数を測った順ではなく、設計上の判断。残りは「ほか」で開く。
+ */
+export const MAIN_GENRES = ["コンビニ", "飲食店", "病院", "駅"];
+
+/** 「ほか」を開いているか。 */
+let chipsOpen = false;
+
 export function renderChips(): void {
-  $("chips").replaceChildren(
-    ...GENRES.map((genre) => {
-      const chip = el("button", "chip", genre.label);
-      chip.type = "button";
-      chip.setAttribute("aria-pressed", String(state.genre === genre));
-      chip.addEventListener("click", () => searchGenre(genre));
-      return chip;
-    }),
-  );
+  const main = MAIN_GENRES.map((label) => GENRES.find((g) => g.label === label)).filter((g): g is Genre => !!g);
+  const rest = GENRES.filter((g) => !main.includes(g));
+  // 選んでいるジャンルが「ほか」の中なら、開いたままにする。
+  const open = chipsOpen || (state.genre !== null && rest.includes(state.genre));
+  const chip = (genre: Genre) => {
+    const b = el("button", "chip", genre.label);
+    b.type = "button";
+    b.setAttribute("aria-pressed", String(state.genre === genre));
+    b.addEventListener("click", () => searchGenre(genre));
+    return b;
+  };
+  const more = el("button", "chip chip-more", open ? "閉じる" : "ほか");
+  more.type = "button";
+  more.setAttribute("aria-expanded", String(open));
+  more.addEventListener("click", () => {
+    chipsOpen = !open;
+    renderChips();
+    $("chips").querySelector<HTMLElement>(".chip-more")?.focus();
+    if (chipsOpen) $("chips").querySelectorAll<HTMLElement>(".chip")[main.length + 1]?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  });
+  $("chips").replaceChildren(...main.map(chip), more, ...(open ? rest.map(chip) : []));
 }
 
 /** 外部の検索を待つ長さ。これを過ぎたら手元の候補だけで続ける。 */

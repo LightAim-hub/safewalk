@@ -1,0 +1,299 @@
+import { $, CURRENT, el, state } from "./app";
+import { openDirections, SAFETY_PAGE } from "./directions";
+import { emergencyPanel } from "./emergency";
+import { voiceOn } from "./guide";
+import { type KobanHit } from "./koban";
+import { setBaseLayer, type BaseLayer } from "./map-ui";
+import { openIntro } from "./onboarding";
+import { type Place } from "./types";
+import { copyLink } from "./url";
+import { chosenVoiceName, onVoiceChange } from "./voice";
+import "./menu.css";
+
+/**
+ * 地図の右側の「≡」から開く、下からの一覧。使う頻度の低い設定と説明をここにまとめる。
+ * 昼夜の切り替えと免責は、経路の画面に置くのでここには入れない。
+ */
+
+const LAYER_CHOICES: [BaseLayer | "map", string][] = [
+  ["map", "地図"],
+  ["photo", "航空写真"],
+  ["relief", "地形"],
+];
+
+/** データの出典（public/safety.html の「出典」と、地図の下の表示から要約した物）。 */
+const SOURCES = [
+  "交通事故: 警察庁「交通事故統計情報のオープンデータ」（2020〜2025年）を神戸市内で抜き出して加工",
+  "ひったくり・交番と警察署: 兵庫県警察のデータ（兵庫県オープンデータカタログ、CC BY 2.1 JP）を加工",
+  "町丁目の境界: 総務省統計局 e-Stat（2020年国勢調査 小地域）を加工",
+  "地図・道・店の営業時間: OpenStreetMap © contributors（OpenFreeMap 配信）",
+  "航空写真・地形・住所・標高: 国土地理院",
+  "#7119 の案内: 神戸市の救急安心センターのページ",
+];
+
+let layer: BaseLayer | "map" = "map";
+let back: HTMLElement;
+let sheet: HTMLElement;
+let opener: HTMLElement | null = null;
+
+const FOCUSABLE = 'a[href], button:not([disabled]), summary, input, [tabindex]:not([tabindex="-1"])';
+
+function focusables(): HTMLElement[] {
+  return [...sheet.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((n) => n.offsetParent !== null);
+}
+
+/** 開いている間だけ、Esc で閉じ、Tab を一覧の中に閉じ込める。 */
+function onKey(e: KeyboardEvent): void {
+  if (e.key === "Escape") {
+    e.preventDefault();
+    return closeMenu();
+  }
+  if (e.key !== "Tab") return;
+  const list = focusables();
+  if (!list.length) return;
+  const first = list[0];
+  const last = list[list.length - 1];
+  const active = document.activeElement;
+  if (!sheet.contains(active)) {
+    e.preventDefault();
+    first.focus();
+  } else if (e.shiftKey && active === first) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && active === last) {
+    e.preventDefault();
+    first.focus();
+  }
+}
+
+export function openMenu(): void {
+  if (!back.hidden) return;
+  opener = document.activeElement instanceof HTMLElement ? document.activeElement : $("menu-open");
+  refreshVoice();
+  back.hidden = false;
+  document.body.classList.add("menu-open");
+  document.addEventListener("keydown", onKey, true);
+  sheet.scrollTop = 0;
+  sheet.querySelector<HTMLElement>(".menu-close")?.focus();
+}
+
+export function closeMenu(): void {
+  if (back.hidden) return;
+  back.hidden = true;
+  document.body.classList.remove("menu-open");
+  document.removeEventListener("keydown", onKey, true);
+  // 緊急の枠は、次に開く時に位置を取り直すため畳む。
+  const emg = $("menu-emg");
+  emg.setAttribute("aria-expanded", "false");
+  $("menu-emg-box").hidden = true;
+  $("menu-emg-box").replaceChildren();
+  const back2 = opener && opener.isConnected && opener.offsetParent !== null ? opener : $("menu-open");
+  opener = null;
+  back2.focus();
+}
+
+function refreshVoice(): void {
+  const on = voiceOn;
+  const button = $("menu-voice");
+  button.textContent = on ? "音声案内 オン" : "音声案内 オフ";
+  button.setAttribute("aria-pressed", String(on));
+  const name = chosenVoiceName();
+  $("menu-voice-name").textContent = `使っている声: ${name || "端末の既定の日本語"}`;
+}
+
+/** 緊急の枠の「出発地から近い順」を、現在地から探した時の言い方に直す。 */
+function relabelNear(box: HTMLElement): void {
+  const near = box.querySelector(".emg-near");
+  if (!near) return;
+  const fix = () => {
+    const h = near.querySelector("h4");
+    if (h && h.textContent?.includes("出発地から")) h.textContent = h.textContent.replace("出発地から", "いまいる場所から");
+  };
+  new MutationObserver(fix).observe(near, { childList: true });
+}
+
+/** 現在地を、緊急の時にだけ使う。許可の前置きは挟まず、押した本人の操作をそのまま許可の求めにする。 */
+function locateForEmergency(): Promise<Place | null> {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) return resolve(null);
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => resolve({ lat: coords.latitude, lon: coords.longitude, name: CURRENT }),
+      () => resolve(null),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+    );
+  });
+}
+
+function showEmergency(origin: Place | null): void {
+  const box = $("menu-emg-box");
+  const onRoute = (k: KobanHit) => {
+    if (!origin) return;
+    closeMenu();
+    openDirections({ from: origin, to: { name: k.name, lat: k.lat, lon: k.lon, kind: "警察" } });
+  };
+  const panel = emergencyPanel(origin, onRoute);
+  if (origin) {
+    if (origin.name === CURRENT) relabelNear(panel);
+  } else {
+    const near = panel.querySelector(".emg-near");
+    const find = el("button", "primary menu-find", "いまいる場所から近い交番を探す");
+    find.type = "button";
+    const note = el("p", "emg-hint", "位置情報の許可を聞かれたら、許可してください。");
+    near?.replaceChildren(find, note);
+    find.addEventListener("click", async () => {
+      find.disabled = true;
+      note.textContent = "いまの場所を調べています…";
+      const here = await locateForEmergency();
+      if (box.hidden) return;
+      if (here) showEmergency(here);
+      else {
+        find.disabled = false;
+        note.textContent = "いまの場所が分かりませんでした。上の番号に電話してください。";
+      }
+    });
+  }
+  box.replaceChildren(panel);
+}
+
+function toggleEmergency(): void {
+  const button = $("menu-emg");
+  const open = button.getAttribute("aria-expanded") !== "true";
+  button.setAttribute("aria-expanded", String(open));
+  const box = $("menu-emg-box");
+  box.hidden = !open;
+  if (!open) return void box.replaceChildren();
+  // 経路の出発地が決まっていれば、そこから。決まっていなければ、現在地を押した時に探す。
+  showEmergency(state.from);
+  box.scrollIntoView({ block: "nearest" });
+}
+
+async function shareApp(button: HTMLButtonElement): Promise<void> {
+  const url = location.origin + location.pathname;
+  if (typeof navigator.share === "function") {
+    try {
+      await navigator.share({ title: "SafeWalk", text: "神戸市の徒歩の地図。経路ごとに交通事故の記録と夜の歩きやすさの目安を出します。", url });
+      return;
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+    }
+  }
+  await copyLink(button, url, "リンクをコピーしました");
+}
+
+function section(title: string, ...body: HTMLElement[]): HTMLElement {
+  const s = el("section", "menu-sec");
+  s.append(el("h3", "", title), ...body);
+  return s;
+}
+
+function buildMenu(): void {
+  back = el("div", "menu-back");
+  back.hidden = true;
+  sheet = el("section", "card menu-sheet");
+  sheet.setAttribute("role", "dialog");
+  sheet.setAttribute("aria-modal", "true");
+  sheet.setAttribute("aria-labelledby", "menu-title");
+
+  const head = el("div", "menu-head");
+  const title = el("h2", "", "メニュー");
+  title.id = "menu-title";
+  const close = el("button", "menu-close", "閉じる");
+  close.type = "button";
+  close.addEventListener("click", closeMenu);
+  head.append(title, close);
+
+  const emg = el("button", "menu-emg", "緊急の時（110・119）");
+  emg.id = "menu-emg";
+  emg.type = "button";
+  emg.setAttribute("aria-expanded", "false");
+  emg.setAttribute("aria-controls", "menu-emg-box");
+  emg.addEventListener("click", toggleEmergency);
+  const emgBox = el("div", "menu-emg-box");
+  emgBox.id = "menu-emg-box";
+  emgBox.hidden = true;
+
+  const seg = el("div", "menu-seg");
+  seg.setAttribute("role", "group");
+  seg.setAttribute("aria-label", "地図の種類");
+  for (const [value, label] of LAYER_CHOICES) {
+    const b = el("button", "", label);
+    b.type = "button";
+    b.dataset.layer = value;
+    b.setAttribute("aria-pressed", String(value === layer));
+    b.addEventListener("click", () => {
+      layer = value;
+      setBaseLayer(value);
+      seg.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    });
+    seg.append(b);
+  }
+
+  const voice = el("button", "menu-row");
+  voice.id = "menu-voice";
+  voice.type = "button";
+  voice.addEventListener("click", () => {
+    // 音声のオン・オフは案内の画面の「音声」ボタンが持っている。同じ状態を使うため、そのボタンを押す。
+    $("guide-voice").click();
+    refreshVoice();
+  });
+  const voiceName = el("p", "menu-note");
+  voiceName.id = "menu-voice-name";
+  onVoiceChange(refreshVoice);
+
+  const detail = el("a", "menu-row", "計算のくわしい説明");
+  detail.href = SAFETY_PAGE;
+  detail.target = "_blank";
+  detail.rel = "noopener";
+
+  const sources = el("details", "menu-sources");
+  sources.append(el("summary", "menu-row", "データの出典"));
+  const list = el("ul");
+  for (const text of SOURCES) list.append(el("li", "", text));
+  sources.append(list, el("p", "menu-note", "くわしい出典は「計算のくわしい説明」にあります。"));
+
+  const help = el("button", "menu-row", "使い方");
+  help.type = "button";
+  help.addEventListener("click", () => {
+    closeMenu();
+    openIntro();
+  });
+
+  const share = el("button", "menu-row", "このアプリを共有");
+  share.type = "button";
+  share.addEventListener("click", () => void shareApp(share));
+
+  sheet.append(
+    head,
+    emg,
+    emgBox,
+    section("地図の種類", seg),
+    section("音声", voice, voiceName),
+    section("説明", detail, sources, help, share),
+  );
+  back.append(sheet);
+  back.addEventListener("click", (e) => {
+    if (e.target === back) closeMenu();
+  });
+  document.body.append(back);
+}
+
+/**
+ * 経路の画面では、上の入力欄の下に ≡ を置く。入力欄の高さは入れ替えや折りたたみで変わるので、実測して CSS の変数に入れる。
+ */
+function trackDirectionsBottom(): void {
+  const form = $("directions");
+  const apply = () => {
+    const bottom = form.hidden ? 0 : Math.round(form.getBoundingClientRect().bottom);
+    document.documentElement.style.setProperty("--below-directions", `${bottom + 8}px`);
+  };
+  new ResizeObserver(apply).observe(form);
+  new MutationObserver(apply).observe(form, { attributes: true, attributeFilter: ["hidden"] });
+  window.addEventListener("resize", apply);
+  apply();
+}
+
+export function bindMenu(): void {
+  buildMenu();
+  $("menu-open").addEventListener("click", openMenu);
+  trackDirectionsBottom();
+}

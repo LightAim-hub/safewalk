@@ -103,10 +103,16 @@
   gap: 4px;
   padding: 4px 4px 4px 12px;
   border-radius: 8px;
-  background: #fef7e0;
-  color: var(--ink);
+  background: var(--warn-bg);
+  color: var(--warn-ink);
   font-size: 14px;
   box-shadow: var(--shadow);
+}
+
+/* 経路・案内の画面では、下の「案内を始める」に被さるので出さない。 */
+body.routing .inapp-bar,
+body.guiding .inapp-bar {
+  display: none;
 }
 
 .inapp-bar span {
@@ -118,9 +124,8 @@
   flex: none;
 }
 
-/* 「使い方」ボタンは、現在地・地図の種類のボタンの下に並べる。 */
+/* 「使い方」ボタンの位置は style.css（現在地・≡ の下）。 */
 .help {
-  bottom: 284px;
   font-size: 20px;
   font-weight: 700;
 }
@@ -131,15 +136,15 @@ body.guiding .help {
   display: none;
 }
 
+/* 経路の画面で位置情報のメモが出ても、一覧と「案内を始める」を覆わない。入力欄の下の、地図の見える所に出す。 */
 @media (max-width: 900px) {
-  .help {
-    top: 216px;
+  body.routing .locate-note {
+    top: var(--below-directions, 16rem);
+    right: 64px;
     bottom: auto;
-  }
-}
-
-@media (max-width: 720px) {
-  .help {
-    top: 230px;
+    left: 8px;
+    width: auto;
+    max-height: 26dvh;
+    transform: none;
   }
 }
