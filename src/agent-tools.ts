@@ -165,7 +165,8 @@ function findRoutesTool(s: ToolSession): ToolOutput {
       const dm = r.metres - shortest.metres;
       facts.push({
         id: `${p}.diff`,
-        text: `${routeName(i)}は経路Aより、時間が${d >= 0 ? "+" : "-"}${Math.abs(Math.round(d))}分、距離が${dm >= 0 ? "+" : "-"}${fmtKm(Math.abs(dm))}`,
+        // 「+5分短く」のような重なりを生まないよう、符号ではなく「長い・短い」で書く(読み上げても自然な形)。
+        text: `${routeName(i)}は経路Aより、${Math.round(d) === 0 ? "時間はほぼ同じで" : `時間が${Math.abs(Math.round(d))}分${d > 0 ? "長く" : "短く"}`}、距離が${fmtKm(Math.abs(dm))}${dm >= 0 ? "長い" : "短い"}`,
       });
     }
     if (r.via) facts.push({ id: `${p}.via`, text: `${routeName(i)}が主に通る道: ${r.via}` });
