@@ -1,12 +1,14 @@
 import { metres, type LatLon } from "./graph";
-import { minutesFor, type Route } from "./routes";
+import { findRoutes, minutesFor, type Route } from "./routes";
 import { $, CURRENT, state, map, markers, toast, el } from "./app";
-import { snap, safety } from "./data";
+import { snap, safety, graph, accidents, meta, names } from "./data";
 import { assess, newGuideState, nextNotice, type GuideState, type RouteAlert } from "./safety";
 import { setEnd, renderStops, selectRoute, formatMetres, fitRoutes } from "./directions";
 import { replaceUrl } from "./url";
 import type { Place } from "./types";
 import { showAccuracy } from "./map-ui";
+import { emergencyPanel } from "./emergency";
+import type { KobanHit } from "./koban";
 import "./guide.css";
 import { chosenVoiceName, loadVoices, onVoiceChange, primeVoice, say, stopSpeaking, turnSpeech, type SayKind } from "./voice";
 
@@ -35,6 +37,8 @@ export let lastFixAt = 0;
 export let staleTimer = 0;
 export let lost = false;
 let anchor: LatLon | null = null;
+/** 最後に取れた現在地。緊急の枠が近くの交番を探すのに使う。 */
+let lastPos: LatLon | null = null;
 let anchorAt = 0;
 /** 長距離の案内を始める時に、電池の使い方を一度だけ知らせる距離。 */
 export const LONG_ROUTE_M = 3000;
@@ -49,6 +53,11 @@ let noticeRoute: Route | null = null;
 let noticeAlerts: RouteAlert[] = [];
 /** 探し直せず「元の経路へ戻って」を出している間 true。経路に戻れたら消す。 */
 let offStuck = false;
+/** 案内を始めて最初の位置か。出発地から離れている時の知らせの文を変える。 */
+let firstFix = false;
+/** 終了の二度押しで、すぐ下の「案内を始める」が押されて再開しないよう、終えてからこの間は始めない。 */
+export const RESTART_GUARD_MS = 600;
+let endedAt = 0;
 
 /** 声を出す。kind の違い(曲がる案内は割り込む・知らせは待つ)は voice.ts の SayKind を参照。 */
 export function speak(text: string, kind: SayKind | boolean = "turn"): void {
@@ -222,31 +231,82 @@ export function remainingFrom(
   return { next, then, metresLeft, metresToNext };
 }
 
-/** 現在地から探し直す。探せない時は元の経路を残し、戻るように伝える。 */
-export function reroute(p: LatLon, route: Route): void {
-  const saved = { from: state.from, stops: state.stops, routes: state.routes, selected: state.selected };
-  const here = nearestIndex(p, route, guideProgress);
-  rerouting = true;
-  state.stops = state.stops.filter((stop) => stop !== null && nearestIndex(stop, route, here) > here);
-  renderStops();
-  guideProgress = 0;
-  if (snap(p)) {
-    showAlert("off", "経路を外れたので、現在地から探し直しました", 6000);
-    speak("経路を外れました。探し直します。");
-    setEnd("from", { ...p, name: CURRENT });
+/**
+ * 選んだ経路の、p から行く先の点 idx 以降を、p からの戻り道(leg)につないだ1本の経路にする。
+ * 選んだ経路を捨てず、その経路にいちばん近い点まで歩いてから乗る。
+ */
+export function joinBack(p: LatLon, route: Route, idx: number, leg: Route): Route {
+  const rest = route.coords.slice(idx);
+  const toJoin = alongMetres(route, 0, idx);
+  const restM = alongMetres(route, idx, route.coords.length - 1);
+  const first = leg.coords[0];
+  const lastLeg = leg.coords[leg.coords.length - 1];
+  const joinPoint = route.coords[idx];
+  const legM = metres(p, { lat: first[1], lon: first[0] }) + leg.metres + metres({ lat: lastLeg[1], lon: lastLeg[0] }, { lat: joinPoint[1], lon: joinPoint[0] });
+  const fraction = route.metres ? restM / route.metres : 1;
+  const indexes = stepIndexes(route);
+  const steps = [...leg.steps, ...route.steps.filter((_, i) => indexes[i] >= idx)];
+  const lift = leg.profile[leg.profile.length - 1]?.[1] ?? 0;
+  const profile: [number, number][] = [
+    ...leg.profile,
+    ...route.profile.filter(([d]) => d >= toJoin).map(([d, h]): [number, number] => [d - toJoin + legM, h + lift]),
+  ];
+  const climb = leg.climb + Math.round(route.climb * fraction);
+  const metresAll = legM + restM;
+  return {
+    ...route,
+    edges: [...leg.edges, ...route.edges],
+    coords: [[p.lon, p.lat], ...leg.coords, ...rest],
+    metres: metresAll,
+    climb,
+    descent: leg.descent + Math.round(route.descent * fraction),
+    profile,
+    steps,
+    minutes: minutesFor(metresAll, climb),
+    accidents: [...new Set([...leg.accidents, ...route.accidents])],
+    remoteMetres: leg.remoteMetres + route.remoteMetres * fraction,
+    outsideMetres: leg.outsideMetres + route.outsideMetres * fraction,
+    safety: route.safety !== null && leg.safety !== null ? Math.round((route.safety * restM + leg.safety * legM) / Math.max(1, metresAll)) : null,
+  };
+}
+
+/**
+ * 経路から離れた時の探し直し。選んだ経路にいちばん近い点へ向かう道を探し、その点から選んだ経路に乗る。
+ * 探せない時は元の経路を残し、戻るように伝える。
+ */
+export function reroute(p: LatLon, route: Route, startOfGuide = false): boolean {
+  const idx = nearestIndex(p, route, guideProgress);
+  const join = route.coords[idx];
+  const here = snap(p);
+  const there = snap({ lat: join[1], lon: join[0] });
+  const leg = here && there ? findRoutes(graph, here, there, state.period, accidents, meta, names)[0] : undefined;
+  if (!leg) {
+    showTurn("!", "");
+    $("guide-then").textContent = "";
+    $("guide-next").textContent = "元の経路へ戻ってください";
+    showAlert("off", "経路から離れています。元の経路へ戻ってください");
+    offStuck = true;
+    return false;
   }
+  rerouting = true;
+  const joined = joinBack(p, route, idx, leg);
+  const toJoin = metres(p, { lat: leg.coords[0][1], lon: leg.coords[0][0] }) + leg.metres;
+  const atStart = startOfGuide && alongMetres(route, 0, idx) < 30;
+  const text = atStart
+    ? `出発地まで${formatMetres(toJoin)}あります。選んだ経路の出発地へ向かいます`
+    : startOfGuide
+      ? `選んだ経路まで${formatMetres(toJoin)}あります。そこへ向かってから、選んだ経路に乗ります`
+      : `経路を外れたので、選んだ経路へ戻る道を案内します（${formatMetres(toJoin)}）`;
+  showAlert("off", text, 8000);
+  speak(startOfGuide ? text : "経路を外れました。選んだ経路へ戻ります。");
+  state.routes = [joined];
+  guideProgress = 0;
+  announced = "";
+  noticeRoute = null;
+  setEnd("from", { ...p, name: CURRENT }, false);
+  selectRoute(0);
   rerouting = false;
-  if (state.routes.length && snap(p)) return;
-  state.stops = saved.stops;
-  renderStops();
-  state.routes = saved.routes;
-  setEnd("from", saved.from, false);
-  selectRoute(saved.selected);
-  showTurn("!", "");
-  $("guide-then").textContent = "";
-  $("guide-next").textContent = "元の経路へ戻ってください";
-  showAlert("off", "経路から離れています。元の経路へ戻ってください");
-  offStuck = true;
+  return true;
 }
 
 /**
@@ -309,6 +369,7 @@ export function checkNotice(p: LatLon, route: Route): void {
 
 export function updateGuide(p: LatLon, accuracy?: number): void {
   lastFixAt = Date.now();
+  lastPos = p;
   setLost(false);
   // 更新は来ている。位置がほとんど変わらないまま STOP_MS 経ったら、警告ではなく「停止中」と静かに出す。
   if (!anchor || metres(p, anchor) > MOVE_M) {
@@ -316,14 +377,17 @@ export function updateGuide(p: LatLon, accuracy?: number): void {
     anchorAt = lastFixAt;
   }
   setStopped(lastFixAt - anchorAt >= STOP_MS);
-  const route = state.routes[state.selected];
+  let route = state.routes[state.selected];
   if (!route) return;
   markers.me.setLngLat([p.lon, p.lat]).addTo(map);
   if (accuracy) showAccuracy(p, accuracy);
   map.easeTo({ center: [p.lon, p.lat], zoom: Math.max(map.getZoom(), 17), duration: 500 });
+  const first = firstFix;
+  firstFix = false;
   if (distanceToRoute(p, route) > OFF_ROUTE_M && !rerouting) {
-    reroute(p, route);
-    return;
+    // 選んだ経路へ戻る道ができたら、その新しい経路で続けて案内を出す。できなければ「戻って」の表示で終える。
+    if (!reroute(p, route, first)) return;
+    route = state.routes[state.selected];
   }
   if (offStuck) {
     offStuck = false;
@@ -356,6 +420,8 @@ export function updateGuide(p: LatLon, accuracy?: number): void {
 export function startGuide(index: number): void {
   // 案内中にもう一度押されても、位置の監視を二重にしない。
   if (watchId !== null) return;
+  // 終了の二度押しが、すぐ下の「案内を始める」に当たって再開するのを防ぐ。
+  if (Date.now() - endedAt < RESTART_GUARD_MS) return;
   if (!navigator.geolocation) {
     toast("この端末では現在地を取得できません。");
     return;
@@ -389,6 +455,7 @@ export function startGuide(index: number): void {
   guideState = newGuideState();
   noticeRoute = null;
   offStuck = false;
+  firstFix = true;
   for (const kind of ["notice", "off", "gps", "info"] as AlertKind[]) hideAlert(kind);
   const lengthM = state.routes[index]?.metres ?? 0;
   if (lengthM >= LONG_ROUTE_M) showAlert("info", BATTERY_TEXT, 12000);
@@ -412,10 +479,43 @@ export function startGuide(index: number): void {
   watchCompass();
 }
 
+/** 案内中の緊急の枠。押しただけでは電話はかからない(番号を押して初めて発信)。 */
+export function toggleEmergency(open?: boolean): void {
+  const box = document.getElementById("guide-emg");
+  const button = document.getElementById("guide-emergency");
+  if (!box || !button) return;
+  const show = open ?? box.hidden;
+  button.setAttribute("aria-expanded", String(show));
+  if (!show) {
+    box.hidden = true;
+    box.replaceChildren();
+    return;
+  }
+  const close = el("button", "secondary guide-emg-close", "閉じる");
+  close.type = "button";
+  close.addEventListener("click", () => toggleEmergency(false));
+  box.replaceChildren(close, emergencyPanel(lastPos, routeToKobanFromGuide));
+  box.hidden = false;
+}
+
+/** 案内を終えて、今いる場所から交番への経路を出す。 */
+function routeToKobanFromGuide(k: KobanHit): void {
+  const here = lastPos;
+  finishGuide();
+  if (here) setEnd("from", { ...here, name: CURRENT }, false);
+  setEnd("to", { name: k.name, lat: k.lat, lon: k.lon, kind: "警察" }, true);
+}
+
 export function stopGuide(): void {
+  toggleEmergency(false);
   if (watchId !== null) navigator.geolocation.clearWatch(watchId);
   const wasGuiding = watchId !== null;
   watchId = null;
+  if (wasGuiding) {
+    endedAt = Date.now();
+    document.body.classList.add("guide-cooldown");
+    window.setTimeout(() => document.body.classList.remove("guide-cooldown"), RESTART_GUARD_MS);
+  }
   window.clearInterval(staleTimer);
   for (const kind of ["notice", "off", "gps", "info"] as AlertKind[]) hideAlert(kind);
   setLost(false);
@@ -486,7 +586,17 @@ export function buildGuideParts(): void {
   status.hidden = true;
   info.append(rest, status);
   bar.append(info, actions);
-  card.replaceChildren(main, alerts, bar);
+  const emergency = el("button", "secondary guide-emergency", "緊急");
+  emergency.id = "guide-emergency";
+  emergency.type = "button";
+  emergency.setAttribute("aria-label", "緊急の時の電話番号を出す");
+  emergency.setAttribute("aria-expanded", "false");
+  emergency.addEventListener("click", () => toggleEmergency());
+  actions.prepend(emergency);
+  const panel = el("div", "guide-emg");
+  panel.id = "guide-emg";
+  panel.hidden = true;
+  card.replaceChildren(main, alerts, panel, bar);
 }
 
 export function bindGuideUi(): void {
