@@ -5,10 +5,11 @@ import { showAccidents, accidentDetail } from "./accidents-ui";
 import { $, qInput, fromInput, toInput, searchbar, directions, sheet, COLORS, CURRENT, GENRES, state, map, markers, stopMarkers, toast, el } from "./app";
 import { graph, accidents, meta, places, names, emptyCollection, snap, safety, agentContext } from "./data";
 import { runAgent, SITUATION_MAX, FIXED, type AgentResult } from "./agent";
-import { assess, SAFETY_DISCLAIMER, type Assessment, type Tier } from "./safety";
+import { assess, SAFETY_DISCLAIMER, SAFETY_RULES, type Assessment, type Tier } from "./safety";
 import { startGuide, stopGuide } from "./guide";
 import { popup } from "./place";
 import { placeRows, showResultDots, clearGenre, bindSuggest } from "./search";
+import { locateMe, SHEET_STOPS } from "./map-ui";
 import { type Place, type Genre, type End } from "./types";
 import { detectDisaster, detectEmergency, disasterPanel, DISASTER_NOTICE, emergencyPanel } from "./emergency";
 import type { KobanHit } from "./koban";
@@ -39,9 +40,9 @@ function fillCurrentFrom(): void {
 }
 
 /** 送られてきた経路を開いたのに、現在地が使えない時の理由（出発地が空のままだと何も出ないため）。 */
-function sharedWithoutPlace(reason: string): void {
+function sharedWithoutPlace(reason: string, offerCurrent = false): void {
   if (pending?.banner && state.mode === "directions" && !state.routes.length) {
-    clearRoutes(`送られてきた経路です。${reason}`);
+    clearRoutes(`送られてきた経路です。${reason}`, offerCurrent);
   }
 }
 
@@ -53,10 +54,10 @@ export function fillCurrent(which: End): void {
   const mine = ++locating;
   const input = which === "from" ? fromInput : toInput;
   const ask = navigator.permissions?.query({ name: "geolocation" }).then((s) => s.state, () => "unknown");
-  if (!navigator.geolocation || !ask) return sharedWithoutPlace("出発地を入れるか、「現在地を使う」を選んでください。");
+  if (!navigator.geolocation || !ask) return sharedWithoutPlace("出発地を入れるか、「現在地を使う」を選んでください。", true);
   void ask.then((permission) => {
     if (mine !== locating) return;
-    if (permission !== "granted") return sharedWithoutPlace("出発地を入れるか、「現在地を使う」を選んでください。");
+    if (permission !== "granted") return sharedWithoutPlace("出発地を入れるか、「現在地を使う」を選んでください。", true);
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
         // 待つ間に、経路の画面を閉じた・地点を選んだ・文字を打った時は、何もしない。
@@ -77,6 +78,7 @@ export function closeDirections(): void {
   locating++;
   pending = arrived = null;
   emergencyNode = null;
+  restoreSheetHeight();
   setFolded(false);
   resetAgent();
   stopGuide();
@@ -94,15 +96,42 @@ export function closeDirections(): void {
   clearRoutes();
 }
 
-/** 表示中の経路を消す。経路を出せない時は、古い経路を残さず理由を出す。 */
-export function clearRoutes(message = ""): void {
+/** 現在地を出発地に入れるボタン（位置情報の許可をここで求める）。 */
+function useCurrentButton(): HTMLButtonElement {
+  const button = el("button", "primary use-current", "現在地を使う");
+  button.type = "button";
+  button.addEventListener("click", () => {
+    button.disabled = true;
+    void locateMe().then((me) => {
+      button.disabled = false;
+      if (me && state.mode === "directions" && !state.from) setEnd("from", me);
+    });
+  });
+  return button;
+}
+
+/** エラー・空の画面にも、免責を下端に固定で出す（経路の画面と同じ）。 */
+function disclaimerBar(): HTMLElement {
+  const bar = el("div", "start-bar");
+  bar.append(el("p", "disclaimer", DISCLAIMER_LINE));
+  return bar;
+}
+
+/** 表示中の経路を消す。経路を出せない時は、古い経路を残さず理由を出す。offerCurrent は「現在地を使う」ボタンを添える。 */
+export function clearRoutes(message = "", offerCurrent = false): void {
   resetAgent();
   state.routes = [];
   timeTags.splice(0).forEach((tag) => tag.remove());
   (map.getSource("routes") as GeoJSONSource).setData(emptyCollection());
   (map.getSource("accidents") as GeoJSONSource).setData(emptyCollection());
-  sheet.replaceChildren(...(emergencyNode ? [emergencyNode] : []), ...(message ? [el("p", "", message)] : []));
-  sheet.hidden = !message && !emergencyNode;
+  const shown = !!message || !!emergencyNode;
+  sheet.replaceChildren(
+    ...(emergencyNode ? [emergencyNode] : []),
+    ...(message ? [el("p", "empty-note", message)] : []),
+    ...(message && offerCurrent && !state.from ? [useCurrentButton()] : []),
+    ...(shown ? [disclaimerBar()] : []),
+  );
+  sheet.hidden = !shown;
 }
 
 export function setEnd(which: End, place: Place | null, run = true): void {
@@ -641,10 +670,27 @@ const countMeaning = () => (state.period === "night" ? "夜の事故の記録" :
 
 /** 選んだ経路の注意（長い距離・家が少ない道を先に、事故の記録からの注意をその後ろに）。 */
 function cautionTexts(route: Route, a: Assessment): { text: string; kind: string }[] {
+  // 事故の注意の件数は、経路から50m以内で数える（一覧は30m以内）。数え方が違うことを添える。
+  const range = `（経路から${SAFETY_RULES.cautionNearM}m以内で数えた件数。一覧の件数は30m以内です）`;
   return [
     ...routeWarnings(route).map((p) => ({ text: p.textContent ?? "", kind: "warn" })),
-    ...a.cautions.map((c) => ({ text: c.text, kind: `caution-${c.kind}` })),
+    ...a.cautions.map((c) => ({ text: c.kind === "snatch" ? c.text : `${c.text}${range}`, kind: `caution-${c.kind}` })),
   ];
+}
+
+/** 周辺の事故の記録（車どうしも含む全部）の開閉。一覧の件数と別の数だと分かる題にし、右の印と折り返さない形にする。 */
+function accidentDetailView(route: Route): HTMLElement {
+  const node = accidentDetail(route);
+  const summary = node.querySelector("summary");
+  const title = summary?.querySelector("span");
+  const note = summary?.querySelector("small");
+  if (summary && title) {
+    title.textContent = `参考: 周辺の事故すべて ${route.accidents.length}件`;
+    const text = el("div", "sum-text");
+    text.append(title, ...(note ? [note] : []));
+    summary.replaceChildren(text);
+  }
+  return node;
 }
 
 /** 「くわしく」の中身。理由・出典・集計の条件・経由・道順・周辺の事故の記録。 */
@@ -669,7 +715,7 @@ function detailBody(route: Route, a: Assessment, shortest: Route): HTMLElement[]
   if (where.length) nodes.push(el("p", "where", where.join("　")));
   const diff = diffFromShortest(route, shortest);
   if (diff) nodes.push(el("p", "diff", diff));
-  nodes.push(stepList(route), elevationDetail(route), alongDetail(route), accidentDetail(route), safetyNote());
+  nodes.push(stepList(route), elevationDetail(route), alongDetail(route), accidentDetailView(route), safetyNote());
   return nodes;
 }
 
@@ -699,7 +745,7 @@ function routePanel(route: Route, index: number, cmp: Comparison, shortest: Rout
     if (cautions.length > 1) {
       const rest = el("ul", "cautions");
       for (const c of cautions.slice(1)) rest.append(el("li", `caution ${c.kind}`, c.text));
-      panel.append(fold("cautions", `ほか${cautions.length - 1}件`, [rest], "more-cautions"));
+      panel.append(fold("cautions", `ほかの注意 ${cautions.length - 1}つ`, [rest], "more-cautions"));
     }
   }
   panel.append(fold("detail", "くわしく", detailBody(route, a, shortest), "more-detail"));
@@ -708,12 +754,18 @@ function routePanel(route: Route, index: number, cmp: Comparison, shortest: Rout
 }
 
 /** 「経路を送る」で何がリンクに入るか。自宅などの名前つきの地点は位置と名前が入り、現在地は入らない。 */
-export function sendNoteText(from: Place | null, to: Place | null): string {
+export function sendNoteText(from: Place | null, to: Place | null, stops: (Place | null)[] = []): string {
   const short = (n: string) => (n.length > 16 ? `${n.slice(0, 16)}…` : n);
-  const named = [from, to].filter((p): p is Place => !!p && p.name !== CURRENT);
-  const current = [from, to].some((p) => p?.name === CURRENT);
+  // リンクに入る地点は、出発地・経由地・目的地（url.ts）。現在地は位置を入れない。
+  const points: [string, Place | null][] = [
+    ["出発地", from],
+    ...stops.filter((s): s is Place => s !== null).map((s): [string, Place] => ["経由地", s]),
+    ["目的地", to],
+  ];
+  const named = points.filter((x): x is [string, Place] => !!x[1] && x[1].name !== CURRENT);
+  const current = points.some(([, p]) => p?.name === CURRENT);
   if (!named.length) return "「経路を送る」のリンクには、現在地の位置は入りません。";
-  const list = named.map((p) => `「${short(p.name)}」`).join("と");
+  const list = named.map(([role, p]) => `${role}「${short(p.name)}」`).join("・");
   return `「経路を送る」のリンクには、${list}の位置と名前が入ります。${current ? "現在地は入りません。" : "自宅などの場合は、送る相手を確かめてください。"}`;
 }
 
@@ -734,7 +786,7 @@ function confirmSend(button: HTMLButtonElement): void {
   cancel.type = "button";
   const actions = el("div", "confirm-actions");
   actions.append(cancel, ok);
-  box.append(title, el("p", "", sendNoteText(state.from, state.to)), actions);
+  box.append(title, el("p", "", sendNoteText(state.from, state.to, state.stops)), actions);
   back.append(box);
   const close = () => {
     back.remove();
@@ -828,8 +880,28 @@ let agentUi: AgentUi = idleAgent();
 let emergencyNode: HTMLElement | null = null;
 let disasterNode: HTMLElement | null = null;
 
+/** 緊急の枠を出す前のシートの高さ（--sheet-h）。枠を閉じたら戻す。null は手で動かしていない（既定の高さ）。 */
+let sheetHeightBefore: string | null | undefined;
+
+/** 緊急の枠が出たら、枠の中の交番の行が下の固定ボタンの裏に隠れないよう、シートを一番上の段まで上げる（スマホの縦向きだけ）。 */
+function raiseSheetForEmergency(): void {
+  const grip = document.querySelector(".grip");
+  if (!grip || getComputedStyle(grip).display === "none") return;
+  const target = Math.round(window.innerHeight * SHEET_STOPS[SHEET_STOPS.length - 1]);
+  if (sheetHeightBefore === undefined) sheetHeightBefore = sheet.style.getPropertyValue("--sheet-h") || null;
+  if (sheet.getBoundingClientRect().height < target) sheet.style.setProperty("--sheet-h", `${target}px`);
+}
+
+function restoreSheetHeight(): void {
+  if (sheetHeightBefore === undefined) return;
+  if (sheetHeightBefore) sheet.style.setProperty("--sheet-h", sheetHeightBefore);
+  else sheet.style.removeProperty("--sheet-h");
+  sheetHeightBefore = undefined;
+}
+
 function showEmergency(): void {
   emergencyNode = emergencyPanel(state.from, routeToKoban, dismissEmergency);
+  raiseSheetForEmergency();
   if (state.routes.length) selectRoute(state.selected);
   else clearRoutes();
   sheet.scrollTop = 0;
@@ -838,6 +910,7 @@ function showEmergency(): void {
 function dismissEmergency(): void {
   emergencyNode?.remove();
   emergencyNode = null;
+  restoreSheetHeight();
   if (!state.routes.length && !sheet.childElementCount) sheet.hidden = true;
 }
 /** 経路を出し直したら古い答えを捨てるための番号。待っている間に変わったら、返ってきた答えは使わない。 */
@@ -1002,7 +1075,14 @@ export function agentSection(): HTMLElement {
         /* 覚えられないだけ */
       }
     });
-    agentNode.append(el("summary", "", "Claude に相談"));
+    const head = el("summary", "", "Claude に相談");
+    // 開いたら、入力欄が下の固定ボタンの裏に隠れないよう、見える所まで送る。
+    head.addEventListener("click", () => {
+      window.setTimeout(() => {
+        if (agentNode?.open) agentNode.scrollIntoView({ block: "start", behavior: "auto" });
+      }, 0);
+    });
+    agentNode.append(head);
     const presets = el("div", "chips inline");
     const form = el("form", "agent-form");
     const input = el("input");
@@ -1032,7 +1112,7 @@ export function agentSection(): HTMLElement {
     agentOut = el("div", "agent-out");
     agentOut.setAttribute("aria-live", "polite");
     // 入力欄の直下に常に出す。災害の文は開いた中に置く。
-    const privacy = el("p", "agent-privacy", "氏名・住所・持病は入れないでください（入力した文は Claude に送られます）。");
+    const privacy = el("p", "agent-privacy", "氏名・住所・持病は入れないでください（入力した文と、出発地・目的地の名前が Claude に送られます）。");
     const scope = el("p", "agent-privacy", DISASTER_NOTICE);
     agentNode.append(form, privacy, presets, scope, agentOut);
   }

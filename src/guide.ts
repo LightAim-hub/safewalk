@@ -7,7 +7,7 @@ import { setEnd, renderStops, selectRoute, formatMetres, fitRoutes } from "./dir
 import { replaceUrl } from "./url";
 import type { Place } from "./types";
 import { showAccuracy } from "./map-ui";
-import { emergencyPanel } from "./emergency";
+import { emergencyPanel, KOBAN_HEADING_HERE } from "./emergency";
 import type { KobanHit } from "./koban";
 import "./guide.css";
 import { chosenVoiceName, loadVoices, onVoiceChange, primeVoice, say, stopSpeaking, turnSpeech, type SayKind } from "./voice";
@@ -494,7 +494,7 @@ export function toggleEmergency(open?: boolean): void {
   const close = el("button", "secondary guide-emg-close", "閉じる");
   close.type = "button";
   close.addEventListener("click", () => toggleEmergency(false));
-  box.replaceChildren(close, emergencyPanel(lastPos, routeToKobanFromGuide));
+  box.replaceChildren(close, emergencyPanel(lastPos, routeToKobanFromGuide, undefined, KOBAN_HEADING_HERE));
   box.hidden = false;
 }
 
