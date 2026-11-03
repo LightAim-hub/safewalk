@@ -7,7 +7,7 @@ compatibility_date = "2025-09-01"
 # Anthropic の窓口。api.anthropic.com 以外は ALLOW_TEST_UPSTREAM = "1" の時(手元の試験)だけ使う。
 UPSTREAM_URL = "https://api.anthropic.com/v1/messages"
 # 1日(UTC。日本時間では朝9時に切り替わる)の全体の上限。Claude への呼び出し回数。
-DAILY_LIMIT = "600"
+DAILY_LIMIT = "300"
 # 1つの IP あたり、10分間の回数と、24時間の回数。
 IP_10MIN_LIMIT = "20"
 IP_DAY_LIMIT = "60"
