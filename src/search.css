@@ -25,3 +25,20 @@
   top: auto;
   bottom: calc(100% + 6px);
 }
+
+/* 病院・薬局の、急な病気・けがの連絡先の一行。 */
+.emergency-note {
+  margin: 8px 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fce8e6;
+  color: #5f1410;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.emergency-note a {
+  color: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+}
