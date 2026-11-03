@@ -34,6 +34,7 @@ export const FIXED = {
   reason: "この経路の記録は、上の一覧に表示されています。",
   failed: "Claude の説明を表示できませんでした。経路の一覧と記録は、そのままご利用いただけます。",
   noRoute: "経路を調べられませんでした。",
+  timeout: "Claude の返事が時間内に届きませんでした。通信の状態を確かめて、もう一度お試しください。",
   unavailable: "Claude への相談は、今は使えません。経路の一覧と記録は、そのままご利用いただけます。",
   /** 特定の他人の行動を調べる使い方などで Claude が断った時。経路は選ばない。 */
   declined: "この相談には、経路を選ぶ形ではお答えできません。経路の一覧と記録は、そのままご利用いただけます。",
@@ -211,20 +212,33 @@ export type AgentDeps = {
   endpoint?: string;
   fetchImpl?: typeof fetch;
   model?: string;
+  /** 相談をやめた時(経路を出し直した・画面を閉じた)に通信を止める。 */
+  signal?: AbortSignal;
+  /** 1回の通信を待つ上限(ms)。 */
+  timeoutMs?: number;
 };
+
+/** Claude の1回の返事を待つ上限。これを過ぎたら「時間内に届かなかった」と知らせる。 */
+export const AGENT_TIMEOUT_MS = 60000;
 
 class RelayError extends Error {}
 
 async function post(body: unknown, deps: AgentDeps): Promise<ApiResponse> {
   const f = deps.fetchImpl ?? fetch;
   let res: Response;
+  const timeout = AbortSignal.timeout(deps.timeoutMs ?? AGENT_TIMEOUT_MS);
+  const signal = deps.signal && "any" in AbortSignal ? AbortSignal.any([deps.signal, timeout]) : (deps.signal ?? timeout);
   try {
     res = await f(deps.endpoint ?? AGENT_ENDPOINT, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
+      signal,
     });
   } catch {
+    // 相談をやめた時は、呼んだ側が結果を使わない。時間切れだけを分かる言葉にする。
+    if (deps.signal?.aborted) throw new RelayError("相談をやめました。");
+    if (timeout.aborted) throw new RelayError(FIXED.timeout);
     // 中継の URL が未設定(deploy 前)の時は、通信の失敗ではなく「今は使えない」と言う。
     if (agentEndpointUnset(deps.endpoint ?? AGENT_ENDPOINT)) throw new RelayError(FIXED.unavailable);
     throw new RelayError("Claude に接続できませんでした。通信の状態を確かめてください。");
@@ -240,7 +254,13 @@ async function post(body: unknown, deps: AgentDeps): Promise<ApiResponse> {
     const jp = /[ぁ-んァ-ヶ一-龠]/.test(message) ? message : "";
     throw new RelayError(jp || `Claude の呼び出しに失敗しました(${res.status})。`);
   }
-  return (await res.json()) as ApiResponse;
+  try {
+    return (await res.json()) as ApiResponse;
+  } catch {
+    if (deps.signal?.aborted) throw new RelayError("相談をやめました。");
+    if (timeout.aborted) throw new RelayError(FIXED.timeout);
+    throw new RelayError("Claude の答えを読み取れませんでした。もう一度お試しください。");
+  }
 }
 
 export type AgentInput = {

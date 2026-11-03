@@ -1,9 +1,9 @@
 import { metres, type LatLon } from "./graph";
 import { findRoutes, minutesFor, type Route } from "./routes";
 import { $, CURRENT, state, map, markers, toast, el } from "./app";
-import { snap, safety, graph, accidents, meta, names } from "./data";
+import { snap, safety, graph, accidents, meta, names, inKobe } from "./data";
 import { assess, newGuideState, nextNotice, type GuideState, type RouteAlert } from "./safety";
-import { setEnd, renderStops, selectRoute, formatMetres, fitRoutes } from "./directions";
+import { setEnd, renderStops, selectRoute, formatMetres, fitRoutes, toKoban } from "./directions";
 import { replaceUrl } from "./url";
 import type { Place } from "./types";
 import { showAccuracy } from "./map-ui";
@@ -53,6 +53,9 @@ let noticeRoute: Route | null = null;
 let noticeAlerts: RouteAlert[] = [];
 /** 探し直せず「元の経路へ戻って」を出している間 true。経路に戻れたら消す。 */
 let offStuck = false;
+/** 現在地が神戸市の外にある間 true。 */
+let outside = false;
+export const OUTSIDE_TEXT = "現在地が神戸市の外です";
 /** 案内を始めて最初の位置か。出発地から離れている時の知らせの文を変える。 */
 let firstFix = false;
 /** 終了の二度押しで、すぐ下の「案内を始める」が押されて再開しないよう、終えてからこの間は始めない。 */
@@ -138,6 +141,8 @@ export function distanceToRoute(p: LatLon, route: Route): number {
 
 /** 経路の座標のうち、from より先で地点にいちばん近い番号。 */
 export function nearestIndex(p: LatLon, route: Route, from = 0, limit = route.coords.length): number {
+  // 経路が替わった・短くなった後でも範囲の外を指さない。
+  from = Math.max(0, Math.min(from, route.coords.length - 1));
   let nearest = from;
   let best = Infinity;
   const end = Math.min(route.coords.length, from + limit);
@@ -303,8 +308,8 @@ export function reroute(p: LatLon, route: Route, startOfGuide = false): boolean 
   guideProgress = 0;
   announced = "";
   noticeRoute = null;
-  setEnd("from", { ...p, name: CURRENT }, false);
-  selectRoute(0);
+  setEnd("from", { ...p, name: CURRENT }, false, true);
+  selectRoute(0, true);
   rerouting = false;
   return true;
 }
@@ -381,6 +386,19 @@ export function updateGuide(p: LatLon, accuracy?: number): void {
   if (!route) return;
   markers.me.setLngLat([p.lon, p.lat]).addTo(map);
   if (accuracy) showAccuracy(p, accuracy);
+  // 神戸市の外へ出た時は、神戸の残り距離や注意を出さず、探し直しもしない。市内へ戻れば続ける。
+  if (!inKobe(p)) {
+    if (!outside) speak(OUTSIDE_TEXT, "notice");
+    outside = true;
+    offStuck = true;
+    showTurn("!", "");
+    $("guide-next").textContent = OUTSIDE_TEXT;
+    $("guide-then").textContent = "";
+    $("guide-rest").textContent = "";
+    showAlert("off", `${OUTSIDE_TEXT}。このアプリは神戸市の中だけで案内します`);
+    return;
+  }
+  outside = false;
   map.easeTo({ center: [p.lon, p.lat], zoom: Math.max(map.getZoom(), 17), duration: 500 });
   const first = firstFix;
   firstFix = false;
@@ -455,6 +473,7 @@ export function startGuide(index: number): void {
   guideState = newGuideState();
   noticeRoute = null;
   offStuck = false;
+  outside = false;
   firstFix = true;
   for (const kind of ["notice", "off", "gps", "info"] as AlertKind[]) hideAlert(kind);
   const lengthM = state.routes[index]?.metres ?? 0;
@@ -503,7 +522,7 @@ function routeToKobanFromGuide(k: KobanHit): void {
   const here = lastPos;
   finishGuide();
   if (here) setEnd("from", { ...here, name: CURRENT }, false);
-  setEnd("to", { name: k.name, lat: k.lat, lon: k.lon, kind: "警察" }, true);
+  toKoban(k);
 }
 
 export function stopGuide(): void {
