@@ -31,7 +31,7 @@ export const WARD_BY_CODE: Record<string, string> = {
 export async function addressOf(p: LatLon): Promise<string | null> {
   const url = `https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress?lat=${p.lat}&lon=${p.lon}`;
   try {
-    const { results } = (await fetch(url).then((r) => r.json())) as { results?: { muniCd: string; lv01Nm: string } };
+    const { results } = (await fetch(url, { signal: AbortSignal.timeout(2500) }).then((r) => r.json())) as { results?: { muniCd: string; lv01Nm: string } };
     const ward = results && WARD_BY_CODE[results.muniCd];
     if (!ward) return null;
     const town = results.lv01Nm && results.lv01Nm !== "－" ? results.lv01Nm : "";
@@ -65,12 +65,20 @@ export function askWhichEnd(place: Place): void {
     .addTo(map);
 }
 
+/** 地図を押した回数。住所が届いた時、もっと後に押されていたら捨てる（最後の要求だけを使う）。 */
+let pickSeq = 0;
+
 export async function onMapPick(place: Place, labelled: boolean): Promise<void> {
+  const mine = ++pickSeq;
   if (snap(place) === null) {
     toast("この地点の近くに、神戸市内の歩ける道がありません。");
     return;
   }
-  if (!labelled) place.name = (await addressOf(place)) ?? place.name;
+  if (!labelled) {
+    const address = await addressOf(place);
+    if (mine !== pickSeq) return;
+    place.name = address ?? place.name;
+  }
   if (state.mode === "browse") {
     showPlace(place);
     pushUrl();
