@@ -1,4 +1,8 @@
-import maplibregl, { type Map as MapLibre } from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
+import { type Map as MapLibre } from "maplibre-gl";
+// 版6の maplibre は作業用の部品(worker)を、束ねた JS の隣から探す。束ねた後は無いので、
+// 取り込み(?url)で assets/ に出し、その場所を教える(これが無いと地図が空になる)。
+import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import { type Period, type Route } from "./routes";
 import { type Place, type Genre } from "./types";
 import { periodNow } from "./daylight";
@@ -42,6 +46,8 @@ export const state = {
   selected: 0,
   genre: null as Genre | null,
 };
+
+maplibregl.setWorkerUrl(workerUrl);
 
 export const map: MapLibre = new maplibregl.Map({
   container: "map",

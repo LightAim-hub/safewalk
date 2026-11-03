@@ -1,4 +1,4 @@
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import { metres, type LatLon } from "./graph";
 import { qInput, sheet, GENRES, state, map, markers, toast, el, mapPadding } from "./app";
 import { places, snap } from "./data";
