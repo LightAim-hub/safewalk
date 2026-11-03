@@ -102,10 +102,19 @@ function kobanRow(k: KobanHit, onRoute: (k: KobanHit) => void): HTMLElement {
 }
 
 /**
- * 緊急の枠。origin は今いる場所(出発地)。交番は origin に近い順に最大3つ。
+ * 緊急の枠。origin は今いる場所(出発地・案内中は現在地)。交番は origin に近い順に最大3つ。
  * 全体を同じ枠に入れ、番号は電話を発信するリンクにする。
+ * heading は交番の一覧の見出し。何から測っているか(出発地・現在地)を呼ぶ側が言う。
  */
-export function emergencyPanel(origin: LatLon | null, onRoute: (k: KobanHit) => void, onClose?: () => void): HTMLElement {
+export const KOBAN_HEADING_FROM = "近くの交番・警察署（出発地から近い順）";
+export const KOBAN_HEADING_HERE = "近くの交番・警察署（現在地から近い順）";
+
+export function emergencyPanel(
+  origin: LatLon | null,
+  onRoute: (k: KobanHit) => void,
+  onClose?: () => void,
+  heading: string = KOBAN_HEADING_FROM,
+): HTMLElement {
   const box = el("section", "emergency");
   box.setAttribute("role", "region");
   box.setAttribute("aria-label", "緊急時の案内");
@@ -135,7 +144,7 @@ export function emergencyPanel(origin: LatLon | null, onRoute: (k: KobanHit) => 
       if (!list.length) return near.replaceChildren(el("p", "emg-hint", "近くの交番の記録を読み込めませんでした。上の番号に電話してください。"));
       const ul = el("ul", "emg-kobans");
       ul.append(...list.map((k) => kobanRow(k, onRoute)));
-      near.replaceChildren(el("h4", "", "近くの交番・警察署（出発地から近い順）"), ul, el("p", "emg-hint", "交番は人がいない時間があります。着いても誰もいないことがあります。"));
+      near.replaceChildren(el("h4", "", heading), ul, el("p", "emg-hint", "交番は人がいない時間があります。着いても誰もいないことがあります。"));
     });
   } else {
     near.append(el("p", "emg-hint", "出発地が決まると、近くの交番を出します。"));

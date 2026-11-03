@@ -195,6 +195,7 @@ section#guide.guide[hidden] {
 #guide .guide-bar {
   display: flex;
   flex: none;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
@@ -210,11 +211,13 @@ section#guide.guide[hidden] {
   min-width: 0;
 }
 
+/* 「残り 1.1km・約15分」は折り返さない。ボタンと並ばない幅では、ボタンが次の行へ回る。 */
 #guide .guide-bar .rest {
   margin: 0;
   color: inherit;
   font-size: 0.9375rem;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 #guide .guide-status {
@@ -233,6 +236,7 @@ section#guide.guide[hidden] {
 #guide .guide-actions {
   flex: none;
   gap: 6px;
+  margin-left: auto;
 }
 
 #guide .guide-actions button {
@@ -285,6 +289,7 @@ body.guiding .toast {
 
   #guide .guide-bar {
     flex-direction: column;
+    flex-wrap: nowrap;
     align-items: stretch;
     gap: 6px;
     padding: 8px;
@@ -292,6 +297,7 @@ body.guiding .toast {
 
   #guide .guide-actions {
     justify-content: space-between;
+    margin-left: 0;
   }
 
   #guide .guide-actions button {
@@ -381,5 +387,24 @@ body.guide-cooldown .start-bar {
     width: min(420px, calc(100vw - min(208px, 32vw) - 96px));
     max-height: calc(100dvh - 16px);
     margin: 0;
+  }
+}
+/* 幅の狭い縦向き（iPhone SE など）: 帯が2段になる分、地図の部品と緊急の枠を上げる。 */
+@media (max-width: 360px) and (orientation: portrait) {
+  body.guiding .maplibregl-ctrl-bottom-left,
+  body.guiding .maplibregl-ctrl-bottom-right {
+    margin-bottom: calc(116px + env(safe-area-inset-bottom));
+  }
+
+  #guide .guide-emg {
+    bottom: calc(116px + env(safe-area-inset-bottom));
+    max-height: calc(100dvh - 208px);
+  }
+}
+
+/* 幅が 430px 以下の縦向き: ボタンの左右の余白を詰め、「残り〜」とボタンを1段に収める（押す高さは 44px のまま）。 */
+@media (max-width: 430px) and (orientation: portrait) {
+  #guide .guide-actions button {
+    padding: 0 8px;
   }
 }

@@ -411,8 +411,10 @@
 .agent-error { margin: 8px 0; padding: 8px 10px; border-radius: 8px; background: var(--warn-bg, #fef7e0); color: var(--warn-ink, #5f4b00); }
 .agent-reasons { margin: 0; padding-left: 18px; }
 .agent-evidence summary { color: var(--sub); font-size: 0.75rem; cursor: pointer; }
+.empty-note { margin: 0 0 12px; }
+.use-current { display: block; width: 100%; min-height: 44px; margin: 0 0 8px; }
 .agent-evidence ul { margin: 2px 0 6px; padding-left: 16px; color: var(--sub); font-size: 0.75rem; }
-.agent { scroll-margin-top: 72px; }
+.agent { scroll-margin-top: 8px; }
 
 /* 押す物は 44px 以上 */
 .detail > summary {
@@ -421,11 +423,18 @@
   box-sizing: border-box;
 }
 
+/* 事故の記録の開閉は枠の中。右の印のぶんの余白を取る。 */
+.detail.accident-detail > summary {
+  padding: 4px 0;
+}
+
 /* ---------------------------------------------------------------- 上の入力欄
    出発地と目的地を1枚のカードにまとめ、入れ替えは2つの欄の間、昼夜は1つの切り替え、✕ は右上。
    目的地が決まったら「三宮駅 → 神戸駅」の1行に畳む（押すと開く）。 */
 form.directions {
   display: grid;
+  /* 長い地名で列が広がらないよう、列を画面の幅に収める（昼夜と ✕ が画面の外へ出ない）。 */
+  grid-template-columns: minmax(0, 1fr);
   gap: 4px;
   padding: 6px 8px 8px;
 }
@@ -540,28 +549,38 @@ form.directions .field .suggest {
 
 /* ---------------------------------------------------------------- ラベル付きの開閉 */
 .fold > summary {
+  padding: 0 4px;
+  color: var(--link);
+  font-weight: 600;
+}
+
+/* 開閉の印は ▾（閉じている）と ▴（開いている）の1種類。経路の画面の開閉は全部これ。 */
+body.routing .sheet details > summary {
   display: flex;
   align-items: center;
   min-height: 44px;
-  padding: 0 4px;
   box-sizing: border-box;
-  color: var(--link);
-  font-weight: 600;
   list-style: none;
 }
 
-.fold > summary::-webkit-details-marker {
+body.routing .sheet details > summary::-webkit-details-marker {
   display: none;
 }
 
-.fold > summary::after {
+body.routing .sheet details > summary::after {
   content: "▾";
+  flex: none;
   margin-left: auto;
   padding-left: 8px;
 }
 
-.fold[open] > summary::after {
+body.routing .sheet details[open] > summary::after {
   content: "▴";
+}
+
+.sum-text {
+  flex: 1;
+  min-width: 0;
 }
 
 .fold.more-detail > summary,
@@ -570,14 +589,6 @@ form.directions .field .suggest {
   border: 1px solid var(--edge);
   border-radius: 8px;
   background: var(--paper);
-}
-
-.agent > summary::after {
-  content: "▸";
-}
-
-.agent[open] > summary::after {
-  content: "▾";
 }
 
 .fold[open] > summary {
