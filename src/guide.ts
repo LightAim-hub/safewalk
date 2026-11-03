@@ -57,10 +57,14 @@ export function onCompass(e: CompassEvent): void {
 }
 
 /** iPhone は方位の利用に許可が要る。許可を求められるのは操作の直後だけ。 */
+let compassGeneration = 0;
+
 export function watchCompass(): void {
+  const generation = ++compassGeneration;
   const asking = DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> };
   const start = () => {
-    if (watchId === null) return;
+    // 許可を待つ間に案内を終えた・やり直した時は、古い問い合わせの結果で監視を登録しない。
+    if (watchId === null || generation !== compassGeneration) return;
     window.addEventListener("deviceorientationabsolute", onCompass as EventListener);
     window.addEventListener("deviceorientation", onCompass as EventListener);
   };
@@ -69,6 +73,7 @@ export function watchCompass(): void {
 }
 
 export function stopCompass(): void {
+  compassGeneration++;
   window.removeEventListener("deviceorientationabsolute", onCompass as EventListener);
   window.removeEventListener("deviceorientation", onCompass as EventListener);
   markers.me.getElement().classList.remove("facing");
@@ -237,6 +242,8 @@ export function updateGuide(p: LatLon, accuracy?: number): void {
 }
 
 export function startGuide(index: number): void {
+  // 案内中にもう一度押されても、位置の監視を二重にしない。
+  if (watchId !== null) return;
   if (!navigator.geolocation) {
     toast("この端末では現在地を取得できません。");
     return;

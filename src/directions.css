@@ -66,3 +66,81 @@
 .guide.lost .guide-arrow {
   background: var(--sub);
 }
+
+/* 経路のシート */
+.start-bar {
+  position: sticky;
+  top: -14px; /* シートの内側の余白（14px）の分 */
+  z-index: 2;
+  margin: -14px -14px 8px;
+  padding: 14px 14px 8px;
+  background: var(--paper);
+}
+
+.start-bar .start {
+  margin-top: 0;
+}
+
+.safety-note {
+  margin: 0 0 8px;
+  color: var(--sub);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.routes .diff {
+  grid-column: 1;
+  color: var(--sub);
+  font-size: 12px;
+}
+
+/* スマホ（縦も横も）。入力欄を詰め、経路のシートが潰れず、経路が入力欄とシートの間に収まるようにする。 */
+@media (max-height: 520px), (max-width: 720px) {
+  .directions {
+    position: relative;
+    gap: 4px;
+    padding: 6px 10px;
+  }
+
+  .dir-head strong {
+    display: none;
+  }
+
+  /* 閉じるボタンは、昼夜ボタンの右に置く。 */
+  .dir-head {
+    position: absolute;
+    right: 8px;
+    bottom: 6px;
+  }
+
+  .dir-head .icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .dir-fields .field input {
+    height: 36px;
+  }
+
+  .period {
+    margin-right: 44px;
+  }
+
+  .period button {
+    min-height: 32px;
+  }
+
+  .add-stop {
+    padding: 0 2px;
+  }
+
+  body.routing .sheet {
+    min-height: min(120px, 100%);
+  }
+}
+
+@media (max-width: 720px) {
+  body.routing .sheet {
+    max-height: var(--sheet-h, 36dvh);
+  }
+}
