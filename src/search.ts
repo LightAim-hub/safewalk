@@ -154,8 +154,24 @@ export function showResultDots(rows: Place[]): void {
   });
 }
 
+/** 履歴の移動の最中か。url.ts の popstate より先に立てる（url.ts は書き換えない）。 */
+let fromHistory = false;
+window.addEventListener(
+  "popstate",
+  () => {
+    fromHistory = true;
+    setTimeout(() => (fromHistory = false), 0);
+  },
+  true,
+);
+
+/** 最後に出したジャンルの一覧。戻った時に同じ並びで出すため、並べた順と数えた中心を残す。 */
+let genreList: { label: string; rows: Place[]; from: LatLon; inView: boolean } | null = null;
+
 /** 今見ている範囲のジャンルの場所を、中心から近い順に出す。 */
 export function searchGenre(genre: Genre): void {
+  // 履歴の「戻る」「進む」で一覧に戻る時は、最初に出した並びをそのまま出す（戻した地図の中心から数え直すと並びが変わる）。
+  const reuse = fromHistory && genreList !== null && genreList.label === genre.label;
   state.genre = genre;
   state.picked = null;
   markers.picked.remove();
@@ -164,17 +180,21 @@ export function searchGenre(genre: Genre): void {
   $("research").hidden = true;
   const view = map.getBounds();
   const center = map.getCenter();
-  const from = { lat: center.lat, lon: center.lng };
+  const from = genreList && reuse ? genreList.from : { lat: center.lat, lon: center.lng };
   // 「病院」は、種類が施設で名前が急病センター・クリニック・医院などの物も含める（places.json は作り直さず検索側で救う）。
   const ofGenre = places.filter((p) => genre.kinds.includes(p.kind) || (genre.label === "病院" && p.kind === "施設" && isMedical(p)));
   const inView = ofGenre.filter((p) => view.contains([p.lon, p.lat]));
-  const rows = (inView.length ? inView : ofGenre)
-    .slice()
-    .sort((a, b) => metres(a, from) - metres(b, from))
-    .slice(0, GENRE_LIMIT);
+  const rows =
+    genreList && reuse
+      ? genreList.rows
+      : (inView.length ? inView : ofGenre)
+          .slice()
+          .sort((a, b) => metres(a, from) - metres(b, from))
+          .slice(0, GENRE_LIMIT);
+  if (!reuse) genreList = { label: genre.label, rows, from, inView: inView.length > 0 };
   showResultDots(rows);
   const wrap = el("div");
-  wrap.append(el("h2", "sheet-title", inView.length ? `この範囲の${genre.label}` : `近くの${genre.label}（この範囲にはありません）`));
+  wrap.append(el("h2", "sheet-title", (reuse ? genreList?.inView : inView.length) ? `この範囲の${genre.label}` : `近くの${genre.label}（この範囲にはありません）`));
   if (genre.label === "病院" || genre.label === "薬局") wrap.append(emergencyNote());
   wrap.append(
     rows.length
@@ -187,7 +207,7 @@ export function searchGenre(genre: Genre): void {
   sheet.replaceChildren(wrap);
   sheet.hidden = false;
   // 市全体を見ている時や範囲内に無い時は、結果が見える所まで寄る。
-  if (rows.length && (!inView.length || map.getZoom() < 13)) {
+  if (!reuse && rows.length && (!inView.length || map.getZoom() < 13)) {
     const all = rows.slice(0, 12).map((p): [number, number] => [p.lon, p.lat]);
     map.fitBounds(
       all.reduce((b, c) => b.extend(c), new maplibregl.LngLatBounds(all[0], all[0])),
@@ -230,8 +250,12 @@ export function renderChips(): void {
   more.addEventListener("click", () => {
     chipsOpen = !open;
     renderChips();
-    $("chips").querySelector<HTMLElement>(".chip-more")?.focus();
-    if (chipsOpen) $("chips").querySelectorAll<HTMLElement>(".chip")[main.length + 1]?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    $("chips").querySelector<HTMLElement>(".chip-more")?.focus({ preventScroll: true });
+    // 開いた時は「閉じる」を左端にそろえる（どのジャンルも途中で欠けず、続きのジャンルが右に並ぶ）。閉じた時は先頭に戻す。
+    const row = $("chips");
+    const closeChip = row.querySelector<HTMLElement>(".chip-more");
+    row.scrollLeft = 0;
+    if (chipsOpen && closeChip) row.scrollLeft += closeChip.getBoundingClientRect().left - 4;
   });
   $("chips").replaceChildren(...main.map(chip), more, ...(open ? rest.map(chip) : []));
 }

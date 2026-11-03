@@ -66,6 +66,8 @@
 }
 
 .menu-close {
+  border: 1px solid var(--edge);
+  background: var(--paper);
   color: var(--link);
   font-weight: 600;
 }
@@ -118,6 +120,7 @@
   min-height: 44px;
   border: 1px solid var(--edge);
   border-radius: 8px;
+  background: var(--paper);
   color: var(--ink);
   font-size: 1rem;
 }
@@ -133,11 +136,47 @@
   display: flex;
   align-items: center;
   width: 100%;
-  border: 0;
-  background: transparent;
+  border: 1px solid var(--line);
+  background: var(--paper);
   color: var(--ink);
   text-align: left;
   text-decoration: none;
+}
+
+/* 押せる物と分かるよう、右端に印を置く（押すと何が起きるかを形で分ける）。 */
+.menu-row::after {
+  content: "›";
+  margin-left: auto;
+  padding-left: 12px;
+  color: var(--sub);
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+a.menu-row::after {
+  content: "↗";
+  font-size: 1rem;
+}
+
+.menu-sources summary::after {
+  content: "▾";
+  font-size: 0.875rem;
+}
+
+.menu-sources[open] summary::after {
+  content: "▴";
+}
+
+.menu-sources summary {
+  list-style: none;
+}
+
+.menu-sources summary::-webkit-details-marker {
+  display: none;
+}
+
+#menu-voice::after {
+  content: none;
 }
 
 .menu-row:hover,
@@ -161,4 +200,9 @@
   padding: 0 14px;
   color: var(--sub);
   font-size: 0.875rem;
+}
+
+/* 下のシートに重なった丸いボタン（現在地・≡・?）は隠す。menu.ts が data-covered を付け外しする。 */
+.locate[data-covered] {
+  visibility: hidden;
 }
