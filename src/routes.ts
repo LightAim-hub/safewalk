@@ -64,6 +64,8 @@ const MAX_OVERLAP = 0.85;
 const REMOTE_NIGHT = 4;
 /** 評価できない道がこの割合を超える経路は、安全度を「不明」にする。 */
 const MAX_UNKNOWN = 0.3;
+/** 夜に人通り・明かり・犯罪の記録で足す割合の上限(道の長さに対して)。これで遠回りの増え方も 1.2 倍までに収まる。 */
+const NIGHT_EXTRA_MAX = 0.2;
 
 /** 安全を重く見る度合いを変えて経路を出し、似た経路を除く。 */
 export function findRoutes(
@@ -78,14 +80,17 @@ export function findRoutes(
   const risk = period === "night" ? g.riskNight : g.riskDay;
   const reference = period === "night" ? meta.riskPerKmNight : meta.riskPerKmDay;
   let found: Route[] = [];
-  const nightRemote = period === "night" ? REMOTE_NIGHT : 1;
+  const night = period === "night";
+  const nightRemote = night ? REMOTE_NIGHT : 1;
   if (from.edge === to.edge) return [alongOneEdge(g, from, to, names, acc, risk, reference)];
 
   for (const weight of SAFETY_WEIGHTS) {
     const climbM = WALK_M_PER_MIN * MINUTES_PER_CLIMB_M;
     const path = g.shortestPath(from, to, (e, node) => {
       const length = g.length[e] * (g.flags[e] & REMOTE ? nightRemote : 1);
-      return length + climbM * g.climb(e, node) + weight * METRES_PER_RISK * risk[e] + (weight > 0 ? TURN_M : 0);
+      // 夜の「最短ではない」候補だけ、人通りと明かりの少なさ(と犯罪の記録)で小さく足す。最大 NIGHT_EXTRA_MAX 倍。昼と最短は変えない。
+      const quiet = night && weight > 0 ? g.length[e] * Math.min(g.nightExtra[e] / 1000, NIGHT_EXTRA_MAX) : 0;
+      return length + quiet + climbM * g.climb(e, node) + weight * METRES_PER_RISK * risk[e] + (weight > 0 ? TURN_M : 0);
     });
     if (!path) return [];
     const { edges } = path;

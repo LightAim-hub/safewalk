@@ -32,7 +32,8 @@ function checkGraph(buf: ArrayBuffer): ArrayBuffer {
   if (buf.byteLength < 12) throw new Error("graph.bin が短すぎます");
   const [n, m, k] = new Uint32Array(buf, 0, 3);
   const expected = 12 + n * 8 + m * 36 + (m + 1) * 4 + k * 8;
-  if (!n || !m || buf.byteLength !== expected) throw new Error("graph.bin の形が正しくありません");
+  // 末尾の m バイトは、夜の費用に足す値(pipeline/05_crime.py)。無くてもよい。
+  if (!n || !m || (buf.byteLength !== expected && buf.byteLength !== expected + m)) throw new Error("graph.bin の形が正しくありません");
   return buf;
 }
 

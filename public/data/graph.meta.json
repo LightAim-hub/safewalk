@@ -12,5 +12,6 @@
   "idsFile": "graph.ids.bin",
   "remoteKm": 2293,
   "riskPerKmDay": 12.9856,
-  "riskPerKmNight": 8.6587
+  "riskPerKmNight": 8.6587,
+  "nightExtra": 1
 }

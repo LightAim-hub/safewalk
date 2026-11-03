@@ -34,6 +34,8 @@ export class Graph {
   readonly climbBackward: Float32Array;
   readonly nameId: Uint32Array;
   readonly flags: Uint32Array;
+  /** 夜の費用に足す割合(1000分の1)。pipeline/05_crime.py が graph.bin の末尾に付ける。無ければ 0。 */
+  readonly nightExtra: Uint8Array;
   private readonly geomStart: Uint32Array;
   private readonly geomLat: Int32Array;
   private readonly geomLon: Int32Array;
@@ -66,6 +68,7 @@ export class Graph {
     this.geomStart = take(Uint32Array, m + 1, 4);
     this.geomLat = take(Int32Array, k, 4);
     this.geomLon = take(Int32Array, k, 4);
+    this.nightExtra = buf.byteLength >= off + m ? new Uint8Array(buf, off, m) : new Uint8Array(m);
 
     const degree = new Uint32Array(n + 1);
     for (let e = 0; e < m; e++) {

@@ -62,9 +62,11 @@ npm run dev
 | データ | 提供元 | 利用条件 |
 | --- | --- | --- |
 | 交通事故（2020〜2025年） | [警察庁 交通事故統計情報のオープンデータ](https://www.npa.go.jp/publications/statistics/koutsuu/opendata/index_opendata.html) | 公共データ利用規約 PDL1.0 |
-| ひったくり（2018〜2025年） | 兵庫県警察の犯罪発生状況、兵庫県オープンデータカタログ。町丁目ごとの件数に加工して利用しており、兵庫県が作成した物ではありません | [CC BY 2.1 JP](https://creativecommons.org/licenses/by/2.1/jp/deed.ja) |
+| ひったくり・車上ねらい（2018〜2025年） | 兵庫県警察の犯罪発生状況、兵庫県オープンデータカタログ。町丁目ごとの件数を、人口あたりの率にして夜の経路の選び方に使うなど加工して利用しており、兵庫県が作成した物ではありません | [CC BY 2.1 JP](https://creativecommons.org/licenses/by/2.1/jp/deed.ja) |
 | 交番・警察署・駐在所（2026年9月1日時点） | 兵庫県警察「警察署・交番・駐在所の所在地」、兵庫県オープンデータカタログ。住所を国土地理院の住所検索で座標に直して加工して利用しており、兵庫県・兵庫県警察が作成した物ではありません | [CC BY 2.1 JP](https://creativecommons.org/licenses/by/2.1/jp/deed.ja) |
-| 町丁目の境界 | [総務省統計局 e-Stat](https://www.e-stat.go.jp/) 2020年国勢調査 小地域（町丁・字等）境界を加工 | 政府統計の総合窓口（e-Stat）の利用規約 |
+| 町丁目の境界・人口 | [総務省統計局 e-Stat](https://www.e-stat.go.jp/) 2020年国勢調査 小地域（町丁・字等）境界を加工 | 政府統計の総合窓口（e-Stat）の利用規約 |
+| 深夜の滞在人口（2019年） | [国土交通省 全国の人流オープンデータ](https://www.geospatial.jp/ckan/dataset/mlit-1km-fromto)（G空間情報センター）を加工して作成 | 全国の人流オープンデータ利用規約（CC BY 4.0 互換） |
+| 夜間光（2023〜2025年） | 衛星 VIIRS 夜間光 年平均 V2.2（Earth Observation Group）を加工して作成 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/deed.ja) |
 | 道路網 | [OpenStreetMap](https://www.openstreetmap.org/copyright)（Geofabrik 抽出） | ODbL |
 | 地名・神戸市の行政界 | [OpenStreetMap](https://www.openstreetmap.org/copyright) | ODbL |
 | 背景地図 | [OpenFreeMap](https://openfreemap.org/) / OpenMapTiles / OpenStreetMap | 各提供元の条件 |
@@ -122,6 +124,8 @@ python -m venv .venv
 | `data/raw/stats/6_safety_places/hyogo_police_koban/kobe_police_geocoded.csv` | 交番・警察署・駐在所（2026年9月1日時点）の住所に座標を付けた物（UTF-8） | 兵庫県警「警察署・交番・駐在所の所在地」（上の兵庫県のページの `r8-9-police.xlsx`）の住所を、国土地理院の住所検索 <https://msearch.gsi.go.jp/> で座標にした物。座標を付ける小さなスクリプトはこのリポジトリに無い | 2026-11-03 |
 | `data/raw/dem/` | 標高タイルの置き場 | 国土地理院 標高タイル（02 が自動で取得して置く。<https://maps.gsi.go.jp/development/demtile.html>） | 実行時 |
 
+`05_crime.py` は、上の表に加えて `data/raw/stats/1_crime/hyogo_police_theft/`（ひったくり・車上ねらい）、`3_area/estat_2020/`、`4_people/mlit_jinryu/`（国土交通省「全国の人流オープンデータ」<https://www.geospatial.jp/ckan/dataset/mlit-1km-fromto>）、`5_light/viirs/`（衛星の夜間光）を読みます。
+
 ひったくりの CSV は 2024年だけ UTF-8、ほかは Shift_JIS です（`03_cautions.py` がファイル名の年で切り替えます）。
 
 ### 2. 実行の順番
@@ -135,6 +139,9 @@ export PYTHONPATH=pipeline
 .venv/Scripts/python pipeline/02_graph.py      # 歩ける道: graph.bin, graph.meta.json, names.json, graph.ids.bin（標高を取得するため通信が要る）
 .venv/Scripts/python pipeline/03_cautions.py   # 注意書きと段階の境目: cautions.json（01・02・00 の出力を読む）
 .venv/Scripts/python pipeline/04_koban.py      # 近くの交番: koban.json
+.venv/Scripts/python pipeline/05_crime.py      # 夜の経路の費用に足す値: graph.bin の末尾に付ける（02 を作り直したら必ず実行し直す）
 ```
 
 作り直した後は `npx tsc --noEmit`、`npm run build`、`python tools/check.py` で動きを確かめてください。
+
+`05_crime.py` は、町丁目ごとの犯罪の記録（ひったくり・車上ねらいの8年合計）を深夜の滞在人口あたりの率にし、深夜の滞在人口・夜間光と合わせて道ごとの小さな足し分にします。夜の「最短ではない」候補にだけ効き、昼は変わりません。8年合計が5件に満たない町丁目は使わず、足し分は道の長さの2割までです。町名・件数・色・地図の印は画面に出しません。
