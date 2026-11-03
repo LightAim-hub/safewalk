@@ -36,10 +36,12 @@ export type Route = {
   /** [出発からの距離(m), 出発地からの高さ(m)] */
   profile: [number, number][];
   steps: Step[];
-  /** 安全度の目安。評価できない道が多い時は null */
+  /** 旧い安全度(%)。画面が src/safety.ts の assess() に切り替わったら消す。評価できない道が多い時は null */
   safety: number | null;
   /** 人家から離れた道の長さ(m) */
   remoteMetres: number;
+  /** 神戸市の外の道の長さ(m)。事故データが無く、段階を出せない。 */
+  outsideMetres: number;
   /** いちばん長く通る道の名前 */
   via: string;
   /** 経路から 30m 以内の事故の添字 */
@@ -119,6 +121,7 @@ export function findRoutes(
       steps,
       safety: safetyOf(g, pieces, risk, reference),
       remoteMetres: flaggedMetres(g, pieces, REMOTE),
+      outsideMetres: flaggedMetres(g, pieces, OUTSIDE),
       via,
       accidents: acc.near(coords),
     };
@@ -237,6 +240,7 @@ function alongOneEdge(
     steps,
     safety: safetyOf(g, pieces, risk, reference),
     remoteMetres: flaggedMetres(g, pieces, REMOTE),
+    outsideMetres: flaggedMetres(g, pieces, OUTSIDE),
     via,
     accidents: acc.near(coords),
   };
@@ -357,6 +361,7 @@ export function joinRoutes(parts: Route[], stopNames: string[]): Route {
     route.climb += part.climb;
     route.descent += part.descent;
     route.remoteMetres += part.remoteMetres;
+    route.outsideMetres += part.outsideMetres;
     route.accidents.push(...part.accidents);
     if (part.metres > longest.metres) longest = part;
   });
