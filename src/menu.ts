@@ -1,6 +1,6 @@
 import { $, CURRENT, el, sheet as sheetEl, state } from "./app";
 import { openDirections, SAFETY_PAGE } from "./directions";
-import { emergencyPanel } from "./emergency";
+import { emergencyPanel, KOBAN_HEADING_HERE } from "./emergency";
 import { voiceOn } from "./guide";
 import { type KobanHit } from "./koban";
 import { setBaseLayer, type BaseLayer } from "./map-ui";
@@ -106,17 +106,6 @@ function refreshVoice(): void {
   $("menu-voice-name").textContent = `使っている声: ${name || "端末の既定の日本語"}`;
 }
 
-/** 緊急の枠の「出発地から近い順」を、現在地から探した時の言い方に直す。 */
-function relabelNear(box: HTMLElement): void {
-  const near = box.querySelector(".emg-near");
-  if (!near) return;
-  const fix = () => {
-    const h = near.querySelector("h4");
-    if (h && h.textContent?.includes("出発地から")) h.textContent = h.textContent.replace("出発地から", "いまいる場所から");
-  };
-  new MutationObserver(fix).observe(near, { childList: true });
-}
-
 /** 現在地を、緊急の時にだけ使う。許可の前置きは挟まず、押した本人の操作をそのまま許可の求めにする。 */
 function locateForEmergency(): Promise<Place | null> {
   return new Promise((resolve) => {
@@ -136,10 +125,8 @@ function showEmergency(origin: Place | null): void {
     closeMenu();
     openDirections({ from: origin, to: { name: k.name, lat: k.lat, lon: k.lon, kind: "警察" } });
   };
-  const panel = emergencyPanel(origin, onRoute);
-  if (origin) {
-    if (origin.name === CURRENT) relabelNear(panel);
-  } else {
+  const panel = emergencyPanel(origin, onRoute, undefined, origin?.name === CURRENT ? KOBAN_HEADING_HERE : undefined);
+  if (!origin) {
     const near = panel.querySelector(".emg-near");
     const find = el("button", "primary menu-find", "いまいる場所から近い交番を探す");
     find.type = "button";
