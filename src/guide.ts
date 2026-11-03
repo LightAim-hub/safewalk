@@ -349,7 +349,11 @@ const alertTimers: Partial<Record<AlertKind, number>> = {};
 export function showAlert(kind: AlertKind, text: string, ms = 0): void {
   const box = $(ALERT_ID[kind]);
   // 同じ文を毎回書き直すと、読み上げが繰り返される。出ていて同じ文なら触らない。
-  if (box.hidden || box.textContent !== text) box.textContent = text;
+  if (box.hidden || box.textContent !== text) {
+    // 文ごとにかたまりで折る(「かいます」のように文の終わりだけが次の行に残らないように)。
+    const parts = text.split(/(?<=。)/).filter(Boolean);
+    box.replaceChildren(...parts.map((t) => Object.assign(document.createElement("span"), { className: "sentence", textContent: t })));
+  }
   box.hidden = false;
   window.clearTimeout(alertTimers[kind]);
   if (ms) alertTimers[kind] = window.setTimeout(() => (box.hidden = true), ms);

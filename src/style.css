@@ -811,6 +811,11 @@ body.guiding .ui {
   white-space: nowrap;
 }
 
+/* ひとかたまりで折る短い句(括弧の補足など)。 */
+.nowrap {
+  display: inline-block;
+}
+
 .toast {
   position: fixed;
   left: 50%;

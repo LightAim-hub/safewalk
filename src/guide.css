@@ -142,6 +142,10 @@ section#guide.guide[hidden] {
   pointer-events: auto;
 }
 
+#guide .guide-alert .sentence {
+  display: inline-block;
+}
+
 #guide .guide-alert[hidden] {
   display: none;
 }

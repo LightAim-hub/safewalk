@@ -494,10 +494,16 @@ export function routePadding(): maplibregl.PaddingOptions {
     const covered = sh ? vh - (gripBox ?? sh).top + 20 : 40;
     // 地図が狭くなり過ぎないよう、上下の余白を縮める。
     const scale = Math.min(1, (vh - 140) / Math.max(top + covered, 1));
-    return { top: top * scale, bottom: covered * scale, left: 36, right: 36 };
+    // 右上の「≡」メニューのボタンの下に、印や所要時間の札が隠れないよう、その幅だけ右を空ける。
+    const menu = rect(document.getElementById("menu-open"));
+    const right = menu && menu.width ? Math.max(36, vw - menu.left + 8) : 36;
+    return { top: top * scale, bottom: covered * scale, left: 36, right };
   }
   const left = Math.max(form?.right ?? 0, sh?.right ?? 0) + 40;
-  return { top: 24 + MARK, bottom: 60, left: Math.min(left, vw * 0.6), right: 60 };
+  // 下は出典の帯の分も空ける(目的地の印が帯に接して切れないように)。
+  const attrib = rect(document.querySelector(".maplibregl-ctrl-bottom-right"));
+  const bottom = 60 + (attrib ? Math.min(60, vh - attrib.top) : 30);
+  return { top: 24 + MARK, bottom, left: Math.min(left, vw * 0.6), right: 60 };
 }
 
 type Box = { x1: number; y1: number; x2: number; y2: number };
@@ -928,7 +934,9 @@ export function selectRoute(index: number, force = false): void {
   const shortest = state.routes.find((r) => r.label === "最短") ?? state.routes.reduce((x, y) => (y.metres < x.metres ? y : x), state.routes[0]);
   const cmp = compareRoutes(state.routes.map(assessment));
   // 案内ボタンは画面の下に固定し、何を始めるのかを書く。
-  const start = el("button", "primary start", `案内を始める（${formatMinutes(route.minutes)}・${shortLabel(route, a)}）`);
+  // 「（36分・最短）」はひとかたまりで折る(「短）」だけが次の行に残らないように)。
+  const start = el("button", "primary start", "案内を始める");
+  start.append(el("span", "nowrap", `（${formatMinutes(route.minutes)}・${shortLabel(route, a)}）`));
   start.type = "button";
   start.addEventListener("click", () => {
     startGuide(state.selected);
@@ -960,7 +968,7 @@ export function selectRoute(index: number, force = false): void {
     heading,
     ...notes,
     routeList(),
-    el("p", "rec-meaning", `件数は、${countMeaning()}（歩行者・自転車が関わるもの）`),
+    el("p", "rec-meaning", `件数は、${countMeaning()}（歩行者・自転車）`),
     ...(periodSwitched ? [el("p", "rec-meaning period-note", PERIOD_NOTE)] : []),
     routePanel(route, index, cmp, shortest),
     agentSection(),
@@ -1213,7 +1221,11 @@ export function agentSection(): HTMLElement {
         /* 覚えられないだけ */
       }
     });
-    const head = el("summary", "", "Claude に相談（例: 坂が少ない道がいい）");
+    // 見出しは並べて置かれる(flex)ので、文と補足を1つのかたまりに入れてから補足だけをひとかたまりで折る。
+    const head = el("summary");
+    const title = el("span", "", "Claude に相談");
+    title.append(el("span", "nowrap", "（例: 坂が少ない道がいい）"));
+    head.append(title);
     // 開いたら、入力欄が下の固定ボタンの裏に隠れないよう、見える所まで送る。
     head.addEventListener("click", () => {
       window.setTimeout(() => {
