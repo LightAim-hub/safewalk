@@ -11,6 +11,10 @@
   Uint32  flags[nEdges]                      (1=人家から離れた道 2=神戸市の外)
   Uint32  geomStart[nEdges + 1]
   Int32   geomLat[nCoords], geomLon[nCoords] (度 x 1e6)
+
+別ファイル public/data/graph.ids.bin: 辺と同じ順の道の区間の呼び名。
+  Uint64  [OSM 点番号 始点, 終点, 始点の次の点] x nEdges (リトルエンディアン)
+  作り直しても OSM の点が変わらない限り同じ。辺の添字は作り直すと変わる。
 """
 import json
 import math
@@ -35,6 +39,7 @@ ACC = Path("public/data/accidents.json")
 OUT = Path("public/data/graph.bin")
 META = Path("public/data/graph.meta.json")
 NAMES = Path("public/data/names.json")
+IDS = Path("public/data/graph.ids.bin")
 
 WALKABLE = {
     "footway", "path", "pedestrian", "steps", "living_street", "residential", "service",
@@ -133,7 +138,7 @@ class Ways(osmium.SimpleHandler):
         if shapely.contains_xy(AREA, lons, lats).any():
             flat = tags.get("bridge", "no") != "no" or tags.get("tunnel", "no") != "no"
             inside = bool(shapely.contains_xy(KOBE, lons, lats).any())
-            self.ways.append((pts, tags.get("name") or tags.get("ref") or "", flat, hw, inside))
+            self.ways.append((pts, tags.get("name") or tags.get("ref") or "", flat, hw, inside, w.id))
 
 
 def drop_trails(handler):
@@ -141,7 +146,7 @@ def drop_trails(handler):
     kept = []
     dropped = 0.0
     for way in handler.ways:
-        pts, name, _, hw, _ = way
+        pts, name, _, hw, _, _ = way
         if hw in FOOT_ONLY:
             lonely = sum(
                 not is_near(handler.roads, p[1], p[2]) and not is_near(handler.buildings, p[1], p[2]) for p in pts
@@ -160,13 +165,15 @@ class Edge(list):
     name = ""
     flat = False
     inside = True
+    way_id = 0
 
 
-def new_edge(points, name, flat, inside):
+def new_edge(points, name, flat, inside, way_id=0):
     edge = Edge(points)
     edge.name = name
     edge.flat = flat
     edge.inside = inside
+    edge.way_id = way_id
     return edge
 
 
@@ -178,15 +185,15 @@ def split_edges(ways):
         use[pts[0][0]] += 1
         use[pts[-1][0]] += 1
     edges = []
-    for pts, name, flat, _, inside in ways:
+    for pts, name, flat, _, inside, way_id in ways:
         cur = [pts[0]]
         for p in pts[1:]:
             cur.append(p)
             if use[p[0]] > 1:
-                edges.append(new_edge(cur, name, flat, inside))
+                edges.append(new_edge(cur, name, flat, inside, way_id))
                 cur = [p]
         if len(cur) > 1:
-            edges.append(new_edge(cur, name, flat, inside))
+            edges.append(new_edge(cur, name, flat, inside, way_id))
     return edges
 
 
@@ -332,6 +339,11 @@ def main():
     g_lat = np.array([round(p[1] * 1e6) for e in edges for p in e], dtype=np.int32)
     g_lon = np.array([round(p[2] * 1e6) for e in edges for p in e], dtype=np.int32)
 
+    # 作り直しても変わらない道の呼び名。OSM の点の番号 3 つ(両端と、始点の次の点)で道の区間を指す。
+    # 辺の添字は作り直すと変わるので、安全度の点数などを道に結び付ける時はこちらを使う。
+    keys = np.array([[e[0][0], e[-1][0], e[1][0]] for e in edges], dtype="<u8")
+    IDS.write_bytes(keys.tobytes())
+
     OUT.parent.mkdir(parents=True, exist_ok=True)
     with OUT.open("wb") as f:
         f.write(struct.pack("<III", len(index), len(edges), len(g_lat)))
@@ -348,7 +360,8 @@ def main():
         "edges": len(edges),
         "km": round(km),
         "innerKm": round(inner_km),
-        "remoteKm": round(float(length[(flags & REMOTE) != 0].sum()) / 1000),
+        "idsFile": "graph.ids.bin",
+        "remoteKm":round(float(length[(flags & REMOTE) != 0].sum()) / 1000),
         "riskPerKmDay": round(float(day[inner].sum()) / inner_km, 4),
         "riskPerKmNight": round(float(night[inner].sum()) / inner_km, 4),
     }
