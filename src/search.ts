@@ -45,6 +45,14 @@ const ALIASES = new Map(
     無印: "無印良品",
     コメダ: "コメダ珈琲",
     モス: "モスバーガー",
+    // 通称・旧称から、地図に載っている名前へ（どれも places.json に実在する名前）。
+    中華街: "南京町",
+    須磨水族園: "神戸須磨シーワールド",
+    須磨水族館: "神戸須磨シーワールド",
+    ポートタワー: "神戸ポートタワー",
+    神戸タワー: "神戸ポートタワー",
+    空港: "神戸空港",
+    ハーバー: "ハーバーランド",
   }).map(([short, full]) => [normalize(short), normalize(full)]),
 );
 
@@ -122,10 +130,142 @@ const withoutKobe = (name: string) => (/^神戸(?!駅|市).{2,}/.test(name) ? na
 
 const MAIN_OPERATORS = ["西日本旅客鉄道", "阪急電鉄", "阪神電気鉄道"];
 
+/** 英語で書いた場所。空白とハイフンを除いた形で引く。 */
+const ENGLISH_PLACES = new Map(
+  Object.entries({
+    kobeairport: "神戸空港",
+    airport: "神戸空港",
+    chinatown: "南京町",
+    nankinmachi: "南京町",
+    harborland: "ハーバーランド",
+    kobeuniversity: "神戸大学",
+    meriken: "メリケンパーク",
+    merikenpark: "メリケンパーク",
+    kobeporttower: "神戸ポートタワー",
+    porttower: "神戸ポートタワー",
+    kitanoijinkan: "北野 異人館街",
+    ijinkan: "異人館",
+  }),
+);
+
+/** 駅を表す英語の語。 */
+const EN_STATION = new Set(["station", "sta", "stn", "eki"]);
+
+/** 神戸新交通の路線。駅の公式ページの番号（800〜811）はポートライナー、住吉〜アイランドセンターは六甲ライナー。 */
+const ROKKO_LINER = new Set(["住吉駅", "魚崎駅", "南魚崎駅", "アイランド北口駅", "マリンパーク駅", "アイランドセンター駅"]);
+type Liner = "ポートライナー" | "六甲ライナー";
+
+function linerNumber(p: Place): number {
+  const m = /knt-liner\.co\.jp\/station\/(\d+)/.exec(p.web ?? "");
+  return m ? Number(m[1]) : -1;
+}
+
+export function lineOf(p: Place): Liner | null {
+  if (p.kind !== "駅") return null;
+  if (linerNumber(p) >= 800) return "ポートライナー";
+  return p.operator?.includes("神戸新交通") && ROKKO_LINER.has(p.name) ? "六甲ライナー" : null;
+}
+
+/** 名前が JR だけの駅（私鉄・地下鉄に同じ名前が無い物）。事業者の記録がない駅を見分けるために持つ。 */
+const JR_ONLY = new Set(["三ノ宮駅", "神戸駅", "六甲道駅", "摂津本山駅", "甲南山手駅", "灘駅", "鷹取駅", "塩屋駅", "垂水駅", "舞子駅", "須磨駅", "摩耶駅"]);
+
+export function isJr(p: Place): boolean {
+  if (p.kind !== "駅") return false;
+  return !!p.operator?.includes("西日本旅客鉄道") || !!p.web?.includes("jr-odekake") || JR_ONLY.has(p.name);
+}
+
+/** 候補の二行目に出す路線・事業者。JR と神戸新交通は線が分かる形にする。 */
+export function operatorLabel(p: Place): string | undefined {
+  const line = lineOf(p);
+  if (line) return `神戸新交通（${line}）`;
+  if (isJr(p)) return "JR";
+  return p.operator || undefined;
+}
+
+interface Prepared {
+  q: string;
+  station: boolean;
+  jr: boolean;
+}
+
+/** 検索の言葉を整える。英語の station／airport／jr、ハイフンと空白を処理する。 */
+function prepare(query: string): Prepared {
+  let text = query.normalize("NFKC").toLowerCase().trim();
+  let station = false;
+  let jr = false;
+  if (/^[\x20-\x7e]+$/.test(text)) {
+    // 「shin-kobe」「shin kobe」は、ひと続きのローマ字として読む。
+    const tokens = text.split(/[\s\-_.]+/).filter(Boolean);
+    station = tokens.some((t) => EN_STATION.has(t));
+    jr = tokens.includes("jr");
+    const rest = tokens.filter((t) => !EN_STATION.has(t) && t !== "jr").join("");
+    text = ENGLISH_PLACES.get(rest) ?? rest;
+  } else if (/^jr|jr$/.test(text.replace(/\s+/g, ""))) {
+    jr = true;
+    text = text.replace(/\s+/g, "").replace(/^jr|jr$/, "");
+  }
+  return { q: normalize(text), station, jr };
+}
+
+/** 「夜」「夜間」のような、場所の名前ではなく条件の言葉。 */
+const NIGHT_WORD = /^(夜|夜間|よる|深夜|night|24時間)$/;
+/** 夜に開いている・受けられると分かる場所（名前か営業時間の記録から）。 */
+function openAtNight(p: Place): boolean {
+  return /夜間|急病|救急|24時間/.test(p.name) || /24\/7|-0[0-6]:\d\d|-24:00/.test(p.hours ?? "");
+}
+
+/** 名前の全体で 0 件だった時、空白で分けて探し直す。「病院 夜」のような 語＋条件 は、条件に合う物を先に出す。 */
+function searchByParts(query: string): Place[] {
+  const tokens = query.normalize("NFKC").trim().split(/[\s,、]+/).filter(Boolean);
+  if (tokens.length < 2) return [];
+  const night = tokens.some((t) => NIGHT_WORD.test(t.toLowerCase()));
+  const rest = tokens.filter((t) => !NIGHT_WORD.test(t.toLowerCase()));
+  if (night) {
+    if (rest.length !== 1) return [];
+    const genre = matchGenres(rest[0])[0];
+    const pool = genre
+      ? places.filter((p) => genre.kinds.includes(p.kind) || (genre.label === "病院" && p.kind === "施設" && isMedical(p)))
+      : searchPlaces(rest[0]);
+    const hit = pool.filter(openAtNight);
+    return (hit.length ? hit : pool).slice(0, 7);
+  }
+  const parts = tokens.map((t) => {
+    const n = normalize(t);
+    return { n, brand: ALIASES.get(n) };
+  });
+  const all = places.filter((p) => parts.every((t) => p.n.includes(t.n) || p.y.includes(t.n) || (t.brand && p.n.includes(t.brand)) || normalize(p.ward).includes(t.n)));
+  if (all.length) return all.slice(0, 7);
+  for (const t of tokens) {
+    const one = searchPlaces(t);
+    if (one.length) return one;
+  }
+  return [];
+}
+
+/** 路線の名前で探した時の、駅の並び（路線の順）。 */
+function searchLine(q: string): Place[] | null {
+  const port = q === normalize("ポートライナー") || q === normalize("神戸新交通") || q === normalize("新交通");
+  const rokko = q === normalize("六甲ライナー") || q === normalize("神戸新交通") || q === normalize("新交通");
+  if (!port && !rokko) return null;
+  const on = (line: Liner) => places.filter((p) => lineOf(p) === line);
+  const rows = [
+    ...(port ? on("ポートライナー").sort((a, b) => linerNumber(a) - linerNumber(b)) : []),
+    ...(rokko ? on("六甲ライナー") : []),
+  ];
+  return rows.slice(0, 7);
+}
+
 export function searchPlaces(query: string): Place[] {
-  const q = normalize(query);
+  const { q, station, jr } = prepare(query);
   if (!q) return [];
   if (postcodeOf(q)) return [];
+  const line = searchLine(q);
+  if (line) return line;
+  const found = searchNormalized(q, station, jr);
+  return found.length ? found : searchByParts(query);
+}
+
+function searchNormalized(q: string, station: boolean, jr: boolean): Place[] {
   const brand = ALIASES.get(q);
   const kindNamed = (kind: string) => q.length >= 2 && (normalize(kind).includes(q) || q.includes(normalize(kind)));
   // ローマ字(sannomiya)は、読みにだけ当てる。英語の店名などで全部は変換できない言葉は使わない。
@@ -138,9 +278,10 @@ export function searchPlaces(query: string): Place[] {
     // 駅の読みは「…えき」。「さんのみや」と打った時は、駅名そのものと同じ扱いにする。
     if (p.kind === "駅" && key === p.y && key.replace(/えき$/, "") === q) key = q;
     const k = KIND_ORDER.indexOf(p.kind);
-    let match = key === q ? 0 : key.startsWith(q) ? 100 : 200;
+    let match = key === q || p.n === q ? 0 : key.startsWith(q) ? 100 : 200;
     // 略称で探した時は、略称と同じ名前の別の場所（セブンという名のカフェなど）より、正式な名前の店を上にする。
-    if (brand) match = p.n.startsWith(brand) ? 0 : p.n.includes(brand) ? 100 : 300 + match;
+    // 名前がそのまま一致する場所（南京町）は、その広場や案内図より上にする。
+    if (brand) match = p.n === brand ? -100 : p.n.startsWith(brand) ? 0 : p.n.includes(brand) ? 100 : 300 + match;
     // ローマ字から変えた読みだけで当たった物。駅・地区などは読みの一致で並べ、ほかの場所は名前で当たった物より下げる。
     if (kana && !p.n.includes(q) && !p.y.includes(q) && (p.y.includes(kana) || yomi(p).includes(kana))) {
       const y = p.y.includes(kana) ? p.y : yomi(p);
@@ -151,9 +292,11 @@ export function searchPlaces(query: string): Place[] {
     // 略称（ファミマ→ファミリーマート）で当たった店は対象外。
     if (k < 0 && !brand && key === p.y && !p.n.includes(q)) match += 100;
     const minor = MINOR_KINDS.includes(p.kind) && !kindNamed(p.kind) ? 150 : 0;
-    const asked = kindNamed(p.kind) ? -150 : 0;
+    // 「station」と添えた時は駅を、「JR」と添えた時は JR の駅を先に出す。
+    const asked = kindNamed(p.kind) || (station && p.kind === "駅") ? -150 : 0;
+    const onlyJr = jr ? (isJr(p) ? -300 : p.kind === "駅" ? 0 : 100) : 0;
     const main = p.kind === "駅" && MAIN_OPERATORS.some((o) => p.operator?.includes(o)) ? -0.3 : 0;
-    return match + minor + asked + (k < 0 ? 50 : k) + key.length / 100 + main;
+    return match + minor + asked + onlyJr + (k < 0 ? 50 : k) + key.length / 100 + main;
   };
   const seen = new Set<string>();
   return places
@@ -289,6 +432,10 @@ export function searchGenre(genre: Genre): void {
   const wrap = el("div");
   wrap.append(el("h2", "sheet-title", (reuse ? genreList?.inView : inView.length) ? `この範囲の${genre.label}` : `近くの${genre.label}（この範囲にはありません）`));
   if (genre.label === "病院" || genre.label === "薬局") wrap.append(emergencyNote());
+  // 営業時間の記録がある物が半分に満たない時は、「営業中」と出ない理由と確かめ方を一行で伝える。
+  if ((genre.label === "病院" || genre.label === "薬局") && rows.length && rows.filter((p) => p.hours).length * 2 < rows.length) {
+    wrap.append(el("p", "hours-note", "営業時間の記録がある所は少数です。夜間・休日は、出かける前に電話で確かめてください。"));
+  }
   wrap.append(
     rows.length
       ? placeRows(rows, from, (place) => {
@@ -494,6 +641,11 @@ export function bindSuggest(
   let pending = false;
   let head: Place[] = [];
   let local: Place[] = [];
+  /** 打った言葉。欄の中身が「現在地」の文字の時は、探す言葉ではないので空として扱う。 */
+  const typed = () => {
+    const value = input.value.trim();
+    return value === CURRENT ? "" : value;
+  };
 
   const close = () => {
     token++;
@@ -566,7 +718,7 @@ export function bindSuggest(
       syncAria();
       return;
     }
-    const value = input.value.trim();
+    const value = typed();
     const rows = items.map((p, i) => {
       const li = el("li");
       li.setAttribute("role", "presentation");
@@ -576,7 +728,7 @@ export function bindSuggest(
       button.tabIndex = -1;
       button.setAttribute("role", "option");
       button.setAttribute("aria-selected", String(i === active));
-      const hint = [p.kind, p.operator, p.ward].filter(Boolean).join("・");
+      const hint = [p.kind, operatorLabel(p), p.ward].filter(Boolean).join("・");
       button.append(el("span", "", p.name), el("span", "kind", hint));
       button.addEventListener("mousedown", (e) => {
         e.preventDefault();
@@ -612,12 +764,14 @@ export function bindSuggest(
 
   /** 手元の候補だけを今すぐ並べる。 */
   const refreshLocal = () => {
-    const value = input.value.trim();
+    const value = typed();
     local = searchPlaces(value);
     head = offerCurrent && !value ? [{ name: CURRENT, lat: 0, lon: 0, kind: "位置情報" }] : [];
     if (!value) head.push(...recentPlaces().map((p) => ({ ...p, kind: "最近" })));
     if (offerGenres) {
-      head.push(...matchGenres(value).map((genre) => ({ name: `${genre.label}を探す`, lat: 0, lon: 0, kind: "ジャンル", genre })));
+      // 「病院 夜」のように語＋条件で打った時も、先頭の語でジャンルを出す。
+      const genres = matchGenres(value);
+      head.push(...(genres.length ? genres : matchGenres(value.split(/[\s　]+/)[0])).map((genre) => ({ name: `${genre.label}を探す`, lat: 0, lon: 0, kind: "ジャンル", genre })));
     }
     items = [...head, ...local];
     active = -1;
@@ -628,7 +782,7 @@ export function bindSuggest(
 
   /** 外部の検索を足す。時間切れ・失敗の時は手元の候補のまま、使えなかったことを出す。 */
   const refreshExternal = async (mine: number) => {
-    const value = input.value.trim();
+    const value = typed();
     if (value.length < 2) return;
     const code = postcodeOf(value);
     const lookup = code ? await lookupPostcode(code) : await lookupAddress(value);

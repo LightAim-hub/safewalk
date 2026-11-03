@@ -30,6 +30,8 @@ export async function copyLink(button: HTMLButtonElement, text = location.href, 
         button.textContent = original;
       }, 2500),
     );
+    // ボタンの文字が画面の外にある・見落とす時のため、画面の下にも出す。
+    toast(`${done}。送りたい相手に貼り付けてください。`);
   } catch {
     toast("コピーできませんでした。アドレス欄のリンクをお使いください。");
   }
@@ -300,6 +302,14 @@ export function bindUrl(): void {
   new MutationObserver(() => {
     if (!restoring && state.mode === "browse") pushUrl();
   }).observe(sheet, { childList: true, attributes: true, attributeFilter: ["hidden"] });
+  // 案内を始めた時に履歴を1つ積む。共有リンクから直接開いた時は履歴が1つだけなので、積まないと「戻る」でアプリごと離れてしまう。
+  // 積んだ後に「戻る」を押すと listenHistory の popstate が積み直して、終え方を知らせる。
+  let wasGuiding = document.body.classList.contains("guiding");
+  new MutationObserver(() => {
+    const now = document.body.classList.contains("guiding");
+    if (now && !wasGuiding && !restoring) history.pushState(null, "", urlForState());
+    wasGuiding = now;
+  }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
   // 一覧を見ている間は、地図を動かした範囲を今の履歴に上書きして覚える。
   map.on("moveend", () => {
     if (restoring || state.mode !== "browse" || !state.genre || state.picked) return;
