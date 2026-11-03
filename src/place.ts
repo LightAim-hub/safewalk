@@ -5,6 +5,7 @@ import { places, snap } from "./data";
 import { openDirections, setEnd } from "./directions";
 import { searchGenre, clearGenre } from "./search";
 import { type Place, type End } from "./types";
+import { jstParts } from "./daylight";
 import { copyLink, pushUrl } from "./url";
 
 /** 地図の文字の名前から、詳しい情報を持つ場所を探す。 */
@@ -107,8 +108,10 @@ export function isOpen(hours: string, now = new Date()): boolean | null {
   // 同じ曜日に複数の決まりがある時は、後のものが優先される。
   const spansOn = (day: number) =>
     rules.filter((r) => !r.days || r.days.split(",").some((part) => dayInRange(part, day))).at(-1)?.spans ?? [];
-  const clock = now.getHours() * 60 + now.getMinutes();
-  const today = now.getDay();
+  // 営業時間は神戸の現地時間（日本時間）で書かれているので、端末のタイムゾーンでなく日本時間で比べる。
+  const jst = jstParts(now);
+  const clock = jst.hour * 60 + jst.minute;
+  const today = jst.weekday;
   const yesterday = (today + 6) % 7;
   return (
     spansOn(today).some(([a, b]) => clock >= a && clock < b) ||
@@ -131,8 +134,11 @@ export function dayInRange(part: string, day: number): boolean {
   return a <= b ? day >= a && day <= b : day >= a || day <= b;
 }
 
+/** 営業時間という考えが当てはまらない種類（地区・住所・駅・バス停など）。ここには「記録なし」を出さない。 */
+const NO_HOURS_KINDS = new Set(["地区", "住所", "郵便番号", "位置情報", "最近", "ジャンル", "駅", "バス停", "公園", "駐車場", "駐輪場", "史跡", "展望地", "観光", "名所", "寺社", "トイレ", "ATM"]);
+
 export function openState(place: Place): string {
-  if (!place.hours) return "";
+  if (!place.hours) return place.kind && !NO_HOURS_KINDS.has(place.kind) ? "営業時間の記録なし" : "";
   const open = isOpen(place.hours);
   return open === null ? "" : open ? "営業中（記録上）" : "営業時間外（記録上）";
 }
@@ -143,6 +149,26 @@ export function japaneseHours(hours: string): string {
     .replace("24/7", "24時間営業")
     .replace(/\b(Mo|Tu|We|Th|Fr|Sa|Su|PH)\b/g, (d) => names[d])
     .replace(/\boff\b/g, "休み");
+}
+
+/** 病院・薬局（種類が施設でも、名前が診療所・急病センターの物を含む）か。 */
+const MEDICAL_NAME = /急病センター|救急(?:病院|医療|センター)|病院|クリニック|医院|診療所/;
+const NOT_FOR_PEOPLE = /歯科|デンタル|動物|犬猫|ペット|獣医/;
+export function isMedical(place: Place): boolean {
+  if (place.kind === "病院" || place.kind === "薬局") return true;
+  return place.kind === "施設" && MEDICAL_NAME.test(place.name) && !NOT_FOR_PEOPLE.test(place.name);
+}
+
+/** 急な病気・けがの連絡先の一行。#7119 は神戸市の救急医療のページ（city.kobe.lg.jp/a65055/bosai/kyukyuiryo/telephone.html）で24時間の相談先とされている。 */
+export function emergencyNote(): HTMLElement {
+  const p = el("p", "emergency-note");
+  const tel = (text: string, num: string) => {
+    const a = el("a", "", text);
+    a.href = `tel:${num}`;
+    return a;
+  };
+  p.append("急な病気・けがは ", tel("119", "119"), "。迷ったら ", tel("#7119", "%237119"), "（救急安心センター）");
+  return p;
 }
 
 export function infoRow(label: string, value: Node | string): HTMLElement {
@@ -209,6 +235,8 @@ export function showPlace(place: Place): void {
   if (place.hours) {
     const now = openState(place);
     info.append(infoRow("営業時間", [now, japaneseHours(place.hours)].filter(Boolean).join(" ")));
+  } else if (openState(place)) {
+    info.append(infoRow("営業時間", "営業時間の記録なし"));
   }
   if (place.phone) {
     const call = el("a", "", place.phone);
@@ -229,7 +257,10 @@ export function showPlace(place: Place): void {
       return chip;
     }),
   );
-  wrap.append(el("h2", "", place.name), el("p", "", facts), actions, info, el("p", "sub-title", "付近を検索"), nearby);
+  wrap.append(el("h2", "", place.name), el("p", "", facts), actions);
+  if (isMedical(place)) wrap.append(emergencyNote());
+  wrap.append(info);
+  wrap.append(el("p", "sub-title", "付近を検索"), nearby);
   if (place.hours || place.phone || place.web) wrap.append(el("p", "note", "営業時間などは OpenStreetMap の記録で、最新とは限りません。"));
   sheet.replaceChildren(wrap);
   sheet.hidden = false;

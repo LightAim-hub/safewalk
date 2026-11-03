@@ -4,7 +4,7 @@ import { $, qInput, sheet, CURRENT, GENRES, GENRE_LIMIT, state, map, markers, el
 import { places } from "./data";
 import { formatMetres } from "./directions";
 import { locateMe } from "./map-ui";
-import { openState, showPlace } from "./place";
+import { emergencyNote, isMedical, openState, showPlace } from "./place";
 import { type Place, type IndexedPlace, type Genre } from "./types";
 import { pushUrl } from "./url";
 import "./search.css";
@@ -165,7 +165,8 @@ export function searchGenre(genre: Genre): void {
   const view = map.getBounds();
   const center = map.getCenter();
   const from = { lat: center.lat, lon: center.lng };
-  const ofGenre = places.filter((p) => genre.kinds.includes(p.kind));
+  // 「病院」は、種類が施設で名前が急病センター・クリニック・医院などの物も含める（places.json は作り直さず検索側で救う）。
+  const ofGenre = places.filter((p) => genre.kinds.includes(p.kind) || (genre.label === "病院" && p.kind === "施設" && isMedical(p)));
   const inView = ofGenre.filter((p) => view.contains([p.lon, p.lat]));
   const rows = (inView.length ? inView : ofGenre)
     .slice()
@@ -174,6 +175,7 @@ export function searchGenre(genre: Genre): void {
   showResultDots(rows);
   const wrap = el("div");
   wrap.append(el("h2", "sheet-title", inView.length ? `この範囲の${genre.label}` : `近くの${genre.label}（この範囲にはありません）`));
+  if (genre.label === "病院" || genre.label === "薬局") wrap.append(emergencyNote());
   wrap.append(
     rows.length
       ? placeRows(rows, from, (place) => {

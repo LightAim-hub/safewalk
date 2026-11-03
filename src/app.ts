@@ -1,6 +1,7 @@
 import maplibregl, { type Map as MapLibre } from "maplibre-gl";
 import { type Period, type Route } from "./routes";
 import { type Place, type Genre } from "./types";
+import { periodNow } from "./daylight";
 
 export const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 export const qInput = $<HTMLInputElement>("q");
@@ -36,7 +37,7 @@ export const state = {
   to: null as Place | null,
   /** 経由地。入力中の欄は null */
   stops: [] as (Place | null)[],
-  period: (new Date().getHours() >= 18 || new Date().getHours() < 6 ? "night" : "day") as Period,
+  period: periodNow() as Period,
   routes: [] as Route[],
   selected: 0,
   genre: null as Genre | null,
