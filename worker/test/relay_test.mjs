@@ -120,6 +120,22 @@ try {
   check("強制の tool_choice -> 400", r.status === 400);
   r = await call(goodBody({ thinking: { type: "enabled", budget_tokens: 1000 } }));
   check("thinking の budget -> 400", r.status === 400);
+  const longMsgs = Array.from({ length: 41 }, (_, i) => ({ role: i % 2 ? "assistant" : "user", content: "x" }));
+  const bad = [
+    ["messages が件数オーバー", { messages: longMsgs }],
+    ["最初が assistant", { messages: [{ role: "assistant", content: "x" }] }],
+    ["role が不正(system)", { messages: [{ role: "system", content: "x" }] }],
+    ["content が数値", { messages: [{ role: "user", content: 5 }] }],
+    ["未知のブロック(image)", { messages: [{ role: "user", content: [{ type: "image", source: {} }] }] }],
+    ["user が tool_use を送る", { messages: [{ role: "user", content: [{ type: "tool_use", id: "a", name: "find_routes", input: {} }] }] }],
+    ["未知の道具名の tool_use", { messages: [{ role: "user", content: "x" }, { role: "assistant", content: [{ type: "tool_use", id: "a", name: "bash", input: {} }] }] }],
+    ["tool_result の形が不正", { messages: [{ role: "user", content: [{ type: "tool_result", tool_use_id: 1, content: "x" }] }] }],
+    ["全体が長すぎる", { messages: [1, 2, 3].map(() => ({ role: "user", content: "x".repeat(30_000) })) }],
+  ];
+  for (const [name, extra] of bad) {
+    r = await call(goodBody(extra));
+    check(`messages: ${name} -> 400`, r.status === 400 && /[ぁ-ん]/.test(r.json?.error?.message ?? ""), r.text);
+  }
   r = await call(null, { raw: "{not json" });
   check("壊れた JSON -> 400", r.status === 400);
   r = await call(goodBody({ system: "x".repeat(120_000) }));
@@ -135,6 +151,8 @@ try {
   check("anthropic-version を付ける", !!up?.headers["anthropic-version"]);
   check("クライアントの Origin を上流へ渡さない", !up?.headers["origin"]);
   check("stream・fallbacks・metadata を落とす", up && !("stream" in up.body) && !("fallbacks" in up.body) && !("metadata" in up.body));
+  check("ブラウザの system を使わず Worker の固定の文を送る", typeof up?.body.system === "string" && up.body.system !== "s" && up.body.system.includes("SafeWalk"), String(up?.body.system).slice(0, 40));
+  check("ブラウザの tools を使わず Worker の固定の道具を送る", up?.body.tools?.length === 3 && up.body.tools.every((t) => t.strict === true), JSON.stringify(up?.body.tools).slice(0, 80));
   check("応答に CORS が付く", r.headers.get("access-control-allow-origin") === OK_ORIGIN);
 
   // agent.ts が実際に送る形(output_config・strict の道具・tool_use の履歴)を通す
