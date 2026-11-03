@@ -1,4 +1,4 @@
-import { $, CURRENT, el, state } from "./app";
+import { $, CURRENT, el, sheet as sheetEl, state } from "./app";
 import { openDirections, SAFETY_PAGE } from "./directions";
 import { emergencyPanel } from "./emergency";
 import { voiceOn } from "./guide";
@@ -28,6 +28,7 @@ const SOURCES = [
   "町丁目の境界: 総務省統計局 e-Stat（2020年国勢調査 小地域）を加工",
   "地図・道・店の営業時間: OpenStreetMap © contributors（OpenFreeMap 配信）",
   "航空写真・地形・住所・標高: 国土地理院",
+  "郵便番号から町名: zipcloud 郵便番号検索API（株式会社アイビス）。郵便番号を検索した時だけ使います",
   "#7119 の案内: 神戸市の救急安心センターのページ",
 ];
 
@@ -35,6 +36,9 @@ let layer: BaseLayer | "map" = "map";
 let back: HTMLElement;
 let sheet: HTMLElement;
 let opener: HTMLElement | null = null;
+/** メニューを開いた時刻。ダブルタップの2回目が背後の幕に当たって、すぐ閉じるのを防ぐ。 */
+let openedAt = 0;
+const TAP_GUARD_MS = 450;
 
 const FOCUSABLE = 'a[href], button:not([disabled]), summary, input, [tabindex]:not([tabindex="-1"])';
 
@@ -71,6 +75,7 @@ export function openMenu(): void {
   opener = document.activeElement instanceof HTMLElement ? document.activeElement : $("menu-open");
   refreshVoice();
   back.hidden = false;
+  openedAt = Date.now();
   document.body.classList.add("menu-open");
   document.addEventListener("keydown", onKey, true);
   sheet.scrollTop = 0;
@@ -155,6 +160,18 @@ function showEmergency(origin: Place | null): void {
   box.replaceChildren(panel);
 }
 
+/** 位置情報が許可済みの時だけ（許可の確認を新しく出さない）、現在地から近い順に出し直す。 */
+async function upgradeToCurrent(box: HTMLElement): Promise<void> {
+  try {
+    const status = await navigator.permissions?.query({ name: "geolocation" });
+    if (status?.state !== "granted") return;
+  } catch {
+    return;
+  }
+  const here = await locateForEmergency();
+  if (here && !box.hidden) showEmergency(here);
+}
+
 function toggleEmergency(): void {
   const button = $("menu-emg");
   const open = button.getAttribute("aria-expanded") !== "true";
@@ -162,9 +179,11 @@ function toggleEmergency(): void {
   const box = $("menu-emg-box");
   box.hidden = !open;
   if (!open) return void box.replaceChildren();
-  // 経路の出発地が決まっていれば、そこから。決まっていなければ、現在地を押した時に探す。
+  // 経路の画面では出発地を先に出し、現在地が使える（許可済み）なら現在地から探し直す。
+  // 決まっていなければ、「いまいる場所から近い交番を探す」を押した時に探す。
   showEmergency(state.from);
   box.scrollIntoView({ block: "nearest" });
+  if (state.mode === "directions" && state.from && state.from.name !== CURRENT) void upgradeToCurrent(box);
 }
 
 async function shareApp(button: HTMLButtonElement): Promise<void> {
@@ -272,7 +291,7 @@ function buildMenu(): void {
   );
   back.append(sheet);
   back.addEventListener("click", (e) => {
-    if (e.target === back) closeMenu();
+    if (e.target === back && Date.now() - openedAt > TAP_GUARD_MS) closeMenu();
   });
   document.body.append(back);
 }
@@ -292,8 +311,33 @@ function trackDirectionsBottom(): void {
   apply();
 }
 
+/**
+ * 下のシートを最大まで上げると、右側の丸いボタン（現在地・≡・?）がシートの上端に重なって、押すとシートの上の物を押してしまう。
+ * シート（とつまみ）に重なったボタンは隠す（シートを下げれば戻る）。
+ */
+function trackSheetOverlap(): void {
+  const grip = $("grip");
+  const hits = (a: DOMRect, b: DOMRect) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+  const apply = () => {
+    const parts = [sheetEl, grip].filter((n) => !sheetEl.hidden && n.offsetParent !== null).map((n) => n.getBoundingClientRect());
+    for (const button of document.querySelectorAll<HTMLElement>(".locate")) {
+      if (getComputedStyle(button).display === "none") continue;
+      const box = button.getBoundingClientRect();
+      button.toggleAttribute("data-covered", parts.some((r) => hits(box, r)));
+    }
+  };
+  const watch = new ResizeObserver(apply);
+  watch.observe(sheetEl);
+  watch.observe(grip);
+  new MutationObserver(apply).observe(sheetEl, { attributes: true, attributeFilter: ["hidden", "style"], childList: true });
+  new MutationObserver(apply).observe(document.body, { attributes: true, attributeFilter: ["class"], childList: true });
+  window.addEventListener("resize", apply);
+  apply();
+}
+
 export function bindMenu(): void {
   buildMenu();
   $("menu-open").addEventListener("click", openMenu);
   trackDirectionsBottom();
+  trackSheetOverlap();
 }
