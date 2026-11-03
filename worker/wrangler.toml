@@ -1,0 +1,24 @@
+name = "safewalk-claude"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+
+# 鍵(ANTHROPIC_API_KEY)はここに書かない。`npx wrangler secret put ANTHROPIC_API_KEY` で入れる。
+[vars]
+# Anthropic の窓口。api.anthropic.com 以外は ALLOW_TEST_UPSTREAM = "1" の時(手元の試験)だけ使う。
+UPSTREAM_URL = "https://api.anthropic.com/v1/messages"
+# 1日(UTC。日本時間では朝9時に切り替わる)の全体の上限。Claude への呼び出し回数。
+DAILY_LIMIT = "600"
+# 1つの IP あたり、10分間の回数と、24時間の回数。
+IP_10MIN_LIMIT = "20"
+IP_DAY_LIMIT = "60"
+# "1" にすると、拒否(refusal)時にサーバー側で別のモデルに切り替える(fallbacks: "default")。実機で確かめてから "1" にする。
+ENABLE_FALLBACKS = "0"
+
+[[durable_objects.bindings]]
+name = "LIMITER"
+class_name = "Limiter"
+
+# 無料プランで使える Durable Objects は SQLite 方式のみ。
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Limiter"]
