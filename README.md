@@ -48,6 +48,7 @@ npm run dev
 | 地名・神戸市の行政界 | [OpenStreetMap](https://www.openstreetmap.org/copyright) | ODbL |
 | 背景地図 | [OpenFreeMap](https://openfreemap.org/) / OpenMapTiles / OpenStreetMap | 各提供元の条件 |
 | 住所検索 | [国土地理院 住所検索](https://msearch.gsi.go.jp/) | 国土地理院コンテンツ利用規約 |
+| 郵便番号から町名 | [zipcloud 郵便番号検索API](https://zipcloud.ibsnet.co.jp/doc/api)（株式会社アイビス） | zipcloud 利用規約 |
 | 地点の住所（逆ジオコーダー） | [国土地理院](https://mreversegeocoder.gsi.go.jp/) | 国土地理院コンテンツ利用規約 |
 | 標高 | [国土地理院 標高タイル](https://maps.gsi.go.jp/development/demtile.html) | 国土地理院コンテンツ利用規約 |
 | 航空写真・陰影起伏 | [国土地理院 地理院タイル](https://maps.gsi.go.jp/development/ichiran.html) | 国土地理院コンテンツ利用規約 |
