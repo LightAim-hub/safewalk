@@ -1,4 +1,5 @@
 /// <reference types="vite/client" />
+import { toast } from "./app";
 /**
  * 電波が弱い・無い時の備え(Service Worker の登録と、オフライン表示)。
  * 中身は public/sw.js。使えない端末・プライベートブラウズ・開発中(vite dev)では何もせず、今まで通り通信で動く。
@@ -53,6 +54,14 @@ export function bindOffline(): void {
       navigator.serviceWorker
         .register(url)
         .then((reg) => {
+          // 初めての時は、端末に残し終わるまで電波なしでは開けない。終わったことを一度だけ伝える。
+          const first = !navigator.serviceWorker.controller;
+          const worker = reg.installing;
+          if (first && worker) {
+            worker.addEventListener("statechange", () => {
+              if (worker.state === "activated") toast("この端末に地図とデータを残しました。次からは電波がなくても開けます");
+            });
+          }
           // 長く開いたままの画面でも更新に気づけるよう、戻ってきた時に確かめる。
           let last = Date.now();
           document.addEventListener("visibilitychange", () => {
