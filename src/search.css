@@ -42,3 +42,10 @@
   font-weight: 700;
   text-decoration: underline;
 }
+
+/* 営業時間の記録が少ない一覧の、確かめ方の一行。 */
+.hours-note {
+  margin: 8px 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
