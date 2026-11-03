@@ -1,8 +1,7 @@
 import { type GeoJSONSource, type LngLatLike } from "maplibre-gl";
 import { type Route } from "./routes";
 import { state, map, el, mapPadding } from "./app";
-import { accidents } from "./data";
-import { copyLink } from "./url";
+import { accidents, safety } from "./data";
 
 export function accidentLine(i: number): string {
   const a = accidents.data;
@@ -30,15 +29,24 @@ export function accidentDetail(route: Route): HTMLElement {
   const a = accidents.data;
   const list = route.accidents;
   const count = (test: (i: number) => boolean) => list.filter(test).length;
-  const wrap = el("details", "detail");
+  const [y0, y1] = safety.cautions.accidentPeriod;
+  // 他の折りたたみと見分けがつくよう、枠と色を付ける（directions.css の .accident-detail）。
+  const wrap = el("details", "detail accident-detail");
   wrap.addEventListener("toggle", () => showAccidents(route, wrap.open));
-  wrap.append(el("summary", "", `この経路の近くの事故 ${list.length}件`));
+  const summary = el("summary");
+  summary.append(
+    el("span", "", `この経路の近くの事故の記録 ${list.length}件`),
+    el("small", "", `${y0}〜${y1}年・歩行者と自転車以外の事故も含む`),
+  );
+  wrap.append(summary);
   wrap.append(
     el(
       "p",
       "",
-      `経路から30m以内・2020〜2025年。歩行者の事故${count((i) => a.ped[i] === 1)}件、` +
-        `夜の事故${count((i) => a.night[i] === 1)}件、死亡事故${count((i) => a.dead[i] > 0)}件。`,
+      `経路から30m以内、${y0}〜${y1}年の、車どうしの事故も含む全部の記録です。` +
+        `内訳は、歩行者の事故${count((i) => a.ped[i] === 1)}件、自転車の事故${count((i) => a.bike[i] === 1)}件、` +
+        `夜の事故${count((i) => a.night[i] === 1)}件、死亡事故${count((i) => a.dead[i] > 0)}件です。` +
+        "経路の一覧の件数は、歩行者・自転車が関わる事故だけなので、これより少なくなります。",
     ),
   );
   const inPeriod = (i: number) => (a.night[i] === 1) === (state.period === "night");
@@ -55,9 +63,6 @@ export function accidentDetail(route: Route): HTMLElement {
     li.append(button);
     items.append(li);
   }
-  const share = el("button", "secondary", "この経路のリンクをコピー");
-  share.type = "button";
-  share.addEventListener("click", () => copyLink(share));
-  wrap.append(items, share);
+  wrap.append(items);
   return wrap;
 }

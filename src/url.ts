@@ -1,6 +1,6 @@
 import { type LatLon } from "./graph";
 import { $, qInput, sheet, CURRENT, GENRES, state, map, markers, toast, mapPadding } from "./app";
-import { openDirections, closeDirections, renderStops } from "./directions";
+import { openDirections, closeDirections, renderStops, fillCurrent, setSharedRoute, distinguishingPoints, formatMinutes } from "./directions";
 import { matchPlace, showPlace } from "./place";
 import { clearGenre, searchGenre } from "./search";
 import { syncClearButton } from "./map-ui";
@@ -9,12 +9,12 @@ import { type Place } from "./types";
 /** ボタンごとの「コピーしました」を元に戻すタイマー。 */
 const copiedTimers = new WeakMap<HTMLButtonElement, number>();
 
-export async function copyLink(button: HTMLButtonElement): Promise<void> {
+export async function copyLink(button: HTMLButtonElement, text = location.href, done = "コピーしました"): Promise<void> {
   try {
-    await navigator.clipboard.writeText(location.href);
+    await navigator.clipboard.writeText(text);
     const original = button.dataset.label ?? button.textContent ?? "";
     button.dataset.label = original;
-    button.textContent = "コピーしました";
+    button.textContent = done;
     clearTimeout(copiedTimers.get(button));
     copiedTimers.set(
       button,
@@ -35,25 +35,28 @@ function currentView(): string {
   return `${c.lat.toFixed(4)},${c.lng.toFixed(4)},${map.getZoom().toFixed(1)}`;
 }
 
-export function urlForState(): string {
+export function urlForState(opts: { share?: boolean } = {}): string {
   const q = new URLSearchParams();
   if (state.mode === "directions") {
     // 出発地・目的地は、片方だけ決まった時も残す。再読込・共有で同じ画面へ戻れる。
-    // 共有リンクに現在地の正確な座標を載せない。
-    const coords = (p: Place) => {
-      const digits = p.name === CURRENT ? 3 : 5;
-      return `${p.lat.toFixed(digits)},${p.lon.toFixed(digits)}`;
-    };
-    const label = (p: Place) => (p.name === CURRENT ? "現在地の付近" : p.name);
+    // 現在地は座標をアドレスに載せず「me」とする（開いた人の現在地として扱う）。送り主の居場所が人に渡らない。
+    const coords = (p: Place) => (p.name === CURRENT ? "me" : `${p.lat.toFixed(5)},${p.lon.toFixed(5)}`);
+    const label = (p: Place) => p.name;
     if (!state.from || !state.to) q.set("mode", "directions");
     if (state.from) {
       q.set("from", coords(state.from));
-      q.set("fromName", label(state.from));
+      if (state.from.name !== CURRENT) q.set("fromName", label(state.from));
     }
     if (state.to) {
       q.set("to", coords(state.to));
-      q.set("toName", label(state.to));
+      if (state.to.name !== CURRENT) q.set("toName", label(state.to));
     }
+    // 選んだ経路。番号と、他の経路から一番離れた地点（番号は計算し直しで変わりうるため、地点で見分ける）。
+    if (state.routes.length > 1 && state.routes[state.selected]) {
+      q.set("r", String(state.selected));
+      for (const rp of distinguishingPoints(state.routes, state.selected)) q.append("rp", `${rp.lat.toFixed(5)},${rp.lon.toFixed(5)}`);
+    }
+    if (opts.share) q.set("sh", "1");
     const stops = state.stops.filter((stop): stop is Place => stop !== null);
     if (stops.length) q.set("via", stops.map((stop) => `${coords(stop)},${label(stop)}`).join("|"));
     q.set("period", state.period);
@@ -125,8 +128,11 @@ export function applyUrl(): void {
     if (!parsed) unreadable = true;
     return parsed;
   };
-  const from = point("from");
-  const to = point("to");
+  // 「me」は、開いた人の現在地。座標ではないので、読めない座標としては扱わない。
+  const fromMe = q.get("from") === "me";
+  const toMe = q.get("to") === "me";
+  const from = fromMe ? null : point("from");
+  const to = toMe ? null : point("to");
   const place = point("place");
   const period = q.get("period");
   if (period === "day" || period === "night") state.period = period;
@@ -147,12 +153,22 @@ export function applyUrl(): void {
     })
     .filter((stop): stop is Place => stop !== null);
   renderStops();
-  if (from || to || q.get("mode") === "directions") {
+  if (from || to || fromMe || toMe || q.get("mode") === "directions") {
+    // 送られてきた経路・再読込で、選んだ経路を再現する。
+    const index = Number(q.get("r"));
+    const mark = q.getAll("rp").map(parsePoint).filter((p): p is LatLon => p !== null);
+    const banner = q.get("sh") === "1";
+    setSharedRoute(
+      banner || mark.length || q.has("r")
+        ? { r: Number.isInteger(index) && index >= 0 ? index : 0, rp: mark, banner }
+        : null,
+    );
     // 出発地・目的地は片方だけでも開く。
     openDirections({
       ...(from && { from: { ...from, name: q.get("fromName") || "共有された地点" } }),
       ...(to && { to: { ...to, name: q.get("toName") || "共有された地点" } }),
     });
+    if (toMe && !state.to) fillCurrent("to");
   } else {
     const genre = GENRES.find((g) => g.label === q.get("g"));
     if (genre) {
@@ -231,4 +247,26 @@ export function bindUrl(): void {
     genreView = currentView();
     replaceUrl();
   });
+}
+
+/**
+ * 選んだ経路を人に送る。端末の共有（LINE・メッセージなど）があればそれを開き、無ければリンクをコピーする。
+ * 送るリンクには、選んだ経路を見分ける地点を入れる。出発地が現在地の時は座標を入れず、受け取った人の現在地からになる。
+ */
+export async function shareRoute(button: HTMLButtonElement): Promise<void> {
+  const route = state.routes[state.selected];
+  if (!route || !state.from || !state.to) return;
+  const url = new URL(urlForState({ share: true }), location.href).href;
+  const name = (p: Place) => p.name;
+  const text = `${name(state.from)}から${name(state.to)}まで、徒歩${formatMinutes(route.minutes)}の経路です。`;
+  if (typeof navigator.share === "function") {
+    try {
+      await navigator.share({ title: "SafeWalk 徒歩の経路", text, url });
+      return;
+    } catch (error) {
+      // 送るのをやめた時は何もしない。共有が使えなかった時だけ、リンクのコピーに切り替える。
+      if (error instanceof DOMException && error.name === "AbortError") return;
+    }
+  }
+  await copyLink(button, url, "リンクをコピーしました");
 }

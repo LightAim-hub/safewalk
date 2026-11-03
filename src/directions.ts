@@ -5,13 +5,13 @@ import { showAccidents, accidentDetail } from "./accidents-ui";
 import { $, qInput, fromInput, toInput, searchbar, directions, sheet, COLORS, CURRENT, GENRES, state, map, markers, stopMarkers, toast, el } from "./app";
 import { graph, accidents, meta, places, names, emptyCollection, snap, safety, agentContext } from "./data";
 import { runAgent, SITUATION_MAX, FIXED, type AgentResult } from "./agent";
-import { assess, SAFETY_DISCLAIMER, type Assessment } from "./safety";
+import { assess, SAFETY_DISCLAIMER, type Assessment, type Tier } from "./safety";
 import { startGuide, stopGuide } from "./guide";
 import { popup } from "./place";
 import { placeRows, showResultDots, clearGenre, bindSuggest } from "./search";
 import { type Place, type Genre, type End } from "./types";
 import "./directions.css";
-import { replaceUrl, pushUrl, renderPeriod } from "./url";
+import { replaceUrl, pushUrl, renderPeriod, shareRoute } from "./url";
 
 export function openDirections(ends: Partial<Record<End, Place>>): void {
   state.mode = "directions";
@@ -31,25 +31,49 @@ export function openDirections(ends: Partial<Record<End, Place>>): void {
 
 let locating = 0;
 
-/** 出発地の既定は現在地。取れない・神戸市外の時は何も出さず空のままにする（知らせで目的地欄を覆わない）。 */
+/** 出発地・目的地の既定は現在地。取れない・神戸市外の時は何も出さず空のままにする（知らせで目的地欄を覆わない）。 */
 function fillCurrentFrom(): void {
-  if (!navigator.geolocation) return;
+  fillCurrent("from");
+}
+
+/** 送られてきた経路を開いたのに、現在地が使えない時の理由（出発地が空のままだと何も出ないため）。 */
+function sharedWithoutPlace(reason: string): void {
+  if (pending?.banner && state.mode === "directions" && !state.routes.length) {
+    clearRoutes(`送られてきた経路です。${reason}`);
+  }
+}
+
+/**
+ * 現在地を、空の出発地（または目的地）に入れる。url.ts が「to=me」を開く時にも使う。
+ * 位置情報を許可済みの時だけ自動で入れる。許可を黙って求めない（それ以外は空のまま。「現在地を使う」で入れる）。
+ */
+export function fillCurrent(which: End): void {
   const mine = ++locating;
-  navigator.geolocation.getCurrentPosition(
-    ({ coords }) => {
-      // 待つ間に、経路の画面を閉じた・出発地を選んだ・文字を打った時は、何もしない。
-      if (mine !== locating || state.mode !== "directions" || state.from || fromInput.value.trim()) return;
-      const place: Place = { lat: coords.latitude, lon: coords.longitude, name: CURRENT };
-      if (snap(place) === null) return;
-      setEnd("from", place);
-    },
-    () => undefined,
-    { timeout: 8000, maximumAge: 60000 },
-  );
+  const input = which === "from" ? fromInput : toInput;
+  const ask = navigator.permissions?.query({ name: "geolocation" }).then((s) => s.state, () => "unknown");
+  if (!navigator.geolocation || !ask) return sharedWithoutPlace("出発地を入れるか、「現在地を使う」を選んでください。");
+  void ask.then((permission) => {
+    if (mine !== locating) return;
+    if (permission !== "granted") return sharedWithoutPlace("出発地を入れるか、「現在地を使う」を選んでください。");
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        // 待つ間に、経路の画面を閉じた・地点を選んだ・文字を打った時は、何もしない。
+        if (mine !== locating || state.mode !== "directions" || state[which] || input.value.trim()) return;
+        const place: Place = { lat: coords.latitude, lon: coords.longitude, name: CURRENT };
+        if (snap(place) === null) return sharedWithoutPlace("現在地が神戸市の外です。出発地を入れてください。");
+        setEnd(which, place);
+      },
+      () => {
+        if (mine === locating) sharedWithoutPlace("現在地を取得できませんでした。出発地を入れてください。");
+      },
+      { timeout: 8000, maximumAge: 60000 },
+    );
+  });
 }
 
 export function closeDirections(): void {
   locating++;
+  pending = arrived = null;
   resetAgent();
   stopGuide();
   popup?.remove();
@@ -168,6 +192,7 @@ export function searchThrough(): Route | null {
 
 export function search(): void {
   resetAgent();
+  arrived = null;
   const start = snap(state.from!);
   const goal = snap(state.to!);
   showResultDots([]);
@@ -191,9 +216,108 @@ export function search(): void {
 export function showRoutes(): void {
   for (const route of state.routes) connectEnds(route, state.from!, state.to!);
   replaceUrl();
-  // 昼も夜も Google マップと同じく最短を選ぶ。他の経路は一覧に並べたままにする。
-  selectRoute(0);
+  // 昼も夜も Google マップと同じく最短を選ぶ。送られてきた経路を開いた時だけ、送り主が選んだ経路を選ぶ。
+  let first = 0;
+  if (pending) {
+    const found = findShared(pending);
+    first = found.index;
+    arrived = pending.banner ? found : null;
+    pending = null;
+  }
+  selectRoute(first);
   fitRoutes(500);
+}
+
+// ---------------------------------------------------------------- 経路を人に送る（選んだ経路を開いた側で再現する）
+
+/** 送られてきた経路の、再現に使う情報。r は経路の番号、rp は他の経路から一番離れた地点。 */
+type Pending = { r: number; rp: LatLon[]; banner: boolean };
+let pending: Pending | null = null;
+/** 送られてきた経路を開いた時の、画面の知らせ。経路を出し直したら消す。 */
+let arrived: { index: number; exact: boolean } | null = null;
+
+export function setSharedRoute(info: Pending | null): void {
+  pending = info;
+  arrived = null;
+}
+
+/** 点から経路の線までの距離(m)。 */
+export function distanceToRoute(route: Route, p: LatLon): number {
+  const kx = 111320 * Math.cos((p.lat * Math.PI) / 180);
+  const ky = 110540;
+  let best = Infinity;
+  const c = route.coords;
+  for (let i = 0; i + 1 < c.length; i++) {
+    const ax = (c[i][0] - p.lon) * kx;
+    const ay = (c[i][1] - p.lat) * ky;
+    const bx = (c[i + 1][0] - p.lon) * kx;
+    const by = (c[i + 1][1] - p.lat) * ky;
+    const dx = bx - ax;
+    const dy = by - ay;
+    const len = dx * dx + dy * dy;
+    const t = len === 0 ? 0 : Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len));
+    best = Math.min(best, Math.hypot(ax + t * dx, ay + t * dy));
+  }
+  return best;
+}
+
+const markCache = new WeakMap<Route[], Map<number, LatLon[]>>();
+
+/**
+ * 経路を言い当てる地点（多くて3つ）。他の経路それぞれから一番離れた、その経路の上の点。
+ * 出発地・目的地の近く（300m以内）は選ばない。出発地が現在地でも、居場所が人に渡らないようにするため。
+ * 経路が1本なら要らない。
+ */
+export function distinguishingPoints(routes: Route[], index: number): LatLon[] {
+  if (routes.length < 2 || !routes[index]) return [];
+  const cache = markCache.get(routes) ?? new Map<number, LatLon[]>();
+  markCache.set(routes, cache);
+  const hit = cache.get(index);
+  if (hit) return hit;
+  const route = routes[index];
+  const first = route.coords[0];
+  const last = route.coords[route.coords.length - 1];
+  const apart = (c: [number, number], q: [number, number]) => metres({ lon: c[0], lat: c[1] }, { lon: q[0], lat: q[1] });
+  const stride = Math.max(1, Math.floor(route.coords.length / 150));
+  let samples = route.coords.filter((_, k) => k % stride === 0);
+  const inside = samples.filter((c) => apart(c, first) > 300 && apart(c, last) > 300);
+  if (inside.length) samples = inside;
+  const points: LatLon[] = [];
+  routes.forEach((other, j) => {
+    if (j === index) return;
+    let best = samples[0];
+    let far = -1;
+    for (const c of samples) {
+      const d = distanceToRoute(other, { lon: c[0], lat: c[1] });
+      if (d > far) {
+        far = d;
+        best = c;
+      }
+    }
+    if (!points.some((p) => p.lon === best[0] && p.lat === best[1])) points.push({ lon: best[0], lat: best[1] });
+  });
+  // 多すぎると送るリンクが長くなる。一番離れている3つまで。
+  const result = points.slice(0, 3);
+  cache.set(index, result);
+  return result;
+}
+
+/** 送られてきた経路が、いま出した経路のどれか。地点が1本の線にだけ近ければそれ。決まらなければ番号に従う。 */
+function findShared(info: Pending): { index: number; exact: boolean } {
+  const n = state.routes.length;
+  if (n === 1) return { index: 0, exact: true };
+  if (info.rp.length) {
+    // 各経路について、地点までの距離の平均を比べる。
+    const d = state.routes.map((r) => info.rp.reduce((sum, p) => sum + distanceToRoute(r, p), 0) / info.rp.length);
+    const order = d.map((_, i) => i).sort((x, y) => d[x] - d[y]);
+    if (d[order[0]] <= 30) {
+      const tied = order.filter((i) => d[i] - d[order[0]] < 15);
+      // 同じに見える経路が複数ある時は、送られた番号がその中にあればそれ。
+      if (tied.length === 1) return { index: tied[0], exact: true };
+      if (tied.includes(info.r)) return { index: info.r, exact: true };
+    }
+  }
+  return { index: info.r < n ? info.r : 0, exact: false };
 }
 
 /** 経路の全体が、入力欄とシートを避けた見える範囲に収まるようにする。 */
@@ -354,32 +478,119 @@ export function diffFromShortest(route: Route, shortest: Route): string {
   return `最短より ${parts.join("・")}`;
 }
 
+/** 段階の記号。色だけに頼らず、記号と言葉を一緒に出す。 */
+export const TIER_MARK: Record<Tier, string> = { attention: "▲", normal: "●", low: "○", unknown: "－" };
+
+const routeLetter = (i: number) => "ABCDEFGH"[i] ?? String(i + 1);
+
+/** 一覧の行に出す札。「事故の記録が少ない道」は長いので縮める。 */
+function shortLabel(route: Route, a: Assessment): string {
+  const label = routeLabel(route, a);
+  return label === OLD_BEST ? "記録が少ない道" : label;
+}
+
+/** 複数の経路を比べた結果。一番少ない経路の番号と、どれもほぼ同じかどうか。 */
+export type Comparison = { least: number | null; same: boolean };
+
+export function compareRoutes(list: Assessment[]): Comparison {
+  const known = list.map((a, i) => ({ a, i })).filter((x) => x.a.accident.tier !== "unknown");
+  if (known.length < 2) return { least: null, same: false };
+  const counts = known.map((x) => x.a.accident.count);
+  const min = Math.min(...counts);
+  const max = Math.max(...counts);
+  const sameTier = known.every((x) => x.a.accident.tier === known[0].a.accident.tier);
+  // 段階が同じで件数の差も小さい時は、差があるように見せない。
+  if (sameTier && max - min < Math.max(3, max * 0.2)) return { least: null, same: true };
+  const atMin = known.filter((x) => x.a.accident.count === min);
+  return { least: atMin.length === 1 ? atMin[0].i : null, same: false };
+}
+
+/** 事故の記録の、数え方の説明（期間は記録の期間、夜は夜の記録だけ）。 */
+function countBasis(): string {
+  const [y0, y1] = safety.cautions.accidentPeriod;
+  return `歩行者・自転車が関わる事故を、経路から30m以内で数えています（${y0}〜${y1}年${state.period === "night" ? "・夜の記録だけ" : ""}）。`;
+}
+
+/** 経路の記録の要約。「▲ 71件」。段階が出せない時は「－ 評価なし」。 */
+function recordText(a: Assessment): string {
+  return a.accident.tier === "unknown" ? `${TIER_MARK.unknown} 評価なし` : `${TIER_MARK[a.accident.tier]} ${a.accident.count}件`;
+}
+
 export function routeList(): HTMLOListElement {
   const list = el("ol", "routes");
-  const shortest = state.routes.reduce((a, b) => (b.metres < a.metres ? b : a), state.routes[0]);
+  const assessed = state.routes.map(assessment);
+  const cmp = compareRoutes(assessed);
   list.append(
     ...state.routes.map((route, i) => {
+      const a = assessed[i];
       const li = el("li");
-      const button = el("button");
+      const button = el("button", "route-row");
       button.type = "button";
       button.toggleAttribute("aria-current", i === state.selected);
       button.addEventListener("click", () => selectRoute(i));
-      const a = assessment(route);
-      const tier = el("span", `tier tier-${a.accident.tier}`, a.accident.label);
-      tier.prepend(el("small", "", "交通事故の記録"));
+      const mark = el("span", `rec tier-${a.accident.tier}`, recordText(a));
+      if (cmp.least === i) mark.append(el("small", "", "記録が最少"));
+      button.setAttribute(
+        "aria-label",
+        `経路${routeLetter(i)} ${formatMinutes(route.minutes)} ${shortLabel(route, a)} ${(route.metres / 1000).toFixed(1)}キロ ` +
+          (a.accident.tier === "unknown" ? "事故の記録は評価できません" : `事故の記録${a.accident.count}件 ${a.accident.label}`) +
+          (cmp.least === i ? " この中で記録が一番少ない" : ""),
+      );
       button.append(
+        el("span", "letter", routeLetter(i)),
         el("span", "time", formatMinutes(route.minutes)),
-        tier,
-        el("span", "facts", `${routeLabel(route, a)}・${(route.metres / 1000).toFixed(1)}km・上り${route.climb}m`),
-        ...(route.via ? [el("span", "via", `${route.via} 経由`)] : []),
-        ...listReasons(a).map((line) => el("span", "reason", line)),
-        ...(diffFromShortest(route, shortest) ? [el("span", "diff", diffFromShortest(route, shortest))] : []),
+        el("span", "facts", `${shortLabel(route, a)}・${(route.metres / 1000).toFixed(1)}km`),
+        mark,
       );
       li.append(button);
       return li;
     }),
   );
   return list;
+}
+
+/** 選んだ経路の近くの駅（100m以内。地図データにある駅だけ）。経由の道の名前だけでは場所が伝わらないため。 */
+export function stationsNear(route: Route): string[] {
+  const genre = GENRES.find((g) => g.label === "駅");
+  if (!genre) return [];
+  const names: string[] = [];
+  for (const { place } of placesAlong(route, genre)) {
+    // 同じ駅が運営会社ごとに並ぶので、名前が同じ物は1つにする。
+    if (!names.includes(place.name)) names.push(place.name);
+  }
+  return names.slice(0, 3);
+}
+
+/** 選んだ経路の中身。一覧の下に、選んだ1本だけ詳しく出す。 */
+function routePanel(route: Route, index: number, cmp: Comparison, shortest: Route): HTMLElement {
+  const a = assessment(route);
+  const panel = el("section", "route-panel");
+  panel.setAttribute("aria-label", `経路${routeLetter(index)}の詳しい内容`);
+  panel.append(el("h3", "", `経路${routeLetter(index)}（${formatMinutes(route.minutes)}・${shortLabel(route, a)}）`));
+
+  const tier = el("p", `tierline tier-${a.accident.tier}`);
+  if (a.accident.tier === "unknown") {
+    tier.append(el("strong", "", `${TIER_MARK.unknown} 記録の段階は出せません`), ` ${a.unknown ?? ""}`);
+  } else {
+    tier.append(
+      el("strong", "", `${TIER_MARK[a.accident.tier]} ${a.accident.label}`),
+      ` 事故の記録 ${a.accident.count}件／${(route.metres / 1000).toFixed(1)}km`,
+    );
+    if (cmp.least === index) tier.append(el("span", "best", "この中で記録が一番少ない"));
+    else if (cmp.same) tier.append(el("span", "same", "ほかの経路とほぼ同じ"));
+  }
+  panel.append(tier);
+  if (a.accident.tier !== "unknown") panel.append(el("p", "basis", countBasis()));
+
+  const stations = stationsNear(route);
+  const where = [route.via ? `${route.via} 経由` : "", stations.length ? `近くの駅 ${stations.join("・")}` : ""].filter(Boolean);
+  if (where.length) panel.append(el("p", "where", where.join("　")));
+  const diff = diffFromShortest(route, shortest);
+  if (diff) panel.append(el("p", "diff", diff));
+
+  panel.append(safetyDetail(a), ...routeWarnings(route));
+  panel.append(el("p", "note", "階段や段差は考えていません。ベビーカーや車いすの方は、現地で確かめてください。"));
+  return panel;
 }
 
 export function selectRoute(index: number): void {
@@ -395,28 +606,42 @@ export function selectRoute(index: number): void {
   const route = state.routes[index];
   showAccidents(route, false);
   drawTimeTags();
-  const start = el("button", "primary start", "案内を始める");
+  const a = assessment(route);
+  const shortest = state.routes.reduce((x, y) => (y.metres < x.metres ? y : x), state.routes[0]);
+  const cmp = compareRoutes(state.routes.map(assessment));
+  // 案内ボタンは画面の下に固定し、何を始めるのかを書く。
+  const start = el("button", "primary start", `案内を始める（${formatMinutes(route.minutes)}・${shortLabel(route, a)}）`);
   start.type = "button";
   start.addEventListener("click", () => startGuide(state.selected));
-  // 一覧が長くても届くよう、案内ボタンは一覧の上に置き、スクロールしても上端に残す。
+  const send = el("button", "secondary send", "経路を送る");
+  send.type = "button";
+  send.setAttribute("aria-label", "選んだ経路を人に送る");
+  send.addEventListener("click", () => void shareRoute(send));
   const startBar = el("div", "start-bar");
-  startBar.append(start);
+  startBar.append(start, send);
+  const notes: HTMLElement[] = [];
+  if (arrived) {
+    const text = `送られてきた経路です。経路${routeLetter(arrived.index)}（${formatMinutes(state.routes[arrived.index]?.minutes ?? 0)}）。`;
+    notes.push(el("p", "shared-note", text + (arrived.exact ? "" : "出発地などが違うため、近い経路を出しています。")));
+  }
   sheet.replaceChildren(
-    startBar,
-    safetyNote(),
+    ...notes,
     routeList(),
+    routePanel(route, index, cmp, shortest),
     agentSection(),
-    safetyDetail(assessment(route)),
-    ...routeWarnings(route),
     stepList(route),
     elevationDetail(route),
     alongDetail(route),
     accidentDetail(route),
+    safetyNote(),
+    startBar,
   );
   sheet.hidden = false;
   // 最短（先頭）の時は上端のまま。説明の行を半端に隠さない。
   if (index === 0) sheet.scrollTop = 0;
   else sheet.querySelector(".routes [aria-current]")?.scrollIntoView({ block: "nearest" });
+  // アドレス欄にも選んだ経路を残す（再読込・共有で同じ経路に戻れる）。
+  replaceUrl();
 }
 
 // ---------------------------------------------------------------- Claude に事情を伝えて道を選んでもらう
@@ -508,8 +733,6 @@ async function askClaude(text: string): Promise<void> {
   // 答えの先頭(まとめの文)が見えるようにする。
   agentNode?.scrollIntoView({ block: "start" });
 }
-
-const routeLetter = (i: number) => "ABCDEFGH"[i] ?? String(i + 1);
 
 function agentResultView(result: AgentResult): HTMLElement[] {
   const nodes: HTMLElement[] = [el("p", "agent-summary", result.summary)];
@@ -678,14 +901,16 @@ export const NOTE_REMOTE_M = 500;
 
 export function routeWarnings(route: Route): HTMLElement[] {
   const lines: string[] = [];
-  if (route.metres >= LONG_WALK_M) lines.push(`徒歩では長い距離です（${(route.metres / 1000).toFixed(1)}km）。`);
+  if (route.metres >= LONG_WALK_M) {
+    lines.push(`長い距離です（${(route.metres / 1000).toFixed(1)}km）。休む場所とスマホの電池を考えてください。`);
+  }
   if (route.climb >= BIG_CLIMB_M) lines.push(`上りの大きい経路です（上り${route.climb}m）。`);
   if (route.remoteMetres >= NOTE_REMOTE_M) {
     const km = (route.remoteMetres / 1000).toFixed(1);
     lines.push(
       state.period === "night"
-        ? `人家から離れた道を${km}km通ります。夜は避けることをおすすめします。`
-        : `人家から離れた道を${km}km通ります。`,
+        ? `家が少ない道を${km}km通ります。夜は避けることをおすすめします。`
+        : `家が少ない道を${km}km通ります。`,
     );
   }
   return lines.map((line) => el("p", "warn", line));
@@ -702,26 +927,28 @@ export function safetyNote(): HTMLElement {
   return note;
 }
 
-/** 選んだ経路の、注意書きと夜の歩きやすさ。注意書きは最大3つ。 */
+/** 選んだ経路の、夜の道の様子・注意書き・段階の理由。注意書きは最大3つ。 */
 export function safetyDetail(a: Assessment): HTMLElement {
   const wrap = el("section", "safety-detail");
+  if (a.night) {
+    wrap.append(el("h4", "", "夜の道"));
+    const list = el("ul", "night-lines");
+    for (const line of a.night.lines) list.append(el("li", "", line));
+    wrap.append(list, el("p", "foot", "店は、地図データに営業時間がある店だけです。"));
+  }
   if (a.cautions.length) {
-    wrap.append(el("h3", "", "この経路の注意書き"));
+    wrap.append(el("h4", "", "注意"));
     const list = el("ul", "cautions");
     for (const c of a.cautions) list.append(el("li", `caution caution-${c.kind}`, c.text));
     wrap.append(list);
   }
-  if (a.night) {
-    wrap.append(el("h3", "", "夜の歩きやすさ"));
-    const list = el("ul", "night-lines");
-    for (const line of a.night.lines) list.append(el("li", "", line));
-    wrap.append(list);
-  }
   if (!a.unknown) {
-    wrap.append(el("h3", "", "交通事故の記録の段階の理由"));
+    const why = el("details", "why");
+    why.append(el("summary", "", "この段階になった理由"));
     const list = el("ul", "night-lines");
     for (const line of a.accident.reasons) list.append(el("li", "", line));
-    wrap.append(list);
+    why.append(list);
+    wrap.append(why);
   }
   wrap.hidden = !wrap.childElementCount;
   return wrap;
