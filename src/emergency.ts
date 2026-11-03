@@ -7,7 +7,7 @@
  *   #7119: 神戸市の救急安心センター(#7119)のページ(https://www.city.kobe.lg.jp/a65055/bosai/kyukyuiryo/telephone.html、
  *     2026-11-03 に確認)。24時間。2025-07-11 から兵庫県全域が対象(名称は「救急安心センターひょうご」)。直通 078-331-7119。
  */
-import { el } from "./app";
+import { announce, el } from "./app";
 import { nearestKoban, type KobanHit } from "./koban";
 import type { LatLon } from "./graph";
 import "./emergency.css";
@@ -144,7 +144,13 @@ export function emergencyPanel(
       if (!list.length) return near.replaceChildren(el("p", "emg-hint", "近くの交番の記録を読み込めませんでした。上の番号に電話してください。"));
       const ul = el("ul", "emg-kobans");
       ul.append(...list.map((k) => kobanRow(k, onRoute)));
-      near.replaceChildren(el("h4", "", heading), ul, el("p", "emg-hint", "交番は人がいない時間があります。着いても誰もいないことがあります。"));
+      const title = el("h4", "", heading);
+      title.tabIndex = -1;
+      near.replaceChildren(title, ul, el("p", "emg-hint", "交番は人がいない時間があります。着いても誰もいないことがあります。"));
+      announce(`近くの交番・警察署が${list.length}か所出ました`);
+      // 「交番を探す」を押した物は結果で置き換わる。焦点が背景に落ちていたら、結果の見出しへ移す。
+      const active = document.activeElement;
+      if (box.isConnected && (!active || active === document.body || !active.isConnected)) title.focus({ preventScroll: true });
     });
   } else {
     near.append(el("p", "emg-hint", "出発地が決まると、近くの交番を出します。"));

@@ -82,6 +82,40 @@ export function toast(text: string): void {
   toastTimer = window.setTimeout(() => (toastEl.hidden = true), 3500);
 }
 
+/**
+ * 画面には出さず、読み上げにだけ一行を伝える（「経路が2本出ました」など）。
+ * 同じ文でも、続けて呼ばれたらもう一度伝わるよう、いったん空にしてから入れ直す。
+ */
+/**
+ * 直前の操作がキーボードか。入力欄へ焦点を移すと、指やマウスの人には画面の小さな入力キーボードや枠が出てしまうため、
+ * 入力欄への焦点の移動はキーボードで操作している時だけにする。
+ */
+export const modality = { keyboard: false };
+document.addEventListener("keydown", () => (modality.keyboard = true), true);
+document.addEventListener("pointerdown", () => (modality.keyboard = false), true);
+
+let announceTimer = 0;
+export function announce(text: string): void {
+  const node = document.getElementById("announce");
+  if (!node) return;
+  window.clearTimeout(announceTimer);
+  node.textContent = "";
+  announceTimer = window.setTimeout(() => (node.textContent = text), 60);
+}
+
+/**
+ * 地図の印（出発地・目的地・現在地・所要時間の札）は、読み上げの対象にしない。
+ * MapLibre は印に英語の名前（Map marker）を付けるが、同じ内容は経路の一覧と入力欄に文字であるため、隠す。
+ */
+const addMarkerTo = maplibregl.Marker.prototype.addTo;
+maplibregl.Marker.prototype.addTo = function (this: maplibregl.Marker, target: MapLibre) {
+  const result = addMarkerTo.call(this, target);
+  const node = this.getElement();
+  node.removeAttribute("aria-label");
+  node.setAttribute("aria-hidden", "true");
+  return result;
+};
+
 export function scoreColor(score: number | null): string {
   if (score === null) return COLORS.other;
   return score >= 70 ? COLORS.good : score >= 50 ? COLORS.mid : COLORS.bad;

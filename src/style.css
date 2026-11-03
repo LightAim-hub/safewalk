@@ -6,8 +6,9 @@
   --wash: #f1f3f4;
   --blue: #1a73e8;
   --good: #188038;
-  --mid: #b06000;
+  --mid: #a05800; /* 薄い地の上でも文字が 4.5:1 以上 */
   --bad: #c5221f;
+  --emg: #d93025; /* 緊急の枠の縁・文字。暗い配色では明るい赤にする */
 
   /* 青の文字は 4.5:1 を満たす濃さにする（#1a73e8 は薄い青地の上で 3.9:1）。塗りの青は --accent。 */
   --link: #1557b0;
@@ -45,6 +46,7 @@
     --good: #81c995;
     --mid: #fdd663;
     --bad: #f28b82;
+    --emg: #f28b82;
     --link: #8ab4f8;
     --accent: #8ab4f8;
     --on-accent: #202124;
@@ -753,7 +755,8 @@ body.guiding .ui {
 
 .menu-btn {
   bottom: 232px;
-  font-size: 1.5rem;
+  /* ≡ は文字の拡大に合わせず、44px の丸の中に収める（文字200%で右に切れない）。 */
+  font-size: 24px;
   font-weight: 700;
   line-height: 1;
 }
@@ -794,6 +797,18 @@ body.guiding .ui {
 
 .grip {
   display: none;
+}
+
+/* 画面には出さず、読み上げにだけ伝える。 */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .toast {
@@ -861,9 +876,9 @@ body.guiding .ui {
     position: relative;
     display: block;
     flex: none;
-    height: 34px;
+    height: 44px;
     margin-top: auto;
-    margin-bottom: -10px;
+    margin-bottom: -20px;
     border-radius: 12px 12px 0 0;
     background: var(--paper);
     box-shadow: 0 -1px 3px rgb(60 64 67 / 20%);
@@ -934,6 +949,13 @@ body.guiding .ui {
 
   .time-tag {
     padding: 8px 12px;
+  }
+
+  /* 地図の出典の ⓘ は見た目を変えず、押せる範囲だけ 44px 四方に広げる。 */
+  .maplibregl-ctrl-attrib-button::before {
+    content: "";
+    position: absolute;
+    inset: -10px;
   }
 }
 

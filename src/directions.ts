@@ -2,13 +2,13 @@ import maplibregl, { type GeoJSONSource } from "maplibre-gl";
 import { metres, type LatLon } from "./graph";
 import { findRoutes, joinRoutes, minutesFor, type Period, type Route } from "./routes";
 import { showAccidents, accidentDetail } from "./accidents-ui";
-import { $, qInput, fromInput, toInput, searchbar, directions, sheet, COLORS, CURRENT, GENRES, state, map, markers, stopMarkers, toast, el } from "./app";
+import { $, qInput, fromInput, toInput, searchbar, directions, sheet, COLORS, CURRENT, GENRES, state, map, markers, stopMarkers, toast, announce, modality, el } from "./app";
 import { graph, accidents, meta, places, names, emptyCollection, snap, safety, agentContext } from "./data";
 import { runAgent, SITUATION_MAX, FIXED, type AgentResult } from "./agent";
 import { assess, SAFETY_DISCLAIMER, SAFETY_RULES, type Assessment, type Tier } from "./safety";
 import { startGuide, stopGuide } from "./guide";
 import { popup } from "./place";
-import { placeRows, showResultDots, clearGenre, bindSuggest } from "./search";
+import { placeRows, showResultDots, clearGenre, bindSuggest, focusQuietly } from "./search";
 import { locateMe, SHEET_STOPS } from "./map-ui";
 import { type Place, type Genre, type End } from "./types";
 import { detectDisaster, detectEmergency, disasterPanel, DISASTER_NOTICE, emergencyPanel } from "./emergency";
@@ -17,6 +17,8 @@ import "./directions.css";
 import { replaceUrl, pushUrl, renderPeriod, shareRoute, inServiceArea } from "./url";
 
 export function openDirections(ends: Partial<Record<End, Place>>): void {
+  // 押した物（経路ボタン・場所の「経路」）がこの後に消える時は、焦点を出発地の欄へ移す。
+  const pressed = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
   state.mode = "directions";
   document.body.classList.add("routing");
   searchbar.hidden = true;
@@ -30,6 +32,16 @@ export function openDirections(ends: Partial<Record<End, Place>>): void {
   // 出発地が空なら現在地を入れる。出発地へは焦点を当てない（候補の一覧が目的地欄・昼夜ボタンを覆うため）。
   else if (!state.to) toInput.focus();
   if (!state.from) fillCurrentFrom();
+  if (modality.keyboard && pressed && !directions.contains(document.activeElement) && (!pressed.isConnected || pressed.getClientRects().length === 0)) {
+    focusQuietly(fromInput);
+  }
+}
+
+/** 結果の見出し（経路の一覧）へ焦点を移す。案内を終えた後など、押した物が消えた時の行き先。 */
+export function focusResultHeading(): void {
+  const heading = sheet.querySelector<HTMLElement>("[data-result-heading]");
+  if (heading && !sheet.hidden) heading.focus({ preventScroll: true });
+  else if (modality.keyboard) focusQuietly(fromInput);
 }
 
 let locating = 0;
@@ -132,6 +144,7 @@ export function clearRoutes(message = "", offerCurrent = false): void {
     ...(shown ? [disclaimerBar()] : []),
   );
   sheet.hidden = !shown;
+  if (message) announce(message);
 }
 
 /** 案内中か。案内中は、地図や一覧の操作で出発地・経路を替えない（案内が古い経路のまま進むのを防ぐ）。 */
@@ -247,15 +260,19 @@ function canFold(): boolean {
 }
 
 export function setFolded(folded: boolean): void {
+  let wasEditing: HTMLElement | null = null;
   if (folded) {
     const active = document.activeElement;
-    if (active instanceof HTMLElement && directions.contains(active)) active.blur();
+    if (active instanceof HTMLElement && directions.contains(active)) wasEditing = active;
+    wasEditing?.blur();
     const via = state.stops.filter(Boolean).length;
     dirSummary.textContent = `${state.from?.name ?? ""} → ${state.to?.name ?? ""}${via ? `（経由${via}）` : ""}`;
   }
   directions.classList.toggle("folded", folded);
   dirSummary.hidden = !folded;
   dirSummary.setAttribute("aria-expanded", String(!folded));
+  // 入力していた欄が畳まれて消える時、焦点が背景に落ちないよう、畳んだ1行（押すと開く）へ移す。
+  if (folded && wasEditing && modality.keyboard && document.activeElement === document.body) dirSummary.focus({ preventScroll: true });
 }
 
 function runSearch(): void {
@@ -302,6 +319,7 @@ export function showRoutes(): void {
   }
   selectRoute(first);
   fitRoutes(500);
+  announce(`経路が${state.routes.length}本出ました`);
 }
 
 // ---------------------------------------------------------------- 経路を人に送る（選んだ経路を開いた側で再現する）
@@ -864,7 +882,11 @@ export function selectRoute(index: number, force = false): void {
   // 案内ボタンは画面の下に固定し、何を始めるのかを書く。
   const start = el("button", "primary start", `案内を始める（${formatMinutes(route.minutes)}・${shortLabel(route, a)}）`);
   start.type = "button";
-  start.addEventListener("click", () => startGuide(state.selected));
+  start.addEventListener("click", () => {
+    startGuide(state.selected);
+    // 押した「案内を始める」は案内の間は消える。焦点は案内の「終了」へ移す。
+    if (!$("guide").hidden) $("guide-stop").focus({ preventScroll: true });
+  });
   const send = el("button", "secondary send", "経路を送る");
   send.type = "button";
   send.setAttribute("aria-label", "選んだ経路を人に送る");
@@ -879,8 +901,15 @@ export function selectRoute(index: number, force = false): void {
     const text = `送られてきた経路です。経路${routeLetter(arrived.index)}（${formatMinutes(state.routes[arrived.index]?.minutes ?? 0)}）。`;
     notes.push(el("p", "shared-note", text + (arrived.exact ? "" : "出発地などが違うため、近い経路を出しています。")));
   }
+  // 経路の一覧の見出し。画面には出さず、案内を終えた後などの焦点の行き先にする。
+  const heading = el("h2", "sr-only", "経路の一覧");
+  heading.tabIndex = -1;
+  heading.dataset.resultHeading = "";
+  // 経路の行を押して一覧を描き直す時は、押した行（描き直した後の同じ行）に焦点を残す。
+  const keepRowFocus = sheet.contains(document.activeElement) && document.activeElement?.classList.contains("route-row");
   sheet.replaceChildren(
     ...(emergencyNode ? [emergencyNode] : []),
+    heading,
     ...notes,
     routeList(),
     el("p", "rec-meaning", `件数は、${countMeaning()}（歩行者・自転車が関わるもの）`),
@@ -889,6 +918,7 @@ export function selectRoute(index: number, force = false): void {
     startBar,
   );
   sheet.hidden = false;
+  if (keepRowFocus) sheet.querySelector<HTMLElement>(".routes [aria-current]")?.focus({ preventScroll: true });
   // 最短（先頭）の時は上端のまま。説明の行を半端に隠さない。
   if (index === 0) sheet.scrollTop = 0;
   else sheet.querySelector(".routes [aria-current]")?.scrollIntoView({ block: "nearest" });

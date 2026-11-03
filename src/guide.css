@@ -234,8 +234,10 @@ section#guide.guide[hidden] {
 }
 
 #guide .guide-actions {
-  flex: none;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
   gap: 6px;
+  max-width: 100%;
   margin-left: auto;
 }
 
@@ -334,8 +336,8 @@ body.guide-cooldown .start-bar {
 /* 緊急: 下の帯の小さなボタンと、押すと出る固定の枠。押しただけでは電話はかからない。 */
 #guide .guide-actions button.guide-emergency {
   padding: 0 10px;
-  border-color: #d93025;
-  color: #d93025;
+  border-color: var(--emg);
+  color: var(--emg);
   font-weight: 700;
 }
 

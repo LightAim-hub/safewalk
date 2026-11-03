@@ -147,7 +147,10 @@ function introKey(e: KeyboardEvent): void {
   if (e.key === "Escape") {
     e.preventDefault();
     writeSeen();
-    return closeIntro();
+    closeIntro();
+    // 開く前に焦点があった物が無い（起動直後）時は、検索欄へ。焦点が背景（body）に落ちたままにしない。
+    focusSearchAfterIntro();
+    return;
   }
   if (e.key !== "Tab") return;
   const list = [...intro.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((n) => n.offsetParent !== null);
@@ -162,6 +165,26 @@ function introKey(e: KeyboardEvent): void {
 /** クリックなどで説明の外にフォーカスが出たら、中へ戻す。 */
 function introFocus(e: FocusEvent): void {
   if (intro && e.target instanceof Node && !intro.contains(e.target)) (intro.querySelector<HTMLElement>("button.primary") ?? intro).focus();
+}
+
+/**
+ * 説明を Esc で閉じた後、焦点が背景（body）に落ちていたら検索欄へ移す。候補は開かない（search.ts の focusQuietly と同じ合図）。
+ * 読み込み中は画面が操作を受けない（inert）ので、使える状態になるまで待つ（その間に利用者が別の所へ移したら、何もしない）。
+ */
+function focusSearchAfterIntro(): void {
+  let tries = 0;
+  const attempt = (): void => {
+    if (document.activeElement && document.activeElement !== document.body) return;
+    const q = document.getElementById("q");
+    if (q && !q.closest("[inert]")) {
+      q.dataset.quiet = "1";
+      q.focus();
+      delete q.dataset.quiet;
+      return;
+    }
+    if (++tries < 240) window.setTimeout(attempt, 250);
+  };
+  attempt();
 }
 
 function closeIntro(): void {
