@@ -1,6 +1,6 @@
 import maplibregl, { type GeoJSONSource } from "maplibre-gl";
 import { metres, type LatLon } from "./graph";
-import { $, qInput, sheet, CURRENT, GENRES, GENRE_LIMIT, state, map, markers, toast, el, mapPadding } from "./app";
+import { $, qInput, sheet, CURRENT, GENRES, GENRE_LIMIT, state, map, markers, el, mapPadding } from "./app";
 import { places } from "./data";
 import { formatMetres } from "./directions";
 import { locateMe } from "./map-ui";
@@ -213,14 +213,27 @@ export function renderChips(): void {
   );
 }
 
-/** 国土地理院の住所検索。神戸市内の住所だけを採る。 */
-export async function searchAddress(query: string, limit = 4): Promise<Place[]> {
+/** 外部の検索を待つ長さ。これを過ぎたら手元の候補だけで続ける。 */
+export const EXTERNAL_TIMEOUT_MS = 2500;
+
+export interface Lookup {
+  places: Place[];
+  /** 時間切れ・通信の失敗で、外部の検索が使えなかった。 */
+  failed: boolean;
+}
+
+/** 国土地理院の住所検索。神戸市内の住所だけを採る。時間切れや失敗は failed で知らせる。 */
+export async function lookupAddress(
+  query: string,
+  limit = 4,
+  signal: AbortSignal = AbortSignal.timeout(EXTERNAL_TIMEOUT_MS),
+): Promise<Lookup> {
   const url = `https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(query)}`;
   try {
-    const rows: { geometry: { coordinates: [number, number] }; properties: { title: string } }[] = await fetch(url).then(
-      (r) => r.json(),
-    );
-    return rows
+    const res = await fetch(url, { signal });
+    if (!res.ok) return { places: [], failed: true };
+    const rows: { geometry: { coordinates: [number, number] }; properties: { title: string } }[] = await res.json();
+    const places = rows
       .filter((r) => r.properties.title.includes("神戸市"))
       .slice(0, limit)
       .map((r) => ({
@@ -229,38 +242,53 @@ export async function searchAddress(query: string, limit = 4): Promise<Place[]> 
         lon: r.geometry.coordinates[0],
         kind: "住所",
       }));
+    return { places, failed: false };
   } catch {
-    return [];
+    return { places: [], failed: true };
   }
 }
 
+export async function searchAddress(query: string, limit = 4): Promise<Place[]> {
+  return (await lookupAddress(query, limit)).places;
+}
 
 /**
  * 郵便番号から場所を探す。国土地理院の住所検索は郵便番号を引けないので、
  * 日本郵便の郵便番号データを返す zipcloud（https://zipcloud.ibsnet.co.jp/doc/api）で町名を調べ、
  * その町名を国土地理院の住所検索で位置にする。神戸市内の物だけを採る。
+ * 全体で EXTERNAL_TIMEOUT_MS を超えたら打ち切る。
  */
-export async function searchPostcode(code: string): Promise<Place[]> {
+export async function lookupPostcode(
+  code: string,
+  signal: AbortSignal = AbortSignal.timeout(EXTERNAL_TIMEOUT_MS),
+): Promise<Lookup> {
   try {
-    const found: { results: { address2: string; address3: string }[] | null } = await fetch(
-      `https://zipcloud.ibsnet.co.jp/api/search?zipcode=${code.replace("-", "")}`,
-    ).then((r) => r.json());
+    const res = await fetch(`https://zipcloud.ibsnet.co.jp/api/search?zipcode=${code.replace("-", "")}`, { signal });
+    if (!res.ok) return { places: [], failed: true };
+    const found: { results: { address2: string; address3: string }[] | null } = await res.json();
     const rows = (found.results ?? []).filter((r) => r.address2.startsWith("神戸市"));
+    let failed = false;
     const spots = await Promise.all(
       rows.slice(0, 3).map(async (r): Promise<Place | null> => {
         const town = /以下に掲載がない場合|一円/.test(r.address3) ? "" : r.address3.replace(/（.*$/, "");
         const text = `兵庫県${r.address2}${town}`;
-        const hits = (await searchAddress(text, 20)).filter((h) => h.name.includes(`${r.address2}${town}`));
+        const lookup = await lookupAddress(text, 20, signal);
+        failed ||= lookup.failed;
+        const hits = lookup.places.filter((h) => h.name.includes(`${r.address2}${town}`));
         if (!hits.length) return null;
         const lat = hits.reduce((s, h) => s + h.lat, 0) / hits.length;
         const lon = hits.reduce((s, h) => s + h.lon, 0) / hits.length;
         return { name: `〒${code} ${r.address2}${town}`, lat, lon, kind: "郵便番号", address: `兵庫県${r.address2}${town}` };
       }),
     );
-    return spots.filter((p): p is Place => p !== null);
+    return { places: spots.filter((p): p is Place => p !== null), failed };
   } catch {
-    return [];
+    return { places: [], failed: true };
   }
+}
+
+export async function searchPostcode(code: string): Promise<Place[]> {
+  return (await lookupPostcode(code)).places;
 }
 
 /** 入力欄に候補の一覧を付ける。Enter で候補を確定する。 */
@@ -281,10 +309,19 @@ export function bindSuggest(
   let active = -1;
   let token = 0;
   let timer = 0;
+  /** 外部の検索が使えなかった時の知らせ。 */
+  let unavailable = false;
+  /** 外部の検索の返事を待っている。 */
+  let pending = false;
+  let head: Place[] = [];
+  let local: Place[] = [];
 
   const close = () => {
     token++;
     list.hidden = true;
+    list.classList.remove("up");
+    list.style.removeProperty("top");
+    pending = false;
     active = -1;
   };
 
@@ -300,55 +337,125 @@ export function bindSuggest(
     onPick(place);
   };
 
-  const render = () => {
-    list.replaceChildren(
-      ...items.map((p, i) => {
-        const li = el("li");
-        const button = el("button");
-        button.type = "button";
-        button.setAttribute("aria-selected", String(i === active));
-        const hint = [p.kind, p.operator, p.ward].filter(Boolean).join("・");
-        button.append(el("span", "", p.name), el("span", "kind", hint));
-        button.addEventListener("mousedown", (e) => {
-          e.preventDefault();
-          choose(p);
-        });
-        li.append(button);
-        return li;
-      }),
-    );
-    if (!items.length && input.value.trim()) {
-      list.replaceChildren(el("li", "empty", "神戸市内で見つかりません（SafeWalk の検索は神戸市内のみです）"));
-      list.hidden = false;
+  /** 欄のすぐ下に出す。下に収まらず上に余裕がある時だけ、欄の上に出す。 */
+  const position = () => {
+    list.classList.remove("up");
+    list.style.removeProperty("--room");
+    list.style.removeProperty("top");
+    const vv = window.visualViewport;
+    const viewH = vv ? vv.height : window.innerHeight;
+    const top = vv ? vv.offsetTop : 0;
+    const box = field.getBoundingClientRect();
+    const need = Math.min(list.scrollHeight, window.innerHeight * 0.52) + 6;
+    // 下に出すと別の入力欄を覆う時は、その欄のさらに下まで下げる。
+    const others = [...document.querySelectorAll<HTMLInputElement>("input")]
+      .filter((o) => o !== input && o.offsetParent && !list.contains(o))
+      .map((o) => o.getBoundingClientRect())
+      .filter((r) => r.top >= box.bottom - 1 && r.right > box.left - 14 && r.left < box.right + 52);
+    let lowest = box.bottom;
+    for (let changed = true; changed; ) {
+      changed = false;
+      for (const r of others) {
+        if (r.top < lowest + 6 + need && r.bottom > lowest) {
+          lowest = r.bottom;
+          changed = true;
+        }
+      }
+    }
+    const below = top + viewH - lowest - 12;
+    const above = box.top - top - 12;
+    if (lowest === box.bottom && need > below && above > below && above >= 120) {
+      list.classList.add("up");
+      list.style.setProperty("--room", `${above}px`);
       return;
     }
-    list.hidden = items.length === 0;
+    if (lowest > box.bottom) list.style.top = `${lowest - box.top + 6}px`;
+    list.style.setProperty("--room", `${Math.max(below, 80)}px`);
   };
 
-  const refresh = async () => {
-    const mine = ++token;
+  /** 焦点が当たっている欄にだけ一覧を出す。 */
+  const focused = () => document.activeElement === input;
+
+  const render = () => {
+    if (!focused()) {
+      list.hidden = true;
+      return;
+    }
     const value = input.value.trim();
-    const local = searchPlaces(value);
-    const head: Place[] = offerCurrent && !value ? [{ name: CURRENT, lat: 0, lon: 0, kind: "位置情報" }] : [];
+    const rows = items.map((p, i) => {
+      const li = el("li");
+      const button = el("button");
+      button.type = "button";
+      button.setAttribute("aria-selected", String(i === active));
+      const hint = [p.kind, p.operator, p.ward].filter(Boolean).join("・");
+      button.append(el("span", "", p.name), el("span", "kind", hint));
+      button.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        choose(p);
+      });
+      li.append(button);
+      return li;
+    });
+    if (!items.length && value && pending) {
+      rows.push(el("li", "empty", "検索しています…"));
+    } else if (!items.length && value) {
+      // 見つからない知らせは、この一か所だけに出す（下の知らせには出さない）。
+      rows.push(
+        el(
+          "li",
+          "empty",
+          unavailable
+            ? "神戸市内の場所が見つかりません（住所検索は今使えませんでした。SafeWalk の検索は神戸市内のみです）"
+            : "神戸市内で見つかりません（SafeWalk の検索は神戸市内のみです）",
+        ),
+      );
+    } else if (unavailable && value) {
+      rows.push(el("li", "empty", "住所検索は今使えないため、手元の候補だけを出しています。"));
+    }
+    list.replaceChildren(...rows);
+    list.hidden = rows.length === 0;
+    if (!list.hidden) position();
+  };
+
+  /** 手元の候補だけを今すぐ並べる。 */
+  const refreshLocal = () => {
+    const value = input.value.trim();
+    local = searchPlaces(value);
+    head = offerCurrent && !value ? [{ name: CURRENT, lat: 0, lon: 0, kind: "位置情報" }] : [];
     if (!value) head.push(...recentPlaces().map((p) => ({ ...p, kind: "最近" })));
     if (offerGenres) {
       head.push(...matchGenres(value).map((genre) => ({ name: `${genre.label}を探す`, lat: 0, lon: 0, kind: "ジャンル", genre })));
     }
     items = [...head, ...local];
     active = -1;
+    unavailable = false;
+    pending = value.length >= 2;
     render();
+  };
+
+  /** 外部の検索を足す。時間切れ・失敗の時は手元の候補のまま、使えなかったことを出す。 */
+  const refreshExternal = async (mine: number) => {
+    const value = input.value.trim();
     if (value.length < 2) return;
     const code = postcodeOf(value);
-    const found = code ? await searchPostcode(code) : await searchAddress(value);
+    const lookup = code ? await lookupPostcode(code) : await lookupAddress(value);
     if (mine !== token) return;
+    pending = false;
     // 施設名で引いた住所検索の結果が、すでに出ている場所と同じ物なら省く（「王子動物園」が二重に出る）。
     const names = local.map((p) => normalize(p.name));
-    const addresses = found.filter((a) => {
+    const addresses = lookup.places.filter((a) => {
       const n = normalize(a.name);
       return !names.some((x) => n.includes(x) || x.includes(n));
     });
     items = [...head, ...local, ...addresses].slice(0, 9);
+    unavailable = lookup.failed;
     render();
+  };
+
+  const refresh = async () => {
+    const mine = ++token;
+    refreshLocal();
+    await refreshExternal(mine);
   };
 
   input.addEventListener("input", () => {
@@ -360,19 +467,33 @@ export function bindSuggest(
     input.select();
     refresh();
   });
-  input.addEventListener("blur", close);
+  input.addEventListener("blur", () => {
+    clearTimeout(timer);
+    close();
+  });
   const submit = async () => {
     clearTimeout(timer);
-    if (active < 0) await refresh();
+    // 何も打っていない時は何もしない。
+    if (!input.value.trim()) return;
+    if (active < 0) {
+      // 手元に候補があれば、外部の返事を待たずに先頭で確定する。無い時だけ外部を（時間切れまで）待つ。
+      const mine = ++token;
+      refreshLocal();
+      if (!items.length) await refreshExternal(mine);
+    }
+    // 見つからない時の知らせは、一覧の中に出ている。
     const pick = items[Math.max(active, 0)];
     if (pick) await choose(pick);
-    else toast(`「${input.value.trim()}」を神戸市内で見つけられませんでした。`);
   };
 
   input.addEventListener("keydown", (e) => {
     // 日本語入力の変換を確定する Enter は、検索の確定にしない。
     if (e.isComposing || e.keyCode === 229) return;
-    if (e.key === "Escape") return close();
+    if (e.key === "Escape") {
+      // ブラウザ標準の「Esc で入力を全部消す」を止め、一覧だけ閉じる。
+      e.preventDefault();
+      return close();
+    }
     if (e.key === "Enter") {
       e.preventDefault();
       submit();

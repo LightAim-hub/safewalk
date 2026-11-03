@@ -7,3 +7,21 @@
 .suggest li button .kind {
   line-height: 1.3;
 }
+
+/* ブラウザ標準の検索欄の × は消す（自前の × を使う）。 */
+#q::-webkit-search-cancel-button,
+#q::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}
+
+/* 候補一覧は欄のすぐ下。下に収まらない時だけ欄の上に出し、画面からはみ出さない高さにする。 */
+.field .suggest {
+  max-height: min(52dvh, var(--room, 52dvh));
+}
+
+.field .suggest.up {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
