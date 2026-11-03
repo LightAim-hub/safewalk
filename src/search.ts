@@ -1,4 +1,5 @@
-import maplibregl, { type GeoJSONSource } from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
+import { type GeoJSONSource } from "maplibre-gl";
 import { metres, type LatLon } from "./graph";
 import { $, qInput, sheet, CURRENT, GENRES, GENRE_LIMIT, state, map, markers, el, mapPadding } from "./app";
 import { places } from "./data";

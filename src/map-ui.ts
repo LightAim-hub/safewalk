@@ -1,5 +1,5 @@
-import type maplibregl from "maplibre-gl";
-import { type ExpressionSpecification, type GeoJSONSource } from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
+import { type DataDrivenPropertyValueSpecification, type ExpressionSpecification, type GeoJSONSource } from "maplibre-gl";
 import { type LatLon } from "./graph";
 import { $, qInput, sheet, COLORS, CURRENT, state, map, markers, mapPadding } from "./app";
 import { DATA_URL, emptyCollection, snap } from "./data";
@@ -143,7 +143,7 @@ export function quietBuildings(): void {
   if (!layer || layer.type !== "fill-extrusion") return;
   for (const prop of ["fill-extrusion-height", "fill-extrusion-base"] as const) {
     const value = layer.paint?.[prop];
-    if (value) map.setPaintProperty("building-3d", prop, withNumberDefault(value, { render_height: 0, render_min_height: 0 }));
+    if (value) map.setPaintProperty("building-3d", prop, withNumberDefault(value, { render_height: 0, render_min_height: 0 }) as DataDrivenPropertyValueSpecification<number>);
   }
 }
 
