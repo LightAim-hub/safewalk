@@ -192,6 +192,23 @@ for (let i = 0; pairs.length < PAIRS && i < PAIRS * 20; i++) {
 }
 if (pairs.length < PAIRS) console.error(`注意: 組が ${pairs.length} しか作れませんでした(目標 ${PAIRS})`);
 
+// 組は道のデータに合わせて選ぶので、データを作り直すと組がずれて前回と比べられなくなる。
+// 記録(baseline)が同じ種・組数で作られていれば、その組の地点をそのまま使う。作り直す時は --regen-pairs。
+if (!args["regen-pairs"] && fs.existsSync(BASELINE)) {
+  const prev = JSON.parse(fs.readFileSync(BASELINE, "utf8"));
+  if (prev.seed === SEED && prev.pairs === PAIRS) {
+    const fixed = [];
+    for (const [k, v] of Object.entries(prev.cases ?? {})) {
+      const m = /^([\d.]+),([\d.]+)>([\d.]+),([\d.]+)\|day$/.exec(k);
+      if (!m) continue;
+      const from = { name: "", kind: "", lat: Number(m[1]), lon: Number(m[2]) };
+      const to = { name: "", kind: "", lat: Number(m[3]), lon: Number(m[4]) };
+      fixed.push({ type: v.t, from, to, straight: M.metres(from, to) });
+    }
+    if (fixed.length) pairs.splice(0, pairs.length, ...fixed);
+  }
+}
+
 // ---------------------------------------------------------------- 1組の検査
 const f5 = (v) => v.toFixed(5);
 const urlOf = (c) => `${SITE}?from=${f5(c.from.lat)},${f5(c.from.lon)}&to=${f5(c.to.lat)},${f5(c.to.lon)}&period=${c.period}`;

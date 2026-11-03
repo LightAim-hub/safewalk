@@ -70,7 +70,7 @@ def norm_town(text: str) -> str:
 
 def load_hittakuri():
     counts = defaultdict(int)
-    for f in sorted(glob.glob(str(RAW / "hittakuri" / "hyogo_*hittakuri.csv"))):
+    for f in sorted((glob.glob(str(RAW / "hittakuri" / "hyogo_*hittakuri.csv")) or glob.glob(str(RAW / "1_crime" / "hyogo_police_theft" / "hyogo_*hittakuri.csv")))):
         enc = "utf-8-sig" if "2024" in f else "cp932"
         with open(f, encoding=enc, newline="") as fh:
             rows = list(csv.reader(fh))[1:]
@@ -84,7 +84,7 @@ def load_hittakuri():
 def town_polygons():
     polys = defaultdict(list)
     for w in WARDS:
-        r = shapefile.Reader(str(RAW / "estat" / w / f"r2ka{w}.shp"), encoding="cp932")
+        r = shapefile.Reader(str(estat_shp(w)), encoding="cp932")
         for rec, sh in zip(r.iterRecords(), r.iterShapes()):
             polys[(rec["CITY_NAME"], norm_town(rec["S_NAME"]))].append(shape(sh.__geo_interface__))
     return polys
@@ -92,6 +92,14 @@ def town_polygons():
 
 # ひったくりの注意を出す町丁目の下限（8年合計）。src/safety.ts はこの一覧にある町を通る時だけ注意を出す。
 TOWN_MIN = 2
+
+
+def estat_shp(w):
+    """町丁目の境界。README の置き方(estat/<区>/)と、取得時のフォルダ(3_area/estat_2020/shp_<区>/)のどちらでも読む。"""
+    for p in (RAW / "estat" / w / f"r2ka{w}.shp", RAW / "3_area" / "estat_2020" / f"shp_{w}" / f"r2ka{w}.shp"):
+        if p.exists():
+            return p
+    raise FileNotFoundError(f"r2ka{w}.shp が data/raw/stats にありません")
 
 
 def towns():

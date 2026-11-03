@@ -5,13 +5,13 @@
     34.95,
     135.38
   ],
-  "nodes": 142241,
-  "edges": 200121,
-  "km": 11955,
-  "innerKm": 7167,
+  "nodes": 153275,
+  "edges": 218294,
+  "km": 13268,
+  "innerKm": 7732,
   "idsFile": "graph.ids.bin",
-  "remoteKm": 2293,
-  "riskPerKmDay": 12.9856,
-  "riskPerKmNight": 8.6587,
+  "remoteKm": 2668,
+  "riskPerKmDay": 12.9948,
+  "riskPerKmNight": 8.7119,
   "nightExtra": 1
 }
