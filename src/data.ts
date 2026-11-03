@@ -4,6 +4,9 @@ import { MAX_SNAP_M } from "./app";
 import { normalize } from "./search";
 import { type PlaceRow, type IndexedPlace } from "./types";
 
+/** データの置き場所。サブパス（GitHub Pages の /safewalk/）でも動くよう、ページの位置から求める。 */
+export const DATA_URL = new URL("data/", document.baseURI).href;
+
 export let graph: Graph;
 export let accidents: AccidentIndex;
 export let meta: Meta;
@@ -13,12 +16,12 @@ export let kobeRings: [number, number][][] = [];
 
 export async function loadData(): Promise<void> {
   const [bin, acc, m, rows, roadNames, kobe] = await Promise.all([
-    fetch("/data/graph.bin").then((r) => r.arrayBuffer()),
-    fetch("/data/accidents.json").then((r) => r.json() as Promise<Accidents>),
-    fetch("/data/graph.meta.json").then((r) => r.json() as Promise<Meta>),
-    fetch("/data/places.json").then((r) => r.json() as Promise<PlaceRow[]>),
-    fetch("/data/names.json").then((r) => r.json() as Promise<string[]>),
-    fetch("/data/kobe.geojson").then((r) => r.json() as Promise<GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>>),
+    fetch(DATA_URL + "graph.bin").then((r) => r.arrayBuffer()),
+    fetch(DATA_URL + "accidents.json").then((r) => r.json() as Promise<Accidents>),
+    fetch(DATA_URL + "graph.meta.json").then((r) => r.json() as Promise<Meta>),
+    fetch(DATA_URL + "places.json").then((r) => r.json() as Promise<PlaceRow[]>),
+    fetch(DATA_URL + "names.json").then((r) => r.json() as Promise<string[]>),
+    fetch(DATA_URL + "kobe.geojson").then((r) => r.json() as Promise<GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>>),
   ]);
   const shape = kobe.geometry;
   kobeRings = (shape.type === "Polygon" ? [shape.coordinates] : shape.coordinates).flat() as [number, number][][];

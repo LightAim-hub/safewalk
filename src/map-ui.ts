@@ -1,7 +1,7 @@
 import { type ExpressionSpecification, type GeoJSONSource } from "maplibre-gl";
 import { type LatLon } from "./graph";
 import { $, qInput, sheet, COLORS, CURRENT, state, map, markers, toast, mapPadding } from "./app";
-import { emptyCollection, snap } from "./data";
+import { DATA_URL, emptyCollection, snap } from "./data";
 import { addStop, selectRoute } from "./directions";
 import { matchPlace, onMapPick, closePlace, showPlace } from "./place";
 import { lastResults } from "./search";
@@ -62,7 +62,7 @@ export function addLayers(): void {
   useJapaneseLabels();
   showMorePois();
   addBaseLayers();
-  map.addSource("kobe", { type: "geojson", data: "/data/kobe.geojson" });
+  map.addSource("kobe", { type: "geojson", data: DATA_URL + "kobe.geojson" });
   map.addSource("results", { type: "geojson", data: emptyCollection() });
   map.addSource("accuracy", { type: "geojson", data: emptyCollection() });
   map.addSource("accidents", { type: "geojson", data: emptyCollection() });
