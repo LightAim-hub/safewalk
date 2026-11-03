@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>交通事故の記録の目安について - SafeWalk</title>
+  <meta name="description" content="SafeWalk が経路に出す「交通事故の記録」の段階と注意書きが、何のデータから、どう計算されているか。" />
+  <style>
+    :root {
+      --ink: #202124;
+      --sub: #5f6368;
+      --line: #e3e5e8;
+      --paper: #ffffff;
+      --wash: #f1f3f4;
+      --blue: #1a73e8;
+      --note: #fef7e0;
+      --note-ink: #7a4f01;
+      font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", system-ui, sans-serif;
+      color: var(--ink);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--wash); line-height: 1.7; font-size: 15px; }
+    header { background: var(--paper); border-bottom: 1px solid var(--line); }
+    .bar, main { max-width: 720px; margin: 0 auto; padding: 0 16px; }
+    .bar { display: flex; align-items: center; min-height: 52px; }
+    .bar a { color: var(--blue); text-decoration: none; font-weight: 600; }
+    main { padding-top: 16px; padding-bottom: 48px; }
+    h1 { margin: 8px 0 4px; font-size: 22px; line-height: 1.4; }
+    h2 { margin: 0 0 8px; font-size: 17px; }
+    h3 { margin: 12px 0 4px; font-size: 15px; }
+    section { margin: 14px 0; padding: 14px 16px; border-radius: 12px; background: var(--paper); box-shadow: 0 1px 3px rgb(60 64 67 / 20%); }
+    p { margin: 6px 0; }
+    ul { margin: 6px 0; padding-left: 1.3em; }
+    li { margin: 3px 0; }
+    .lead { color: var(--sub); }
+    .note { padding: 10px 12px; border-radius: 8px; background: var(--note); color: var(--note-ink); }
+    table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 14px; }
+    th, td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--sub); font-weight: 600; }
+    td.num { font-variant-numeric: tabular-nums; }
+    @media (max-width: 520px) { table { font-size: 12.5px; } th, td { padding: 6px 4px; } }
+    a { color: var(--blue); }
+    @media (prefers-color-scheme: dark) {
+      :root { --ink: #e8eaed; --sub: #9aa0a6; --line: #3c4043; --paper: #202124; --wash: #121212; --blue: #8ab4f8; --note: #3b3321; --note-ink: #f1d9a0; }
+    }
+  </style>
+</head>
+<body>
+  <header><div class="bar"><a href="./">← 地図にもどる</a></div></header>
+  <main>
+    <h1>交通事故の記録の目安について</h1>
+    <p class="lead">経路に出している「交通事故の記録」の段階と注意書きは、何のデータを、どう数えたものか。SafeWalk の考え方を書きます。</p>
+    <p class="note">交通事故の記録に基づく目安です。安全を保証しません。数字は点数や割合（%）にせず、段階と理由の言葉で出しています。</p>
+
+    <section>
+      <h2>何を見ているか</h2>
+      <p>経路ごとに、次の2つを別々に出します。1つの総合点にはしません。</p>
+      <ul>
+        <li><b>交通事故の記録</b>: 経路の近くで、歩行者や自転車が関わった事故がどれくらい記録されているか。「注意が要る」「ふつう」「比較的記録が少ない」の3段階です。</li>
+        <li><b>夜の歩きやすさ</b>（夜を選んだ時だけ）: 人家から離れた区間の長さと、深夜も開いている店の数。言葉で出します。</li>
+      </ul>
+      <p>経路を探す時の重み（遠回りしてでも記録の少ない道を選ぶ度合い）は、段階の表示とは別です。夜でも、最初に選ばれるのは最短の経路です。</p>
+    </section>
+
+    <section>
+      <h2>どう計算しているか</h2>
+      <h3>交通事故の記録の段階</h3>
+      <ol>
+        <li>経路から30m以内にある、歩行者または自転車が関わった事故の記録を数えます。夜を選んだ時は、夜間の記録だけを数えます。</li>
+        <li>それを経路の長さ（km）で割って、1kmあたりの件数にします。</li>
+        <li>神戸市の人家のある道を1km四方に区切り、それぞれを歩いた時の1kmあたりの件数を並べて、上位2割と下位2割の境目を決めます。経路の件数がその境目と比べてどこにあるかで、段階を決めます。</li>
+      </ol>
+      <table>
+        <thead><tr><th></th><th>注意が要る</th><th>ふつう</th><th>比較的記録が少ない</th></tr></thead>
+        <tbody>
+          <tr><th>昼（全時間帯の記録）</th><td class="num">2.8件以上</td><td class="num">0.38件超〜2.8件未満</td><td class="num">0.38件以下</td></tr>
+          <tr><th>夜（夜間の記録）</th><td class="num">0.75件以上</td><td class="num">0.08件超〜0.75件未満</td><td class="num">0.08件以下</td></tr>
+        </tbody>
+      </table>
+      <p>単位はすべて「1kmあたりの件数」です。境目の数字は、神戸市の分布から決めた値です（昼は476区画・5,792km分の道と8,914件、夜は同じ区画と2,474件から）。この境目を、他の都市や別の期間に当てはめることはできません。</p>
+      <h3>段階を出さずに「不明」とする場合</h3>
+      <ul>
+        <li>人家から離れた区間と神戸市の外の区間の合計が、経路の10%を超える、または1.0km以上ある時。人家から離れた道は、事故が起きるほどの交通が少ないだけで、記録が少ないことが良い道を意味しないためです。</li>
+        <li>経路が300mより短い時（記録が少なすぎて比べられないため）。</li>
+      </ul>
+      <p>不明の時は、理由を距離つきで示します（例: 人家から離れた区間 2.0km）。</p>
+      <h3>夜の歩きやすさ</h3>
+      <ul>
+        <li>人家から離れた区間: 周囲約100mに建物が無い道が、道の半分を超える区間の長さ。100m未満は言いません。</li>
+        <li>深夜も開いている店: 経路から100m以内で、営業時間の記録が水曜と土曜の午前1時に開いていることになっている店の数。営業時間が記録されていない店は数えていないため、実際より少なく出ます。</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>注意書き</h2>
+      <p>経路を選ぶ時に、過去の記録の種類ごとに注意書きを最大3つ出します（件数の多い順）。</p>
+      <ul>
+        <li>自転車との事故、歩行者の事故: 経路から50m以内に、2020〜2025年の記録が3件以上ある時。夜を選んだ時は、夜間の記録が3件以上あればそれを使います。</li>
+        <li>ひったくり: 経路が通る町丁目に、2018〜2025年の記録がある時。町丁目ごとの件数（神戸市内で119町丁目・合計129件）で、道の上の位置までは分かりません。</li>
+      </ul>
+      <h3>歩いている間の知らせ</h3>
+      <p>案内中に、経路の近くにある事故の記録の集まり（50m以内に同じ種類の事故が5件以上。夜は夜間の記録で数える）に80m以内まで近づいた時、またはひったくりの記録がある町丁目に入った時に、画面に数秒出し、音声案内がオンなら読み上げます。同じ地点・地区では1回だけです。どの知らせも前の知らせから3分、同じ種類の知らせは12分空けます。</p>
+    </section>
+
+    <section>
+      <h2>入っていない物</h2>
+      <ul>
+        <li>暴行・痴漢・声かけなど、ひったくり以外の犯罪。</li>
+        <li>街灯の明るさ、防犯カメラの位置。</li>
+        <li>人通り、混雑の度合い。</li>
+        <li>犯罪は、段階の計算に入れていません。ひったくりは、注意書きと知らせの言葉にだけ使っています。</li>
+      </ul>
+      <p class="note">犯罪の記録は、届け出のあった件数が町丁目の単位でしか分からず、道ごとの精度を確かめられません。そのため、犯罪の側の目安が正しいかどうかは、検証できていません。</p>
+      <p>事故の記録が少ない道は、そこを通る人や車が少ないだけの場合もあります。警察に記録された事故だけが対象で、記録されなかった事故は入っていません。</p>
+    </section>
+
+    <section>
+      <h2>期間と単位</h2>
+      <table>
+        <tbody>
+          <tr><th>交通事故</th><td>2020〜2025年（6年）。神戸市内。位置が記録されている物。1件ずつの点。</td></tr>
+          <tr><th>ひったくり</th><td>2018〜2025年（8年）。町丁目ごとの件数。1件ごとの日時や被害者の情報は使っていません。</td></tr>
+          <tr><th>深夜営業の店</th><td>OpenStreetMap にある営業時間の記録の時点。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>出典</h2>
+      <ul>
+        <li>交通事故: 警察庁「交通事故統計情報のオープンデータ」（本票 2020〜2025年）を神戸市内で抜き出して加工</li>
+        <li>ひったくり: 兵庫県警察の犯罪発生状況（2018〜2025年）、兵庫県オープンデータカタログ、<a href="https://creativecommons.org/licenses/by/2.1/jp/deed.ja" rel="noopener">CC BY 2.1 JP</a>。町丁目ごとの件数に加工して利用しており、兵庫県が作成した物ではありません</li>
+        <li>町丁目の境界: 総務省統計局 e-Stat 2020年国勢調査 小地域（町丁・字等）境界を加工</li>
+        <li>深夜営業の店・道: OpenStreetMap の営業時間の記録（© OpenStreetMap contributors）</li>
+      </ul>
+      <p>個人を特定できる情報は使っていません。</p>
+    </section>
+  </main>
+</body>
+</html>

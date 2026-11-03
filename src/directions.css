@@ -144,3 +144,89 @@
     max-height: var(--sheet-h, 36dvh);
   }
 }
+
+/* 交通事故の記録の段階(% は使わない) */
+.routes .tier {
+  grid-row: 1 / 3;
+  grid-column: 2;
+  align-self: center;
+  max-width: 9em;
+  text-align: right;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.routes .tier small {
+  display: block;
+  color: var(--sub);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.tier-attention {
+  color: var(--mid);
+}
+
+.tier-low {
+  color: var(--good);
+}
+
+.tier-normal,
+.tier-unknown {
+  color: var(--ink);
+}
+
+.routes .reason {
+  grid-column: 1 / -1;
+  color: var(--sub);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.safety-note a {
+  color: var(--blue);
+  white-space: nowrap;
+}
+
+/* 選んだ経路の注意書きと夜の歩きやすさ */
+.safety-detail {
+  margin-top: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.safety-detail h3 {
+  margin: 10px 0 4px;
+  font-size: 13px;
+}
+
+.safety-detail ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.safety-detail li {
+  margin: 4px 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--wash);
+}
+
+.safety-detail .caution {
+  background: #fef7e0;
+  color: #7a4f01;
+}
+
+/* 歩いている間の知らせ */
+.guide-notice {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fef7e0;
+  color: #7a4f01;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+}

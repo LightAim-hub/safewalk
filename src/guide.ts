@@ -1,7 +1,8 @@
 import { metres, type LatLon } from "./graph";
 import { minutesFor, type Route } from "./routes";
 import { $, CURRENT, state, map, markers, toast, el } from "./app";
-import { snap } from "./data";
+import { snap, safety } from "./data";
+import { assess, newGuideState, nextNotice, type GuideState, type RouteAlert } from "./safety";
 import { setEnd, renderStops, selectRoute, formatMetres } from "./directions";
 import { showAccuracy } from "./map-ui";
 
@@ -22,9 +23,17 @@ export let lastFixAt = 0;
 export let staleTimer = 0;
 export let lost = false;
 
-export function speak(text: string): void {
+/** 案内中の知らせ(記録のある地点・地区に近づいた時)。画面に出す秒数。 */
+export const NOTICE_SHOW_MS = 8000;
+let guideState: GuideState = newGuideState();
+let noticeRoute: Route | null = null;
+let noticeAlerts: RouteAlert[] = [];
+let noticeTimer = 0;
+
+export function speak(text: string, queue = false): void {
   if (!voiceOn || !("speechSynthesis" in window)) return;
-  speechSynthesis.cancel();
+  // 曲がり角の案内を切らないよう、知らせは読み上げ中なら後ろに並べる。
+  if (!queue) speechSynthesis.cancel();
   const line = new SpeechSynthesisUtterance(text);
   line.lang = "ja-JP";
   speechSynthesis.speak(line);
@@ -206,6 +215,22 @@ export function setLost(on: boolean, reason = ""): void {
   if (on && !wasLost) speak("位置を取得できていません");
 }
 
+/** 位置が更新されるたびに、記録のある地点・地区に近づいていないか見る。文が返ったら数秒だけ出し、読み上げる。 */
+export function checkNotice(p: LatLon, route: Route): void {
+  if (noticeRoute !== route) {
+    noticeRoute = route;
+    noticeAlerts = assess(safety, route, state.period).alerts;
+  }
+  const text = nextNotice(safety, noticeAlerts, guideState, p, Date.now());
+  if (!text) return;
+  const box = $("guide-notice");
+  box.textContent = text;
+  box.hidden = false;
+  window.clearTimeout(noticeTimer);
+  noticeTimer = window.setTimeout(() => (box.hidden = true), NOTICE_SHOW_MS);
+  speak(text, true);
+}
+
 export function updateGuide(p: LatLon, accuracy?: number): void {
   lastFixAt = Date.now();
   setLost(false);
@@ -235,6 +260,7 @@ export function updateGuide(p: LatLon, accuracy?: number): void {
       speak(`まもなく、${next.text.replace(/（.*）/, "")}`);
     }
   }
+  checkNotice(p, route);
   showTurn(next ? arrowFor(next.text) : "↑", next ? (metresToNext < 15 ? "まもなく" : `${formatMetres(metresToNext)}先`) : "");
   $("guide-next").textContent = next ? next.text : "このまま目的地へ進む";
   $("guide-then").textContent = next && then ? `そのあと ${formatMetres(next.metres)}進んで ${arrowFor(then.text)} ${then.text.replace(/（.*）/, "")}` : "";
@@ -265,6 +291,9 @@ export function startGuide(index: number): void {
   }, 3000);
   announced = "";
   guideProgress = 0;
+  guideState = newGuideState();
+  noticeRoute = null;
+  $("guide-notice").hidden = true;
   watchId = navigator.geolocation.watchPosition(
     ({ coords }) => {
       updateGuide({ lat: coords.latitude, lon: coords.longitude }, coords.accuracy);
@@ -289,6 +318,8 @@ export function stopGuide(): void {
   if (watchId !== null) navigator.geolocation.clearWatch(watchId);
   watchId = null;
   window.clearInterval(staleTimer);
+  window.clearTimeout(noticeTimer);
+  $("guide-notice").hidden = true;
   setLost(false);
   document.body.classList.remove("guiding");
   $("guide").hidden = true;
@@ -318,7 +349,11 @@ export function buildGuideParts(): void {
   warn.id = "guide-warn";
   warn.hidden = true;
   warn.setAttribute("role", "alert");
-  card.prepend(warn, main);
+  const notice = el("p", "guide-notice");
+  notice.id = "guide-notice";
+  notice.hidden = true;
+  notice.setAttribute("role", "status");
+  card.prepend(warn, notice, main);
 }
 
 export function bindGuideUi(): void {
