@@ -79,7 +79,10 @@ export type Cautions = {
 
 export async function loadCautions(): Promise<Cautions> {
   // サブパス(GitHub Pages の /safewalk/)でも動くよう、ページの位置から求める。
-  return fetch(new URL("data/cautions.json", document.baseURI).href).then((r) => r.json() as Promise<Cautions>);
+  return fetch(new URL("data/cautions.json", document.baseURI).href).then((r) => {
+    if (!r.ok) throw new Error(`cautions.json: ${r.status}`);
+    return r.json() as Promise<Cautions>;
+  });
 }
 
 // ---------------------------------------------------------------- 索引

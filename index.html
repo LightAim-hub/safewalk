@@ -64,6 +64,10 @@
       <button id="reload" type="button" class="primary">再読み込み</button>
     </div>
     <p id="loading" class="toast" role="status">地図を読み込んでいます…</p>
+    <div id="load-slow" class="card load-error" hidden>
+      <p>はじめての読み込みは、地図と道のデータで約7MBあります。電波の良い所では早くなります。</p>
+      <button id="load-slow-reload" type="button" class="secondary">読み込み直す</button>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

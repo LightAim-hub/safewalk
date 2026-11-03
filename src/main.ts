@@ -27,8 +27,9 @@ const locateButton = $<HTMLButtonElement>("locate");
 ui.inert = true;
 locateButton.disabled = true;
 renderPeriod();
-// 地図の配信元が落ちても、読み込み中のまま固まらないよう、エラーと時間切れで失敗の画面に切り替える。
-const LOAD_LIMIT_MS = 15000;
+// 地図の配信元が落ちた時は失敗の画面に切り替える。遅いだけの時は失敗にせず、待っていることを伝えて待ち続ける
+// （遅い回線ではデータが 15 秒に収まらない。時間で切ると永久に使えなくなる）。
+const SLOW_MS = 15000;
 const mapReady = new Promise<void>((resolve, reject) => {
   map.on("load", () => resolve());
   map.on("error", (e) => {
@@ -36,10 +37,16 @@ const mapReady = new Promise<void>((resolve, reject) => {
     // タイルの失敗には sourceId が付く。それは様式の失敗として扱わない。
     if (!("sourceId" in e && e.sourceId) && !map.isStyleLoaded()) reject(e.error ?? new Error("地図を読み込めません"));
   });
-  setTimeout(() => reject(new Error("地図の読み込みに時間がかかっています")), LOAD_LIMIT_MS);
 });
+const slowTimer = setTimeout(() => {
+  $("loading").textContent = "通信に時間がかかっています。読み込みを続けています…";
+  $("load-slow").hidden = false;
+}, SLOW_MS);
+$("load-slow-reload").addEventListener("click", () => location.reload());
 Promise.all([loadData(), mapReady]).then(
   () => {
+    clearTimeout(slowTimer);
+    $("load-slow").hidden = true;
     try {
       addLayers();
       ui.inert = false;
@@ -68,6 +75,8 @@ function showLoadError(err: unknown): void {
   console.error(err);
   if (loadFailed) return;
   loadFailed = true;
+  clearTimeout(slowTimer);
+  $("load-slow").hidden = true;
   $("loading").hidden = true;
   $("load-error").hidden = false;
   $("reload").addEventListener("click", () => location.reload());

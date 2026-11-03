@@ -105,6 +105,8 @@ let compassGeneration = 0;
 
 export function watchCompass(): void {
   const generation = ++compassGeneration;
+  // 方位の仕組みが無い端末（一部の PC・古いブラウザ）では、方位なしで案内する。
+  if (typeof DeviceOrientationEvent === "undefined") return;
   const asking = DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> };
   const start = () => {
     // 許可を待つ間に案内を終えた・やり直した時は、古い問い合わせの結果で監視を登録しない。
@@ -624,8 +626,12 @@ export function bindGuideUi(): void {
   onVoiceChange(showVoiceName);
   void loadVoices();
   $("guide-stop").textContent = "終了";
-  $("guide-stop").setAttribute("aria-label", "案内を終わる");
+  // 見える文字と読み上げの名前をそろえる（音声操作で「終了」と言えば押せる）。
+  $("guide-stop").removeAttribute("aria-label");
+  $("guide-stop").title = "案内を終わる";
   $("guide-stop").addEventListener("click", finishGuide);
+  // 声を出せない端末では、効かない「音声 オン」を出さない。
+  if (!("speechSynthesis" in window)) $("guide-voice").hidden = true;
   $("guide-voice").addEventListener("click", () => {
     voiceOn = !voiceOn;
     $("guide-voice").setAttribute("aria-pressed", String(voiceOn));

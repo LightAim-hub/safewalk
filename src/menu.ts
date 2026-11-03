@@ -99,7 +99,13 @@ export function closeMenu(): void {
 
 function refreshVoice(): void {
   const on = voiceOn;
-  const button = $("menu-voice");
+  const button = $<HTMLButtonElement>("menu-voice");
+  if (!("speechSynthesis" in window)) {
+    button.textContent = "音声案内（この端末では使えません）";
+    button.disabled = true;
+    $("menu-voice-name").textContent = "";
+    return;
+  }
   button.textContent = on ? "音声案内 オン" : "音声案内 オフ";
   button.setAttribute("aria-pressed", String(on));
   const name = chosenVoiceName();
