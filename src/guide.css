@@ -1,0 +1,316 @@
+/*
+ * 歩きながらの案内の画面。地図を広く見せるため、案内は
+ *   縦向き・PC : 上に小さな枠(矢印・次の曲がり角までの距離・短い文)、下に細い帯(残り・終了・音声)
+ *   横向きの低い画面 : 左端の細い帯(同じ中身を縦に並べる)
+ * にする。知らせ(記録のある地点・経路から外れた・位置が取れない・電池)は、上の枠のすぐ下に縦に並べる。
+ * 構造は guide.ts の buildGuideParts が作る。directions.css・style.css にある同名の古い指定より、ここを優先する。
+ */
+
+:root {
+  --alert-notice-bg: #fef7e0;
+  --alert-notice-ink: #6b4400;
+  --alert-notice-mark: #e37400;
+  --alert-off-bg: #fce8e6;
+  --alert-off-ink: #a50e0e;
+  --alert-off-mark: #d93025;
+  --alert-gps-bg: #f3e8fd;
+  --alert-gps-ink: #5a2a82;
+  --alert-gps-mark: #8430ce;
+  --alert-info-bg: #e8f0fe;
+  --alert-info-ink: #174ea6;
+  --alert-info-mark: #1a73e8;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --alert-notice-bg: #4a3b12;
+    --alert-notice-ink: #fde293;
+    --alert-notice-mark: #f9ab00;
+    --alert-off-bg: #4d2321;
+    --alert-off-ink: #f6aea9;
+    --alert-off-mark: #f28b82;
+    --alert-gps-bg: #3d2a52;
+    --alert-gps-ink: #e1c9f7;
+    --alert-gps-mark: #c58af9;
+    --alert-info-bg: #1f3350;
+    --alert-info-ink: #aecbfa;
+    --alert-info-mark: #8ab4f8;
+  }
+}
+
+/* 枠そのものは見えない入れ物。中の部品だけが押せる(地図の操作を邪魔しない)。 */
+section#guide.guide {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  transform: none;
+  pointer-events: none;
+}
+
+section#guide.guide[hidden] {
+  display: none;
+}
+
+#guide > * {
+  width: 100%;
+  max-width: 440px;
+}
+
+/* 上の小さな枠 */
+#guide .guide-main {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px 8px 8px;
+}
+
+#guide .guide-arrow {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  font-size: 30px;
+}
+
+#guide .guide-col {
+  flex: 1;
+}
+
+#guide .guide-dist {
+  font-size: 1.375rem;
+  line-height: 1.15;
+}
+
+#guide .guide-col .next {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  line-height: 1.3;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* 縦向きの小さな画面では、枠を 1〜2 行に抑えるため「そのあと」は出さない。 */
+#guide .guide-then {
+  margin: 2px 0 0;
+  overflow: hidden;
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) and (orientation: portrait) {
+  #guide .guide-then {
+    display: none;
+  }
+}
+
+#guide.lost .guide-main {
+  opacity: 0.8;
+}
+
+/* 知らせ: 枠のすぐ下。種類ごとに色と記号を変える。 */
+#guide .guide-alerts {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#guide .guide-alert {
+  position: relative;
+  margin: 0;
+  padding: 7px 10px 7px 36px;
+  border-radius: 8px;
+  background: var(--alert-bg);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 25%);
+  color: var(--alert-ink);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.45;
+  pointer-events: auto;
+}
+
+#guide .guide-alert[hidden] {
+  display: none;
+}
+
+#guide .guide-alert::before {
+  position: absolute;
+  top: 8px;
+  left: 9px;
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--alert-mark);
+  color: #fff;
+  content: var(--alert-sign);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+#guide .guide-alert[data-kind="notice"] {
+  --alert-bg: var(--alert-notice-bg);
+  --alert-ink: var(--alert-notice-ink);
+  --alert-mark: var(--alert-notice-mark);
+  --alert-sign: "!";
+}
+
+#guide .guide-alert[data-kind="off"] {
+  --alert-bg: var(--alert-off-bg);
+  --alert-ink: var(--alert-off-ink);
+  --alert-mark: var(--alert-off-mark);
+  --alert-sign: "↩";
+}
+
+#guide .guide-alert[data-kind="gps"] {
+  --alert-bg: var(--alert-gps-bg);
+  --alert-ink: var(--alert-gps-ink);
+  --alert-mark: var(--alert-gps-mark);
+  --alert-sign: "◎";
+}
+
+#guide .guide-alert[data-kind="info"] {
+  --alert-bg: var(--alert-info-bg);
+  --alert-ink: var(--alert-info-ink);
+  --alert-mark: var(--alert-info-mark);
+  --alert-sign: "i";
+}
+
+/* 下の細い帯 */
+#guide .guide-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+  padding: 6px 8px 6px 14px;
+}
+
+#guide .guide-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  min-width: 0;
+}
+
+#guide .guide-bar .rest {
+  margin: 0;
+  color: inherit;
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+
+#guide .guide-status {
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: var(--wash);
+  color: var(--sub);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+#guide .guide-status[hidden] {
+  display: none;
+}
+
+#guide .guide-actions {
+  flex: none;
+  gap: 6px;
+}
+
+#guide .guide-actions button {
+  min-height: 44px;
+  padding: 0 14px;
+  white-space: nowrap;
+}
+
+/* 地図の部品は、案内の帯の分だけ避ける。案内中は「現在地」「地図の種類」を出さない(現在地は常に追う)。 */
+body.guiding .locate,
+body.guiding .layer-menu {
+  display: none;
+}
+
+body.guiding .maplibregl-ctrl-bottom-left,
+body.guiding .maplibregl-ctrl-bottom-right {
+  margin-bottom: calc(68px + env(safe-area-inset-bottom));
+}
+
+body.guiding .toast {
+  top: auto;
+  bottom: calc(76px + env(safe-area-inset-bottom));
+}
+
+/* 横向きの低い画面: 左端の細い帯に、同じ中身を縦に並べる。右側は地図。 */
+@media (orientation: landscape) and (max-height: 500px) {
+  section#guide.guide {
+    right: auto;
+    align-items: stretch;
+    width: min(208px, 32vw);
+    padding-right: 0;
+  }
+
+  #guide > * {
+    max-width: none;
+  }
+
+  #guide .guide-then {
+    display: block;
+    white-space: normal;
+  }
+
+  /* 知らせは帯のすぐ右隣(帯の上端にそろえる)に出す。帯の高さを使わないので、重なっても帯のボタンが切れない。 */
+  #guide .guide-alerts {
+    position: fixed;
+    top: max(8px, env(safe-area-inset-top));
+    left: calc(min(208px, 32vw) + max(8px, env(safe-area-inset-left)) + 8px);
+    width: min(360px, calc(100vw - min(208px, 32vw) - 96px));
+  }
+
+  #guide .guide-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    padding: 8px;
+  }
+
+  #guide .guide-actions {
+    justify-content: space-between;
+  }
+
+  #guide .guide-actions button {
+    flex: 1;
+    padding: 0 6px;
+  }
+
+  body.guiding .maplibregl-ctrl-bottom-left,
+  body.guiding .maplibregl-ctrl-bottom-right {
+    margin-bottom: 0;
+  }
+
+  body.guiding .maplibregl-ctrl-bottom-left {
+    margin-left: calc(min(208px, 32vw) + 8px);
+  }
+
+  body.guiding .toast {
+    top: 12px;
+    bottom: auto;
+    left: calc(50% + 100px);
+  }
+}
