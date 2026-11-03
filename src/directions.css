@@ -1,1 +1,68 @@
 /* 経路画面と案内の見た目 */
+
+/* 歩きながらの案内 */
+.guide-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.guide-arrow {
+  display: grid;
+  flex: none;
+  width: 56px;
+  height: 56px;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--blue);
+  color: #fff;
+  font-size: 38px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.guide-col {
+  min-width: 0;
+}
+
+.guide-dist {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.guide-col .next {
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+.guide-then {
+  margin: 2px 0 0;
+  color: var(--sub);
+  font-size: 13px;
+}
+
+.guide-then:empty {
+  display: none;
+}
+
+.guide-warn {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fce8e6;
+  color: var(--bad);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.guide.lost .guide-main,
+.guide.lost .rest {
+  opacity: 0.45;
+}
+
+.guide.lost .guide-arrow {
+  background: var(--sub);
+}
