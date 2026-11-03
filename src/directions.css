@@ -73,11 +73,26 @@
   bottom: -14px; /* シートの内側の余白（14px）の分 */
   z-index: 2;
   display: flex;
-  gap: 8px;
+  flex-direction: column;
+  gap: 6px;
   margin: 10px -14px -14px;
   padding: 8px 14px calc(10px + env(safe-area-inset-bottom, 0px));
   background: var(--paper);
   box-shadow: 0 -1px 0 var(--line);
+}
+
+.start-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+/* 免責。経路画面の下端に、14px 以上で常に出す。 */
+.start-bar .disclaimer {
+  margin: 0;
+  color: var(--sub);
+  font-size: 0.875rem;
+  line-height: 1.4;
+  text-align: center;
 }
 
 .start-bar .start {
@@ -104,8 +119,8 @@
   margin: 0 0 8px;
   padding: 8px 10px;
   border-radius: 8px;
-  background: #e8f0fe;
-  color: #174ea6;
+  background: var(--tint);
+  color: var(--link);
   font-size: 0.875rem;
   font-weight: 600;
   line-height: 1.5;
@@ -171,7 +186,8 @@
   padding: 10px 12px;
   border-left: 3px solid var(--blue);
   border-radius: 4px 10px 10px 4px;
-  background: #f4f8fe;
+  background: var(--tint2);
+  color: var(--ink);
   font-size: 0.875rem;
   line-height: 1.55;
 }
@@ -204,7 +220,7 @@
 }
 
 .route-panel .best {
-  background: #e6f4ea;
+  background: var(--wash);
   color: var(--good);
 }
 
@@ -247,9 +263,10 @@
 /* 経路の近くの事故の記録（折りたたみ）。他の折りたたみと見分けがつくよう、枠と色を付ける。 */
 .detail.accident-detail {
   padding: 8px 12px;
-  border: 1px solid #f1c9c7;
+  border: 1px solid var(--line);
   border-radius: 10px;
-  background: #fdf4f3;
+  background: var(--bad-bg);
+  color: var(--ink);
 }
 
 .accident-detail summary span {
@@ -277,46 +294,8 @@
   font-size: 0.75rem;
 }
 
-/* スマホ（縦も横も）。入力欄を詰め、経路のシートが潰れず、経路が入力欄とシートの間に収まるようにする。 */
+/* 経路が出ている間、シートが潰れないようにする。 */
 @media (max-height: 520px), (max-width: 720px) {
-  .directions {
-    position: relative;
-    gap: 4px;
-    padding: 6px 10px;
-  }
-
-  .dir-head strong {
-    display: none;
-  }
-
-  /* 閉じるボタンは、昼夜ボタンの右に置く。 */
-  .dir-head {
-    position: absolute;
-    right: 8px;
-    bottom: 6px;
-  }
-
-  .dir-head .icon {
-    width: 44px;
-    height: 44px;
-  }
-
-  .dir-fields .field input {
-    height: 44px;
-  }
-
-  .period {
-    margin-right: 44px;
-  }
-
-  .period button {
-    min-height: 44px;
-  }
-
-  .add-stop {
-    padding: 0 2px;
-  }
-
   body.routing .sheet {
     min-height: min(120px, 100%);
   }
@@ -419,8 +398,8 @@
 }
 
 /* Claude に事情を伝えて道を選んでもらう */
-.agent { margin: 12px 0; padding: 12px 0 4px; border-top: 1px solid var(--line); }
-.agent h3 { margin: 0 0 8px; font-size: 0.875rem; }
+.agent { margin: 10px 0 4px; }
+.agent[open] > summary { margin-bottom: 8px; }
 .agent-form { display: flex; gap: 8px; margin-bottom: 8px; }
 .agent-form input { flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: inherit; font: inherit; }
 .agent-form button { flex: none; }
@@ -440,4 +419,296 @@
   min-height: 44px;
   padding: 10px 0;
   box-sizing: border-box;
+}
+
+/* ---------------------------------------------------------------- 上の入力欄
+   出発地と目的地を1枚のカードにまとめ、入れ替えは2つの欄の間、昼夜は1つの切り替え、✕ は右上。
+   目的地が決まったら「三宮駅 → 神戸駅」の1行に畳む（押すと開く）。 */
+form.directions {
+  display: grid;
+  gap: 4px;
+  padding: 6px 8px 8px;
+}
+
+.dir-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+}
+
+.dir-summary {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 12px;
+  overflow: hidden;
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font-size: max(16px, 1rem);
+  font-weight: 600;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+form.directions .add-stop {
+  min-height: 44px;
+  margin-right: auto;
+  padding: 0 6px;
+  font-size: 0.875rem;
+}
+
+form.directions .period {
+  display: inline-grid;
+  flex: none;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--edge);
+  border-radius: 22px;
+}
+
+form.directions .period button {
+  min-width: 52px;
+  min-height: 42px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 0.9375rem;
+}
+
+form.directions .period button[aria-pressed="true"] {
+  background: var(--tint);
+  color: var(--link);
+  font-weight: 700;
+}
+
+form.directions .dir-top .icon {
+  flex: none;
+}
+
+form.directions.folded .add-stop,
+form.directions.folded .dir-fields {
+  display: none;
+}
+
+form.directions .dir-fields {
+  gap: 4px;
+  padding-right: 0;
+}
+
+form.directions .dir-fields > .field {
+  padding: 0 44px 0 10px;
+}
+
+form.directions .field input {
+  height: 40px;
+  min-height: 40px;
+}
+
+/* 入れ替えは2つの欄の間（右端）に置く。 */
+form.directions .swap {
+  top: 50%;
+  right: 4px;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  min-height: 40px;
+  transform: translateY(-50%);
+  border: 1px solid var(--edge);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+form.directions .stop-row {
+  margin-right: 44px;
+}
+
+form.directions .stop-row .field {
+  padding: 0 10px;
+}
+
+form.directions .field .suggest {
+  top: calc(100% + 4px);
+  right: 0;
+  left: 0;
+}
+
+/* ---------------------------------------------------------------- ラベル付きの開閉 */
+.fold > summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  color: var(--link);
+  font-weight: 600;
+  list-style: none;
+}
+
+.fold > summary::-webkit-details-marker {
+  display: none;
+}
+
+.fold > summary::after {
+  content: "▾";
+  margin-left: auto;
+  padding-left: 8px;
+}
+
+.fold[open] > summary::after {
+  content: "▴";
+}
+
+.fold.more-detail > summary,
+.agent > summary {
+  padding: 0 12px;
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  background: var(--paper);
+}
+
+.agent > summary::after {
+  content: "▸";
+}
+
+.agent[open] > summary::after {
+  content: "▾";
+}
+
+.fold[open] > summary {
+  margin-bottom: 6px;
+}
+
+.fold .detail {
+  margin-top: 8px;
+}
+
+.fold.more-detail {
+  margin: 8px 0 4px;
+}
+
+.fold h4 {
+  margin: 10px 0 4px;
+  font-size: 0.875rem;
+}
+
+.fold ul.night-lines,
+.fold ul.cautions {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fold li.caution,
+.fold ul.night-lines li {
+  margin: 4px 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--wash);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.fold li.caution {
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+}
+
+.fold .basis {
+  color: var(--sub);
+  font-size: 0.8125rem;
+}
+
+/* 経路の要約 */
+.route-panel .tierline .meaning {
+  margin-left: 6px;
+  color: var(--sub);
+  font-size: 0.8125rem;
+  font-weight: 400;
+}
+
+.route-panel p.caution {
+  margin: 8px 0 4px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.route-panel .note {
+  margin: 6px 0 0;
+  font-size: 0.8125rem;
+}
+
+.rec-meaning {
+  margin: 6px 2px 0;
+  color: var(--sub);
+  font-size: 0.8125rem;
+}
+
+/* ---------------------------------------------------------------- 経路を送る前の確認 */
+.confirm-back {
+  position: fixed;
+  inset: 0;
+  z-index: 9;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(0 0 0 / 45%);
+}
+
+.confirm {
+  width: min(360px, 100%);
+  padding: 18px;
+}
+
+.confirm h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.confirm p {
+  margin: 0 0 14px;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.confirm-actions button {
+  min-height: 44px;
+  padding: 0 20px;
+}
+
+/* ---------------------------------------------------------------- 横向きのスマホ: 左に入力欄と一覧、右に地図 */
+@media (orientation: landscape) and (max-height: 520px) {
+  body.routing .ui {
+    top: 8px;
+    right: auto;
+    bottom: 8px;
+    left: 8px;
+    width: min(46vw, 400px);
+  }
+
+  body.routing .sheet {
+    flex: 1 1 auto;
+    height: auto;
+    max-height: none;
+    border-radius: 12px;
+  }
+
+  body.routing .grip {
+    display: none;
+  }
 }

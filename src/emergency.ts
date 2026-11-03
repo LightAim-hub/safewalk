@@ -71,11 +71,14 @@ export function detectDisaster(text: string): boolean {
   return DISASTER_WORDS.some((w) => t.includes(norm(w)));
 }
 
-function call(href: string, label: string, text: string): HTMLElement {
+/** 電話の枠。番号は大きく、何の時かを短く添える（全文は読み上げ用の名前に入れる）。 */
+function call(href: string, number: string, short: string, full: string): HTMLElement {
   const li = el("li");
-  const a = el("a", "emg-call", label);
+  const a = el("a", "emg-call");
   a.href = href;
-  li.append(a, document.createTextNode(` ${text}`));
+  a.setAttribute("aria-label", `${number} ${full}`);
+  a.append(el("strong", "", number), el("span", "", short));
+  li.append(a);
   return li;
 }
 
@@ -102,16 +105,26 @@ function kobanRow(k: KobanHit, onRoute: (k: KobanHit) => void): HTMLElement {
  * 緊急の枠。origin は今いる場所(出発地)。交番は origin に近い順に最大3つ。
  * 全体を同じ枠に入れ、番号は電話を発信するリンクにする。
  */
-export function emergencyPanel(origin: LatLon | null, onRoute: (k: KobanHit) => void): HTMLElement {
+export function emergencyPanel(origin: LatLon | null, onRoute: (k: KobanHit) => void, onClose?: () => void): HTMLElement {
   const box = el("section", "emergency");
   box.setAttribute("role", "region");
   box.setAttribute("aria-label", "緊急時の案内");
-  box.append(el("h3", "", "緊急の時は、先にこちらへ"));
+  // 利用者が閉じるまで残す。閉じるボタンは右上。
+  const head = el("div", "emg-head");
+  head.append(el("h3", "", "緊急の時は、先にこちらへ"));
+  if (onClose) {
+    const close = el("button", "emg-close", "閉じる");
+    close.type = "button";
+    close.setAttribute("aria-label", "緊急の案内を閉じる");
+    close.addEventListener("click", onClose);
+    head.append(close);
+  }
+  box.append(head);
   const calls = el("ul", "emg-calls");
   calls.append(
-    call("tel:110", "110", "身の危険を感じたら（警察）"),
-    call("tel:119", "119", "急な病気・けが・火事（救急・消防）"),
-    call("tel:%237119", "#7119", "迷ったら（救急安心センター・24時間）"),
+    call("tel:110", "110", "警察", "身の危険を感じたら（警察）"),
+    call("tel:119", "119", "救急・消防", "急な病気・けが・火事（救急・消防）"),
+    call("tel:%237119", "#7119", "救急相談", "迷ったら（救急安心センター・24時間）"),
   );
   box.append(calls);
   const near = el("div", "emg-near");
