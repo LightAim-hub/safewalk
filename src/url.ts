@@ -6,10 +6,22 @@ import { clearGenre, searchGenre } from "./search";
 import { syncClearButton } from "./map-ui";
 import { type Place } from "./types";
 
+/** ボタンごとの「コピーしました」を元に戻すタイマー。 */
+const copiedTimers = new WeakMap<HTMLButtonElement, number>();
+
 export async function copyLink(button: HTMLButtonElement): Promise<void> {
   try {
     await navigator.clipboard.writeText(location.href);
+    const original = button.dataset.label ?? button.textContent ?? "";
+    button.dataset.label = original;
     button.textContent = "コピーしました";
+    clearTimeout(copiedTimers.get(button));
+    copiedTimers.set(
+      button,
+      window.setTimeout(() => {
+        button.textContent = original;
+      }, 2500),
+    );
   } catch {
     toast("コピーできませんでした。アドレス欄のリンクをお使いください。");
   }
