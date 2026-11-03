@@ -101,13 +101,13 @@ export function findRoutes(
       ...edgeLegs(g, edges, path.from, names),
       { pts: tail, metres: tailM, name: names[g.nameId[to.edge]] ?? "" },
     ];
-    const { climb, descent, profile, steps, via } = walkThrough(legs);
+    const { climb, descent, profile, steps, via, roads } = walkThrough(legs);
     const pieces: Piece[] = [
       [from.edge, leadM],
       ...edges.map((e): Piece => [e, g.length[e]]),
       [to.edge, tailM],
     ];
-    found.push({
+    const route: Route = {
       label: "",
       edges,
       coords,
@@ -121,7 +121,9 @@ export function findRoutes(
       remoteMetres: flaggedMetres(g, pieces, REMOTE),
       via,
       accidents: acc.near(coords),
-    });
+    };
+    roadsOf.set(route, roads);
+    found.push(route);
   }
 
   const known = found.filter((r) => r.safety !== null);
@@ -130,6 +132,7 @@ export function findRoutes(
     r.label = i === 0 ? "最短" : r === safest ? "最も安全" : "別の道";
   });
   if (found.length === 1) found[0].label = "おすすめ";
+  distinctVias(found);
   return found;
 }
 
@@ -246,6 +249,7 @@ function walkThrough(legs: Leg[]): {
   profile: [number, number][];
   steps: Step[];
   via: string;
+  roads: Map<string, number>;
 } {
   let climb = 0;
   let descent = 0;
@@ -293,14 +297,48 @@ function walkThrough(legs: Leg[]): {
     }
   }
   const via = [...byRoad].reduce((a, b) => (b[1] > a[1] ? b : a), ["", 0] as [string, number])[0];
-  return {
+  const result = {
     climb: Math.round(climb),
     descent: Math.round(descent),
     profile,
-    steps: steps.map(({ text, metres, at, road }) => ({ text: road ? `${text}（${road}）` : text, metres, at })),
+    steps: steps.map(({ text, metres, at, road }) => ({ text: stepText(text, road), metres, at })),
     via,
+    roads: byRoad,
   };
+  return result;
 }
+
+/** 道の名前がある時は名前を添え、無い時は「次の角を」のように位置で言う。 */
+function stepText(text: string, road: string): string {
+  if (road) return `${text}（${road}）`;
+  if (text.endsWith("歩き始める") || text === "道なりに進む") return text;
+  if (text.startsWith("やや")) return `次の分かれ道で${text}`;
+  return `次の角を${text}`;
+}
+
+/** 経路ごとの、道の名前と通る長さ。経由名を経路どうしで区別するために使う。 */
+const roadsOf = new WeakMap<object, Map<string, number>>();
+
+/** 「〜経由」の名前を、他の経路と見分けがつく道から選ぶ。 */
+function distinctVias(routes: Route[]): void {
+  const roads = routes.map((r) => roadsOf.get(r) ?? new Map<string, number>());
+  const taken = new Set<string>();
+  const order = routes.map((_, i) => i);
+  // 他の経路と重ならない長い道を持つ経路から決める。
+  const unique = (i: number) =>
+    [...roads[i]]
+      .filter(([name, len]) => len >= UNIQUE_MIN_M && roads.every((o, j) => j === i || (o.get(name) ?? 0) < len * 0.25))
+      .sort((a, b) => b[1] - a[1]);
+  order.sort((a, b) => (unique(b)[0]?.[1] ?? 0) - (unique(a)[0]?.[1] ?? 0));
+  for (const i of order) {
+    const pick =
+      unique(i).find(([n]) => !taken.has(n)) ??
+      [...roads[i]].sort((a, b) => b[1] - a[1]).find(([n]) => !taken.has(n));
+    routes[i].via = pick ? pick[0] : "";
+    if (pick) taken.add(pick[0]);
+  }
+}
+const UNIQUE_MIN_M = 150;
 
 /** 経由地で区切った経路を、1本の経路につなぐ。 */
 export function joinRoutes(parts: Route[], stopNames: string[]): Route {
