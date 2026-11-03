@@ -174,6 +174,17 @@ export function validateOutput(raw: Raw, facts: Map<string, string>, routeCount:
     }
     const allowed = new Set<string>(base);
     ids.forEach((id) => numbersIn(facts.get(id)!).forEach((n) => allowed.add(n)));
+    // 根拠の付け漏れを拾う: 文が名指しした経路(経路A→r0.)の事実に、その数字がそのまま書かれていれば、その事実を根拠に足して認める。
+    // (道具の結果に無い数字は、これまで通り落とす。足した事実は根拠の記録として画面に出る)
+    const named = [...text.matchAll(/経路([A-Z])/g)].map((m) => `r${m[1].charCodeAt(0) - 65}.`);
+    for (const n of numbersIn(text)) {
+      if (allowed.has(n) || !named.length) continue;
+      const hit = [...facts.entries()].find(([id, t]) => named.some((p) => id.startsWith(p)) && numbersIn(t).includes(n));
+      if (hit) {
+        ids.push(hit[0]);
+        numbersIn(hit[1]).forEach((x) => allowed.add(x));
+      }
+    }
     const v = checkText(text, allowed);
     if (!v.ok) {
       replaced.push(`reasons[${k}]: ${v.why}`);

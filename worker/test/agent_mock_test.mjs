@@ -294,6 +294,22 @@ const thinking = { type: "thinking", thinking: "", signature: "sig-abc" };
   check("数字: 全角数字も拾う", M.numbersIn("２２時に3.5km").join() === "22,3.5");
 }
 
+{
+  // 理由が数字の根拠を付け忘れても、名指しした経路の事実にその数字があれば、その事実を根拠に足して残す
+  const facts = new Map([
+    ["r0.distance", "経路A: 距離 2.7km、歩いて約37分"],
+    ["r1.diff", "経路Bは経路Aより、時間が6分長く、距離が0.4km長い"],
+    ["r0.night.1", "深夜営業の店 11軒（経路から100m以内）"],
+  ]);
+  const raw = { summary: "経路Aをおすすめします。", chosenRouteIndex: 0, reasons: [
+    { text: "経路Aは経路Bより6分早く着き、深夜も開いている店が11軒あります。", evidenceIds: ["r0.night.1"] },
+    { text: "経路Aは経路Bより99分早く着きます。", evidenceIds: ["r0.distance"] },
+  ], caveats: [] };
+  const out2 = M.validateOutput(raw, facts, 3, []);
+  check("理由: 名指しした経路の事実の数字は、根拠を足して残す", out2.reasons.some((r) => r.text.includes("6分") && r.evidenceIds.includes("r1.diff")), JSON.stringify(out2.reasons));
+  check("理由: 道具の結果に無い数字は、これまで通り落とす", !out2.reasons.some((r) => r.text.includes("99分")));
+}
+
 fs.rmSync(path.dirname(out), { recursive: true, force: true });
 // Worker に固定した system と tools が、ブラウザ側(agent.ts・agent-tools.ts)と同じ
 console.log("  (messages の最大 " + maxMessagesChars + " 字 / Worker の上限 80000 字)");
