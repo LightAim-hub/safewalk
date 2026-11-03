@@ -1,13 +1,14 @@
 import type maplibregl from "maplibre-gl";
 import { type ExpressionSpecification, type GeoJSONSource } from "maplibre-gl";
 import { type LatLon } from "./graph";
-import { $, qInput, sheet, COLORS, CURRENT, state, map, markers, toast, mapPadding } from "./app";
+import { $, qInput, sheet, COLORS, CURRENT, state, map, markers, mapPadding } from "./app";
 import { DATA_URL, emptyCollection, snap } from "./data";
 import { addStop, selectRoute } from "./directions";
 import { matchPlace, onMapPick, closePlace, showPlace } from "./place";
 import { lastResults } from "./search";
 import { type Place } from "./types";
 import { pushUrl } from "./url";
+import { confirmLocate, showLocateFail, type LocateFail } from "./onboarding";
 
 /** 地図の文字を日本語だけにする。 */
 export function useJapaneseLabels(): void {
@@ -320,30 +321,55 @@ export function showAccuracy(p: LatLon, radiusM: number): void {
   });
 }
 
-export function locateMe(): Promise<Place | null> {
+/** 現在地の取得結果。失敗の理由を区別して返す。 */
+export type LocateResult = { ok: true; place: Place } | { ok: false; reason: LocateFail | "cancelled" };
+
+/** 許可がまだ決まっていない（または状態を調べられない）時だけ true。許可済み・拒否済みの時は一言を挟まない。 */
+async function needsNotice(): Promise<boolean> {
+  try {
+    const st = await navigator.permissions.query({ name: "geolocation" });
+    return st.state === "prompt";
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * 利用者が「現在地」を押した時に呼ぶ。許可を求める前に一言を出し、失敗の理由（拒否・取れない・時間切れ・市外）を返す。
+ * 失敗の案内は消えない形で出す（showLocateFail）。
+ */
+export async function locateMeDetailed(): Promise<LocateResult> {
+  if (!navigator.geolocation) {
+    showLocateFail("unsupported");
+    return { ok: false, reason: "unsupported" };
+  }
+  if ((await needsNotice()) && !(await confirmLocate())) return { ok: false, reason: "cancelled" };
   return new Promise((resolve) => {
-    if (!navigator.geolocation) {
-      toast("この端末では現在地を取得できません。");
-      return resolve(null);
-    }
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
         const place: Place = { lat: coords.latitude, lon: coords.longitude, name: CURRENT };
         if (snap(place) === null) {
-          toast("現在地が神戸市の外のようです。");
-          return resolve(null);
+          showLocateFail("outside");
+          return resolve({ ok: false, reason: "outside" });
         }
         markers.me.setLngLat([place.lon, place.lat]).addTo(map);
         showAccuracy(place, coords.accuracy);
-        resolve(place);
+        resolve({ ok: true, place });
       },
-      () => {
-        toast("現在地を取得できませんでした。位置情報の許可を確かめてください。");
-        resolve(null);
+      (err) => {
+        const reason: LocateFail = err.code === 1 ? "denied" : err.code === 3 ? "timeout" : "unavailable";
+        showLocateFail(reason);
+        resolve({ ok: false, reason });
       },
       { enableHighAccuracy: true, timeout: 10000 },
     );
   });
+}
+
+/** 従来どおり、取れた時は地点、取れない時は null。理由が要る時は locateMeDetailed を使う。 */
+export async function locateMe(): Promise<Place | null> {
+  const r = await locateMeDetailed();
+  return r.ok ? r.place : null;
 }
 
 export const SHEET_STOPS = [0.2, 0.44, 0.82];
