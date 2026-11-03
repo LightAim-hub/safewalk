@@ -115,6 +115,18 @@ export function parsePoint(text: string | null): LatLon | null {
   return lat !== null && lon !== null && inServiceArea(lat, lon) ? { lat, lon } : null;
 }
 
+/**
+ * 出発地・目的地の座標。神戸市の外でも、地球上の座標として読めれば捨てない
+ * （捨てて現在地に置き換えると、別の経路が出てしまう）。市の外かどうかは経路を探す時に知らせる。
+ */
+export function parseEndpoint(text: string | null): LatLon | null {
+  const parts = (text ?? "").split(",");
+  if (parts.length !== 2) return null;
+  const lat = validNumber(parts[0]);
+  const lon = validNumber(parts[1]);
+  return lat !== null && lon !== null && Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? { lat, lon } : null;
+}
+
 /** URL の内容を画面に映す。起動時と「戻る」「進む」の時に使う。 */
 export function applyUrl(): void {
   restoring = true;
@@ -122,17 +134,17 @@ export function applyUrl(): void {
   const q = new URLSearchParams(location.search);
   // 読めない座標（空・文字・範囲外）は捨てて、通常の起動にする。
   let unreadable = false;
-  const point = (key: string): LatLon | null => {
+  const point = (key: string, anywhere = false): LatLon | null => {
     if (!q.has(key)) return null;
-    const parsed = parsePoint(q.get(key));
+    const parsed = (anywhere ? parseEndpoint : parsePoint)(q.get(key));
     if (!parsed) unreadable = true;
     return parsed;
   };
   // 「me」は、開いた人の現在地。座標ではないので、読めない座標としては扱わない。
   const fromMe = q.get("from") === "me";
   const toMe = q.get("to") === "me";
-  const from = fromMe ? null : point("from");
-  const to = toMe ? null : point("to");
+  const from = fromMe ? null : point("from", true);
+  const to = toMe ? null : point("to", true);
   const place = point("place");
   const period = q.get("period");
   if (period === "day" || period === "night") state.period = period;
