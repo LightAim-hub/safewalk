@@ -1,0 +1,5161 @@
+{
+ "date": "2026-11-04",
+ "url": "https://lightaim-hub.github.io/safewalk/",
+ "results": [
+  {
+   "id": 1,
+   "label": "62歳女性・住民・初めて開く",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 3.1,
+   "ready_sec": 0.8,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 0.8,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "intro_read",
+     "ok": true,
+     "sec": 0.7,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:神戸駅",
+     "ok": true,
+     "sec": 1.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.5,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "初回説明: SafeWalk へようこそ  神戸市の、歩いて行くための地図です。道ごとに、警察に届いた交通事故の場所（2020〜2025年）と、夜の歩きやすさを見られます。",
+    "神戸駅→神戸駅",
+    "経路3本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 2,
+   "label": "28歳男性・留学生(英語)",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 3.8,
+   "ready_sec": 2.3,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 2.3,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:Sannomiya Station||三宮駅",
+     "ok": true,
+     "sec": 0.9,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.5,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "Sannomiya Station→三ノ宮駅",
+    "経路1本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 3,
+   "label": "45歳女性・台湾の観光客",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 4.3,
+   "ready_sec": 2.6,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 2.6,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:kobe airport||神戸空港",
+     "ok": true,
+     "sec": 0.8,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.8,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "kobe airport→神戸空港",
+    "経路3本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 4,
+   "label": "70歳男性・住民・電話とLINEだけ",
+   "dev": "iPhone SE",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 6.4,
+   "ready_sec": 4.8,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 4.8,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:三宮",
+     "ok": true,
+     "sec": 0.5,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "guide",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "walk:3",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "stop",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "三宮→神戸三宮駅",
+    "経路3本",
+    "案内の最初: 道なりに進む",
+    "3回動かして案内の文が4通り",
+    "経路を外れた表示が出た（直線で歩かせたため）"
+   ],
+   "findings": []
+  },
+  {
+   "id": 5,
+   "label": "35歳女性・友人と観光",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 5.3,
+   "ready_sec": 4.1,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 4.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:中華街||南京町",
+     "ok": true,
+     "sec": 0.7,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "中華街→南京町",
+    "経路2本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 6,
+   "label": "50歳男性・家族で水族館",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 5.7,
+   "ready_sec": 4.6,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 4.6,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:須磨水族園||須磨海浜水族園",
+     "ok": true,
+     "sec": 0.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.5,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "period:day",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "須磨水族園→神戸須磨シーワールド",
+    "経路4本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 7,
+   "label": "33歳女性・看護師・夜勤明け",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 5.6,
+   "ready_sec": 1.3,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 1.3,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "genre:病院",
+     "ok": true,
+     "sec": 0.3,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "genre_pick",
+     "ok": true,
+     "sec": 0.9,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 2.9,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "病院の一覧30件",
+    "経路3本"
+   ],
+   "findings": [
+    {
+     "kind": "禁句",
+     "text": "安心（画面）…ったら #7119（救急安心センター）  住所",
+     "n": 1,
+     "step": "genre_pick"
+    },
+    {
+     "kind": "禁句",
+     "text": "安心（画面）…ったら #7119（救急安心センター）  営業時",
+     "n": 1,
+     "step": "genre:病院"
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "label": "40歳男性・位置情報に慎重",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 4.2,
+   "ready_sec": 1.9,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 1.9,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "locate",
+     "ok": true,
+     "sec": 2.3,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "現在地→印が出た"
+   ],
+   "findings": []
+  },
+  {
+   "id": 9,
+   "label": "27歳女性・位置を断った",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "net": "normal",
+   "geo": "deny",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 2.5,
+   "ready_sec": 1.1,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 1.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:北野",
+     "ok": true,
+     "sec": 0.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "from:三宮駅",
+     "ok": true,
+     "sec": 0.6,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "北野→北野町一丁目",
+    "経路2本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 10,
+   "label": "55歳男性・営業・三宮から神戸駅",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 1.8,
+   "ready_sec": 1.4,
+   "steps": [
+    {
+     "step": "link:kobe,day",
+     "ok": true,
+     "sec": 1.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "details",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路4本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 11,
+   "label": "41歳男性・昼夜の数を見比べる",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 1.5,
+   "ready_sec": 1.0,
+   "steps": [
+    {
+     "step": "link:kobe,day",
+     "ok": true,
+     "sec": 1.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "period:night",
+     "ok": true,
+     "sec": 0.3,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路4本",
+    "経路3本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 12,
+   "label": "60歳女性・家族に経路を送る",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "none",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 1.8,
+   "ready_sec": 1.5,
+   "steps": [
+    {
+     "step": "link:kobe",
+     "ok": true,
+     "sec": 1.5,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "send",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路4本",
+    "送る→この経路を送ります  「経路を送る」のリンクには、出発地「出発」・目的地「到着」の位置と名前が入ります。自宅などの場合は"
+   ],
+   "findings": []
+  },
+  {
+   "id": 13,
+   "label": "30歳女性・ベビーカー",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 1.6,
+   "ready_sec": 1.3,
+   "steps": [
+    {
+     "step": "link:kitano",
+     "ok": true,
+     "sec": 1.3,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "details",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路3本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 14,
+   "label": "68歳男性・案内で歩く",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 5.5,
+   "ready_sec": 4.2,
+   "steps": [
+    {
+     "step": "link:kitano,night",
+     "ok": true,
+     "sec": 4.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "guide",
+     "ok": true,
+     "sec": 0.9,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "walk:4",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "stop",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路2本",
+    "案内の最初: 次の角を左に曲がる",
+    "4回動かして案内の文が5通り",
+    "経路を外れた表示が出た（直線で歩かせたため）"
+   ],
+   "findings": []
+  },
+  {
+   "id": 15,
+   "label": "29歳女性・案内中に寄り道",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 7.2,
+   "ready_sec": 4.0,
+   "steps": [
+    {
+     "step": "link:kitano",
+     "ok": true,
+     "sec": 4.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "guide",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "walk:2",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "offroute:120",
+     "ok": true,
+     "sec": 1.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "stop",
+     "ok": true,
+     "sec": 1.3,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路3本",
+    "案内の最初: 次の角を左に曲がる",
+    "2回動かして案内の文が3通り",
+    "120m外れて: ↑  20m先  南西へ歩き始める（三宮あじさい通り商店街）  経路を外れたので、選んだ経路へ戻る道を案内します（820"
+   ],
+   "findings": []
+  },
+  {
+   "id": 16,
+   "label": "36歳男性・会社のPC",
+   "dev": "Desktop Chrome",
+   "browser": "chromium",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 2.2,
+   "ready_sec": 0.9,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 0.9,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:神戸駅",
+     "ok": true,
+     "sec": 0.5,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.6,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "send",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "神戸駅→神戸駅",
+    "経路3本",
+    "送る→この経路を送ります  「経路を送る」のリンクには、目的地「神戸駅」の位置と名前が入ります。現在地は入りません。  やめる"
+   ],
+   "findings": []
+  },
+  {
+   "id": 17,
+   "label": "52歳女性・Claudeに相談(失敗する)",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 3.3,
+   "ready_sec": 2.5,
+   "steps": [
+    {
+     "step": "link:kobe,night",
+     "ok": true,
+     "sec": 2.5,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "claude:坂が少ない道がいい",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路3本",
+    "相談→Claude がいま使えません。少し置いてからもう一度。経路の一覧と記録はそのまま使えます。"
+   ],
+   "findings": []
+  },
+  {
+   "id": 18,
+   "label": "24歳女性・終電後・緊急の言葉",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 2.3,
+   "ready_sec": 1.4,
+   "steps": [
+    {
+     "step": "link:kitano,night",
+     "ok": true,
+     "sec": 1.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.3,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "claude:助けて 追われている~110",
+     "ok": true,
+     "sec": 0.6,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路2本",
+    "相談→一覧の経路Aは、道のりが短い経路です。  選んだ経路: 経路A（22分）を地図で選びました。  経路A・Bは、上の一覧の上から順です。  理由 この経路の記録は"
+   ],
+   "findings": [
+    {
+     "kind": "禁句",
+     "text": "危険（属性）…内を閉じる 110 身の危険を感じたら（警察）",
+     "n": 1,
+     "step": "claude:助けて 追われている~110"
+    },
+    {
+     "kind": "禁句",
+     "text": "安心（属性）…7119 迷ったら（救急安心センター・24時間）",
+     "n": 1,
+     "step": "claude:助けて 追われている~110"
+    }
+   ]
+  },
+  {
+   "id": 19,
+   "label": "66歳男性・山歩き・電波が弱い",
+   "dev": "iPhone 13",
+   "browser": "chromium",
+   "net": "slow3g",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 138.9,
+   "ready_sec": 138.7,
+   "steps": [
+    {
+     "step": "link:maya",
+     "ok": true,
+     "sec": 138.7,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "遅い時の案内(約7MB)が出た",
+    "経路2本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 20,
+   "label": "31歳男性・大阪から出張",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 1.8,
+   "ready_sec": 1.6,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 1.6,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "locate:神戸市の外",
+     "ok": true,
+     "sec": 0.3,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "現在地→✕  現在地が神戸市の外のようです。  このアプリは神戸市の中の道だけを案内します。  駅名や住所を入れれば、現在地なしでも使えます。"
+   ],
+   "findings": []
+  },
+  {
+   "id": 21,
+   "label": "21歳女性・中国の留学生",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 3.4,
+   "ready_sec": 1.5,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 1.5,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:元町駅",
+     "ok": true,
+     "sec": 0.7,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.8,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "menu",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "menu_close",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "元町駅→元町駅",
+    "経路2本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 22,
+   "label": "38歳男性・ベトナム出身・工場勤務",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 2.4,
+   "ready_sec": 0.9,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 0.9,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "genre:コンビニ",
+     "ok": true,
+     "sec": 0.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "genre_pick",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.7,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "コンビニの一覧30件",
+    "経路3本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 23,
+   "label": "26歳男性・韓国の観光客",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 3.9,
+   "ready_sec": 2.3,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 2.3,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:メリケンパーク",
+     "ok": true,
+     "sec": 0.7,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "guide",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "walk:3",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "stop",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "メリケンパーク→メリケンパーク",
+    "経路3本",
+    "案内の最初: 次の分かれ道でやや左へ進む",
+    "3回動かして案内の文が4通り",
+    "経路を外れた表示が出た（直線で歩かせたため）"
+   ],
+   "findings": []
+  },
+  {
+   "id": 24,
+   "label": "47歳男性・全盲・VoiceOver",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 8.9,
+   "ready_sec": 3.4,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 3.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "a11y",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:三宮",
+     "ok": true,
+     "sec": 3.3,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 1.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "a11y",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "三宮→神戸三宮駅",
+    "経路3本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 25,
+   "label": "58歳女性・弱視・文字を大きく",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 7.1,
+   "ready_sec": 1.4,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 1.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:神戸駅",
+     "ok": true,
+     "sec": 0.7,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.9,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.3,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "guide",
+     "ok": true,
+     "sec": 2.6,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "walk:3",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "stop",
+     "ok": true,
+     "sec": 0.9,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "神戸駅→神戸駅",
+    "経路3本",
+    "案内の最初: 次の分かれ道でやや左へ進む",
+    "3回動かして案内の文が3通り",
+    "経路を外れた表示が出た（直線で歩かせたため）"
+   ],
+   "findings": []
+  },
+  {
+   "id": 26,
+   "label": "73歳女性・老眼",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 3.0,
+   "ready_sec": 1.7,
+   "steps": [
+    {
+     "step": "link:kobe",
+     "ok": true,
+     "sec": 1.7,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "details",
+     "ok": true,
+     "sec": 1.1,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路4本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 27,
+   "label": "69歳男性・老眼鏡を忘れた",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 2.4,
+   "ready_sec": 1.9,
+   "steps": [
+    {
+     "step": "link:kobe",
+     "ok": true,
+     "sec": 1.9,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "period:day",
+     "ok": true,
+     "sec": 0.4,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路4本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 28,
+   "label": "77歳女性・iPad・ゆっくり読む",
+   "dev": "iPad (gen 7)",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 3.1,
+   "ready_sec": 1.3,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 1.3,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:王子動物園",
+     "ok": true,
+     "sec": 0.5,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 1.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "王子動物園→神戸市立王子動物園",
+    "経路4本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 29,
+   "label": "19歳女性・大学生・終電後",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 4.6,
+   "ready_sec": 1.2,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 1.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:元町駅",
+     "ok": true,
+     "sec": 0.6,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 1.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "period:night",
+     "ok": true,
+     "sec": 0.3,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "pick_route:1",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "guide",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "walk:3",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "guide_emg",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "guide_emg_close",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "stop",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "元町駅→元町駅",
+    "経路2本",
+    "案内の最初: 次の角を右に曲がる",
+    "3回動かして案内の文が3通り",
+    "経路を外れた表示が出た（直線で歩かせたため）",
+    "緊急の枠: 交番あり"
+   ],
+   "findings": [
+    {
+     "kind": "禁句",
+     "text": "危険（属性）…急時の案内 110 身の危険を感じたら（警察）",
+     "n": 1,
+     "step": "guide_emg"
+    },
+    {
+     "kind": "禁句",
+     "text": "安心（属性）…7119 迷ったら（救急安心センター・24時間）",
+     "n": 1,
+     "step": "guide_emg"
+    }
+   ]
+  },
+  {
+   "id": 30,
+   "label": "23歳女性・ひとり暮らし",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 4.2,
+   "ready_sec": 3.2,
+   "steps": [
+    {
+     "step": "link:kitano,night",
+     "ok": true,
+     "sec": 3.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "pick_route:1",
+     "ok": true,
+     "sec": 0.3,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "guide",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "walk:3",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "stop",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路2本",
+    "案内の最初: 次の角を左に曲がる",
+    "3回動かして案内の文が3通り",
+    "経路を外れた表示が出た（直線で歩かせたため）"
+   ],
+   "findings": []
+  },
+  {
+   "id": 31,
+   "label": "30歳女性・夜の外回り・電波が途中で切れる",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "flaky",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 23.3,
+   "ready_sec": 23.7,
+   "steps": [
+    {
+     "step": "link:harbor,night",
+     "ok": true,
+     "sec": 22.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "pick_route:0",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "guide",
+     "ok": true,
+     "sec": 0.6,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "walk:2",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "blip:4",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "walk:2",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "stop",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "読み込み失敗の画面が出た→再読み込みを押した",
+    "経路2本",
+    "案内の最初: 次の分かれ道でやや左へ進む",
+    "2回動かして案内の文が3通り",
+    "経路を外れた表示が出た（直線で歩かせたため）",
+    "2回動かして案内の文が4通り",
+    "経路を外れた表示が出た（直線で歩かせたため）"
+   ],
+   "findings": []
+  },
+  {
+   "id": 32,
+   "label": "22歳女性・留学生",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 2.9,
+   "ready_sec": 1.5,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 1.5,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:元町",
+     "ok": true,
+     "sec": 0.7,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "period:night",
+     "ok": true,
+     "sec": 0.3,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "元町→元町駅",
+    "経路2本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 33,
+   "label": "55歳女性・中学生の娘がいる親",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 1.4,
+   "ready_sec": 1.0,
+   "steps": [
+    {
+     "step": "link:kitano,night",
+     "ok": true,
+     "sec": 1.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "send",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路2本",
+    "送る→この経路を送ります  「経路を送る」のリンクには、出発地「出発」・目的地「到着」の位置と名前が入ります。自宅などの場合は"
+   ],
+   "findings": []
+  },
+  {
+   "id": 34,
+   "label": "48歳男性・高校生の息子がいる親",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 3.2,
+   "ready_sec": 1.2,
+   "steps": [
+    {
+     "step": "link:kitano,night",
+     "ok": true,
+     "sec": 1.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "send",
+     "ok": true,
+     "sec": 1.0,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路2本",
+    "送る→この経路を送ります  「経路を送る」のリンクには、出発地「出発」・目的地「到着」の位置と名前が入ります。自宅などの場合は"
+   ],
+   "findings": []
+  },
+  {
+   "id": 35,
+   "label": "62歳男性・遠方の母を見守る",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 2.5,
+   "ready_sec": 1.0,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 1.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:神戸駅",
+     "ok": true,
+     "sec": 0.8,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "send",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "神戸駅→神戸駅",
+    "経路3本",
+    "送る→この経路を送ります  「経路を送る」のリンクには、目的地「神戸駅」の位置と名前が入ります。現在地は入りません。  やめる"
+   ],
+   "findings": []
+  },
+  {
+   "id": 36,
+   "label": "32歳男性・住民・2回目は電波なし",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "offline2",
+   "geo": "allow",
+   "status": "詰まった",
+   "failed": {
+    "step": "reload",
+    "cat": "読み込めない",
+    "msg": "再読み込みを3回押しても起動しない",
+    "i": 3,
+    "screen": "3 km 住所・標高・航空写真: 国土地理院 | 交通事故: 警察庁オープンデータを加工して作成   コンビニ 飲食店 病院 駅 ほか ≡  読み込みに失敗しました。通信を確かめて、もう一度お試しください。  再読み込み ?  電波がないため、前に読み込んだ地図とデータで表示しています"
+   },
+   "detours": [],
+   "goal_sec": null,
+   "ready_sec": 0.9,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 0.9,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "warm",
+     "ok": true,
+     "sec": 1.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "offline:on",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "reload",
+     "ok": false,
+     "sec": 60.5,
+     "err": "再読み込みを3回押しても起動しない",
+     "cat": "読み込めない"
+    }
+   ],
+   "notes": [
+    "2回目の備え: 制御あり・入れ物4個",
+    "読み込み失敗の画面が出た→再読み込みを押した",
+    "読み込み失敗の画面が出た→再読み込みを押した",
+    "読み込み失敗の画面が出た→再読み込みを押した",
+    "読み込み失敗の画面が出た→再読み込みを押した"
+   ],
+   "findings": [
+    {
+     "kind": "読み込み失敗の画面",
+     "text": "読み込みに失敗しました。通信を確かめて、もう一度お試しください。  再読み込み",
+     "n": 4,
+     "step": "reload"
+    }
+   ]
+  },
+  {
+   "id": 37,
+   "label": "27歳女性・住民",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 3.4,
+   "ready_sec": 2.6,
+   "steps": [
+    {
+     "step": "link:kitano,night",
+     "ok": true,
+     "sec": 2.6,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "claude:夜に一人で帰る",
+     "ok": true,
+     "sec": 0.5,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路2本",
+    "相談→一覧の経路Aは、道のりが短い経路です。  選んだ経路: 経路A（22分）を地図で選びました。  経路A・Bは、上の一覧の上から順です。  理由 この経路の記録は"
+   ],
+   "findings": []
+  },
+  {
+   "id": 38,
+   "label": "45歳男性・住民",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "net": "normal",
+   "geo": "deny",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 4.6,
+   "ready_sec": 2.6,
+   "steps": [
+    {
+     "step": "link:kobe",
+     "ok": true,
+     "sec": 2.6,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.6,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "period:night",
+     "ok": true,
+     "sec": 1.3,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路4本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 39,
+   "label": "39歳男性・昼夜を切り替える",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 3.6,
+   "ready_sec": 1.9,
+   "steps": [
+    {
+     "step": "link:kitano,night",
+     "ok": true,
+     "sec": 1.9,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "period:day",
+     "ok": true,
+     "sec": 0.6,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "period:night",
+     "ok": true,
+     "sec": 0.5,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路2本",
+    "経路3本",
+    "経路2本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 40,
+   "label": "26歳女性・iPhone SE・小さくて押しにくい",
+   "dev": "iPhone SE",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 2.9,
+   "ready_sec": 1.8,
+   "steps": [
+    {
+     "step": "link:kitano",
+     "ok": true,
+     "sec": 1.8,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "period:day",
+     "ok": true,
+     "sec": 0.3,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "period:night",
+     "ok": true,
+     "sec": 0.7,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路3本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 41,
+   "label": "31歳男性・英語表記で探す",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 5.1,
+   "ready_sec": 3.2,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 3.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:jr sannomiya||三ノ宮駅",
+     "ok": true,
+     "sec": 0.8,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.7,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "jr sannomiya→三ノ宮駅",
+    "経路1本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 42,
+   "label": "44歳女性・病院を夜に探す",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 2.8,
+   "ready_sec": 1.1,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 1.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:病院 夜||病院",
+     "ok": true,
+     "sec": 0.6,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 1.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "病院 夜→この範囲の病院",
+    "種類の語で一覧が出たので先頭を選んだ",
+    "経路3本"
+   ],
+   "findings": [
+    {
+     "kind": "禁句",
+     "text": "安心（画面）…ったら #7119（救急安心センター）  営業時",
+     "n": 1,
+     "step": "search:病院 夜"
+    }
+   ]
+  },
+  {
+   "id": 43,
+   "label": "58歳男性・言葉で探す",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 3.0,
+   "ready_sec": 1.7,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 1.7,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:神戸 ランチ||神戸駅",
+     "ok": true,
+     "sec": 0.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.3,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.4,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "神戸 ランチ→神戸駅",
+    "経路3本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 44,
+   "label": "41歳女性・郵便番号で探す",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "回り道で通った",
+   "failed": null,
+   "detours": [
+    {
+     "step": "search:650-0001||search:三宮駅",
+     "first_error": "場所の画面が出ない（画面の文字なし）"
+    }
+   ],
+   "goal_sec": 20.7,
+   "ready_sec": 1.8,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 1.8,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:650-0001||search:三宮駅",
+     "ok": true,
+     "sec": 18.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.6,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "三宮駅→神戸三宮駅",
+    "経路2本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 45,
+   "label": "36歳男性・コンビニを探す",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 7.6,
+   "ready_sec": 4.6,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 4.6,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:コンビニ||セブン",
+     "ok": true,
+     "sec": 1.5,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 1.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "コンビニ→この範囲のコンビニ",
+    "種類の語で一覧が出たので先頭を選んだ",
+    "経路3本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 46,
+   "label": "53歳女性・トイレを探す",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 2.2,
+   "ready_sec": 1.2,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 1.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:トイレ",
+     "ok": true,
+     "sec": 0.3,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.6,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "トイレ→この範囲のトイレ",
+    "種類の語で一覧が出たので先頭を選んだ",
+    "経路2本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 47,
+   "label": "28歳男性・スタバを探す",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 2.1,
+   "ready_sec": 0.9,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 0.9,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:スタバ",
+     "ok": true,
+     "sec": 0.5,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.6,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "スタバ→スターバックス",
+    "経路4本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 48,
+   "label": "42歳女性・車いす",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 1.6,
+   "ready_sec": 1.1,
+   "steps": [
+    {
+     "step": "link:kobe",
+     "ok": true,
+     "sec": 1.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "details",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路4本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 49,
+   "label": "71歳男性・杖で歩く",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 7.2,
+   "ready_sec": 4.5,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 4.5,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:三宮",
+     "ok": true,
+     "sec": 1.7,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.7,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "details",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "三宮→神戸三宮駅",
+    "経路3本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 50,
+   "label": "35歳女性・ベビーカー",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 4.2,
+   "ready_sec": 3.4,
+   "steps": [
+    {
+     "step": "link:kitano",
+     "ok": true,
+     "sec": 3.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.6,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "details",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "pick_route:1",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路3本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 51,
+   "label": "51歳男性・雨の日",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 2.2,
+   "ready_sec": 1.0,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 1.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:元町駅",
+     "ok": true,
+     "sec": 0.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.7,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "元町駅→元町駅",
+    "経路2本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 52,
+   "label": "63歳女性・日傘",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 2.0,
+   "ready_sec": 0.8,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 0.8,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:南京町",
+     "ok": true,
+     "sec": 0.7,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "南京町→南京町",
+    "経路2本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 53,
+   "label": "40歳男性・経路を選ぶ",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 1.9,
+   "ready_sec": 1.6,
+   "steps": [
+    {
+     "step": "link:kobe",
+     "ok": true,
+     "sec": 1.6,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "pick_route:2",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路4本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 54,
+   "label": "46歳男性・通勤・電波が途中で切れる",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "flaky",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 21.7,
+   "ready_sec": 22.2,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 20.7,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:新神戸駅",
+     "ok": true,
+     "sec": 0.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.5,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "読み込み失敗の画面が出た→再読み込みを押した",
+    "新神戸駅→新神戸駅",
+    "経路3本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 55,
+   "label": "34歳女性・位置を断った",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "deny",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 2.9,
+   "ready_sec": 1.2,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 1.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:神戸駅",
+     "ok": true,
+     "sec": 0.6,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.5,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "from:三宮駅",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "menu",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "menu_close",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "神戸駅→神戸駅",
+    "経路3本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 56,
+   "label": "57歳男性・ハーバーランドへ",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 1.9,
+   "ready_sec": 1.0,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 1.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:ハーバーランド",
+     "ok": true,
+     "sec": 0.5,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.3,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "ハーバーランド→神戸ハーバーランド",
+    "経路2本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 57,
+   "label": "29歳男性・六甲山",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 2.2,
+   "ready_sec": 1.0,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 1.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:六甲山",
+     "ok": true,
+     "sec": 0.5,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.6,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "六甲山→六甲山上駅",
+    "経路2本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 58,
+   "label": "38歳女性・有馬温泉へ歩く",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 1.2,
+   "ready_sec": 1.1,
+   "steps": [
+    {
+     "step": "link:arima,night",
+     "ok": true,
+     "sec": 1.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路3本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 59,
+   "label": "55歳男性・ランナー",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 1.9,
+   "ready_sec": 0.9,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 0.9,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:メリケンパーク",
+     "ok": true,
+     "sec": 0.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.5,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "pick_route:0",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "メリケンパーク→メリケンパーク",
+    "経路3本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 60,
+   "label": "32歳女性・案内で歩く",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 4.0,
+   "ready_sec": 2.4,
+   "steps": [
+    {
+     "step": "link:kitano",
+     "ok": true,
+     "sec": 2.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "guide",
+     "ok": true,
+     "sec": 0.5,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "walk:5",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "stop",
+     "ok": true,
+     "sec": 0.3,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路3本",
+    "案内の最初: 次の角を左に曲がる",
+    "5回動かして案内の文が5通り",
+    "経路を外れた表示が出た（直線で歩かせたため）"
+   ],
+   "findings": []
+  },
+  {
+   "id": 61,
+   "label": "25歳男性・音声が鳴らない",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 3.1,
+   "ready_sec": 1.6,
+   "steps": [
+    {
+     "step": "link:kitano",
+     "ok": true,
+     "sec": 1.6,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.3,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "guide",
+     "ok": true,
+     "sec": 0.6,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "voice_toggle",
+     "ok": true,
+     "sec": 0.3,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "walk:2",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "stop",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路3本",
+    "案内の最初: 次の角を左に曲がる",
+    "音声 音声 オン→音声 オフ（押した状態 true→false）",
+    "2回動かして案内の文が3通り"
+   ],
+   "findings": []
+  },
+  {
+   "id": 62,
+   "label": "47歳女性・音声が使えない端末",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 1.6,
+   "ready_sec": 1.0,
+   "steps": [
+    {
+     "step": "link:kitano",
+     "ok": true,
+     "sec": 1.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "guide",
+     "ok": true,
+     "sec": 0.3,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "voice_toggle",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "walk:3",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "stop",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路3本",
+    "案内の最初: 次の角を左に曲がる",
+    "音声が使えない端末: 音声ボタンは隠れている",
+    "3回動かして案内の文が4通り",
+    "経路を外れた表示が出た（直線で歩かせたため）"
+   ],
+   "findings": []
+  },
+  {
+   "id": 63,
+   "label": "44歳男性・道なりが続く",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 1.6,
+   "ready_sec": 1.0,
+   "steps": [
+    {
+     "step": "link:kobe",
+     "ok": true,
+     "sec": 1.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "guide",
+     "ok": true,
+     "sec": 0.3,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "walk:5",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "stop",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路4本",
+    "案内の最初: 次の分かれ道でやや左へ進む",
+    "5回動かして案内の文が3通り",
+    "経路を外れた表示が出た（直線で歩かせたため）"
+   ],
+   "findings": []
+  },
+  {
+   "id": 64,
+   "label": "65歳女性・交差点の案内を見たい",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 1.8,
+   "ready_sec": 1.6,
+   "steps": [
+    {
+     "step": "link:kobe",
+     "ok": true,
+     "sec": 1.6,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "details",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路4本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 65,
+   "label": "33歳女性・夜に案内で歩く",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 3.8,
+   "ready_sec": 1.4,
+   "steps": [
+    {
+     "step": "link:kitano,night",
+     "ok": true,
+     "sec": 1.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "guide",
+     "ok": true,
+     "sec": 1.9,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "walk:5",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "stop",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路2本",
+    "案内の最初: 次の角を左に曲がる",
+    "5回動かして案内の文が5通り",
+    "経路を外れた表示が出た（直線で歩かせたため）"
+   ],
+   "findings": []
+  },
+  {
+   "id": 66,
+   "label": "37歳男性・ビル街でGPSがずれる・電波が途中で切れる",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "flaky",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 21.7,
+   "ready_sec": 22.6,
+   "steps": [
+    {
+     "step": "link:kobe",
+     "ok": true,
+     "sec": 21.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "guide",
+     "ok": true,
+     "sec": 0.3,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "offroute:80",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "blip:3",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "stop",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "読み込み失敗の画面が出た→再読み込みを押した",
+    "経路4本",
+    "案内の最初: 次の分かれ道でやや左へ進む",
+    "80m外れて: ←  70m先  次の角を左に曲がる  経路を外れたので、選んだ経路へ戻る道を案内します（200m）  残り 2.7km"
+   ],
+   "findings": []
+  },
+  {
+   "id": 67,
+   "label": "24歳女性・案内で歩く",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 1.8,
+   "ready_sec": 1.1,
+   "steps": [
+    {
+     "step": "link:kobe",
+     "ok": true,
+     "sec": 1.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "guide",
+     "ok": true,
+     "sec": 0.3,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "walk:3",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "stop",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路4本",
+    "案内の最初: 次の分かれ道でやや左へ進む",
+    "3回動かして案内の文が3通り",
+    "経路を外れた表示が出た（直線で歩かせたため）"
+   ],
+   "findings": []
+  },
+  {
+   "id": 68,
+   "label": "59歳男性・案内で歩く",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 2.7,
+   "ready_sec": 1.2,
+   "steps": [
+    {
+     "step": "link:kobe",
+     "ok": true,
+     "sec": 1.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "guide",
+     "ok": true,
+     "sec": 0.7,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "walk:3",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "stop",
+     "ok": true,
+     "sec": 0.3,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路4本",
+    "案内の最初: 次の分かれ道でやや左へ進む",
+    "3回動かして案内の文が3通り",
+    "経路を外れた表示が出た（直線で歩かせたため）"
+   ],
+   "findings": []
+  },
+  {
+   "id": 69,
+   "label": "41歳女性・案内中に緊急を押した",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 2.2,
+   "ready_sec": 1.2,
+   "steps": [
+    {
+     "step": "link:kitano,night",
+     "ok": true,
+     "sec": 1.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "guide",
+     "ok": true,
+     "sec": 0.3,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "walk:2",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "guide_emg",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "guide_emg_close",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "stop",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路2本",
+    "案内の最初: 次の角を左に曲がる",
+    "2回動かして案内の文が3通り",
+    "緊急の枠: 交番あり"
+   ],
+   "findings": [
+    {
+     "kind": "禁句",
+     "text": "危険（属性）…急時の案内 110 身の危険を感じたら（警察）",
+     "n": 1,
+     "step": "guide_emg"
+    },
+    {
+     "kind": "禁句",
+     "text": "安心（属性）…7119 迷ったら（救急安心センター・24時間）",
+     "n": 1,
+     "step": "guide_emg"
+    }
+   ]
+  },
+  {
+   "id": 70,
+   "label": "67歳男性・交番を探す・電波なし",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "net": "offline2",
+   "geo": "allow",
+   "status": "詰まった",
+   "failed": {
+    "step": "menu",
+    "cat": "押せない(他の物が重なる)",
+    "msg": "メニューに他の物が重なって押せない",
+    "i": 4,
+    "screen": "3 km  コンビニ 飲食店 病院 駅 ほか ≡  ?  電波がないため、前に読み込んだ地図とデータで表示しています"
+   },
+   "detours": [],
+   "goal_sec": null,
+   "ready_sec": 1.3,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 1.3,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "warm",
+     "ok": true,
+     "sec": 0.8,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "offline:on",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "reload",
+     "ok": true,
+     "sec": 0.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "menu",
+     "ok": false,
+     "sec": 8.0,
+     "err": "メニューに他の物が重なって押せない",
+     "cat": "押せない(他の物が重なる)"
+    }
+   ],
+   "notes": [
+    "2回目の備え: 制御あり・入れ物4個",
+    "再起動 0.4秒・電波なし"
+   ],
+   "findings": []
+  },
+  {
+   "id": 71,
+   "label": "30歳女性・近い交番へ",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 1.7,
+   "ready_sec": 0.9,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 0.9,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "menu",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "menu_emg",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "menu_koban",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "menu_route",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "交番: 近くの交番・警察署（現在地から近い順） 葺合警察署三宮センター交番 約80m・交番(人がいない時間があります) 経路を出",
+    "経路1本"
+   ],
+   "findings": [
+    {
+     "kind": "禁句",
+     "text": "危険（属性）…急時の案内 110 身の危険を感じたら（警察）",
+     "n": 2,
+     "step": "menu_emg"
+    },
+    {
+     "kind": "禁句",
+     "text": "安心（属性）…7119 迷ったら（救急安心センター・24時間）",
+     "n": 2,
+     "step": "menu_emg"
+    }
+   ]
+  },
+  {
+   "id": 72,
+   "label": "27歳男性・Claudeに相談",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 1.5,
+   "ready_sec": 1.1,
+   "steps": [
+    {
+     "step": "link:kobe",
+     "ok": true,
+     "sec": 1.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "claude:近道がいい",
+     "ok": true,
+     "sec": 0.3,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路4本",
+    "相談→一覧の経路Aは、道のりが短い経路です。  選んだ経路: 経路A（36分）を地図で選びました。  経路A・Bは、上の一覧の上から順です。  理由 この経路の記録は"
+   ],
+   "findings": []
+  },
+  {
+   "id": 73,
+   "label": "56歳女性・荷物が多い",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 4.5,
+   "ready_sec": 4.0,
+   "steps": [
+    {
+     "step": "link:kobe,night",
+     "ok": true,
+     "sec": 4.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "claude:荷物が多い",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路3本",
+    "相談→一覧の経路Aは、道のりが短い経路です。  選んだ経路: 経路A（36分）を地図で選びました。  経路A・Bは、上の一覧の上から順です。  理由 この経路の記録は"
+   ],
+   "findings": []
+  },
+  {
+   "id": 74,
+   "label": "35歳男性・他人の帰り道を調べたい",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 2.1,
+   "ready_sec": 1.3,
+   "steps": [
+    {
+     "step": "link:kitano,night",
+     "ok": true,
+     "sec": 1.3,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "claude:彼女の帰り道を先回りしたい",
+     "ok": true,
+     "sec": 0.7,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路2本",
+    "相談→この相談には、経路を選ぶ形ではお答えできません。経路の一覧と記録は、そのままご利用いただけます。  交通事故の記録に基づく目安。安全を保証しません。"
+   ],
+   "findings": []
+  },
+  {
+   "id": 75,
+   "label": "48歳男性・経路の違いを見る",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 4.5,
+   "ready_sec": 3.4,
+   "steps": [
+    {
+     "step": "link:kobe",
+     "ok": true,
+     "sec": 3.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "pick_route:1",
+     "ok": true,
+     "sec": 0.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "pick_route:2",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路4本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 76,
+   "label": "31歳女性・別の道を知りたい",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 1.1,
+   "ready_sec": 0.9,
+   "steps": [
+    {
+     "step": "link:kobe",
+     "ok": true,
+     "sec": 0.9,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "details",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路4本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 77,
+   "label": "68歳男性・詳しい理由を見る",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 1.4,
+   "ready_sec": 1.1,
+   "steps": [
+    {
+     "step": "link:kitano",
+     "ok": true,
+     "sec": 1.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "details",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路3本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 78,
+   "label": "25歳女性・初めて使う",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 5.0,
+   "ready_sec": 0.9,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 0.9,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "intro_read",
+     "ok": true,
+     "sec": 0.7,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "maptap",
+     "ok": true,
+     "sec": 2.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:三宮",
+     "ok": true,
+     "sec": 0.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "初回説明: SafeWalk へようこそ  神戸市の、歩いて行くための地図です。道ごとに、警察に届いた交通事故の場所（2020〜2025年）と、夜の歩きやすさを見られます。",
+    "地図をタップ→何も出ない",
+    "三宮→神戸三宮駅",
+    "経路3本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 79,
+   "label": "52歳男性・地図を押してみる",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 3.7,
+   "ready_sec": 0.8,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 0.8,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "maptap",
+     "ok": true,
+     "sec": 2.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:北野",
+     "ok": true,
+     "sec": 0.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "地図をタップ→何も出ない",
+    "北野→北野町一丁目",
+    "経路2本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 80,
+   "label": "38歳女性・ジャンルで探す",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 5.2,
+   "ready_sec": 1.4,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 1.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "maptap",
+     "ok": true,
+     "sec": 2.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "genre:カフェ",
+     "ok": true,
+     "sec": 0.6,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "genre_pick",
+     "ok": true,
+     "sec": 1.1,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "地図をタップ→何も出ない",
+    "カフェの一覧30件"
+   ],
+   "findings": []
+  },
+  {
+   "id": 81,
+   "label": "45歳男性・毎日同じ道・2回目は電波なし",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "offline2",
+   "geo": "allow",
+   "status": "詰まった",
+   "failed": {
+    "step": "search:神戸駅",
+    "cat": "押せない(他の物が重なる)",
+    "msg": "『神戸駅』の候補に他の物が重なって押せない",
+    "i": 4,
+    "screen": "3 km  神戸駅 駅・JR・中央区 新神戸駅 駅・中央区 高速神戸駅 駅・中央区 神戸駅東高架下 施設・中央区 SKホテル神戸駅前 宿泊・中央区 JR新神戸駅前（1F） 施設・中央区 Fitbase 24 神戸駅前 施設・中央区 住所検索は今使えないため、手元の候補だけを出しています。  住所検索は今使えないため、手元の候補だけを出しています。  ✕ コンビニ 飲食店 病院 駅 ほか ≡  ? "
+   },
+   "detours": [],
+   "goal_sec": null,
+   "ready_sec": 0.9,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 0.9,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "warm",
+     "ok": true,
+     "sec": 1.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "offline:on",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "reload",
+     "ok": true,
+     "sec": 0.7,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:神戸駅",
+     "ok": false,
+     "sec": 8.3,
+     "err": "『神戸駅』の候補に他の物が重なって押せない",
+     "cat": "押せない(他の物が重なる)"
+    }
+   ],
+   "notes": [
+    "2回目の備え: 制御あり・入れ物4個",
+    "再起動 0.7秒・電波なし"
+   ],
+   "findings": []
+  },
+  {
+   "id": 82,
+   "label": "34歳女性・共有リンクを電波なしで開く",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "offline2",
+   "geo": "allow",
+   "status": "詰まった",
+   "failed": {
+    "step": "link:kobe,day",
+    "cat": "読み込めない",
+    "msg": "再読み込みを3回押しても起動しない",
+    "i": 3,
+    "screen": "3 km 住所・標高・航空写真: 国土地理院 | 交通事故: 警察庁オープンデータを加工して作成   コンビニ 飲食店 病院 駅 ほか ≡  読み込みに失敗しました。通信を確かめて、もう一度お試しください。  再読み込み ?  電波がないため、前に読み込んだ地図とデータで表示しています"
+   },
+   "detours": [],
+   "goal_sec": null,
+   "ready_sec": 0.9,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 0.9,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "warm",
+     "ok": true,
+     "sec": 1.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "offline:on",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "link:kobe,day",
+     "ok": false,
+     "sec": 60.9,
+     "err": "再読み込みを3回押しても起動しない",
+     "cat": "読み込めない"
+    }
+   ],
+   "notes": [
+    "2回目の備え: 制御あり・入れ物4個",
+    "読み込み失敗の画面が出た→再読み込みを押した",
+    "読み込み失敗の画面が出た→再読み込みを押した",
+    "読み込み失敗の画面が出た→再読み込みを押した",
+    "読み込み失敗の画面が出た→再読み込みを押した"
+   ],
+   "findings": [
+    {
+     "kind": "読み込み失敗の画面",
+     "text": "読み込みに失敗しました。通信を確かめて、もう一度お試しください。  再読み込み",
+     "n": 4,
+     "step": "link:kobe,day"
+    }
+   ]
+  },
+  {
+   "id": 83,
+   "label": "36歳男性・地下鉄の中",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "net": "slow3g",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 134.9,
+   "ready_sec": 132.9,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 132.9,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:神戸駅",
+     "ok": true,
+     "sec": 1.5,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "遅い時の案内(約7MB)が出た",
+    "神戸駅→神戸駅",
+    "経路3本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 84,
+   "label": "42歳女性・通信量が少ない",
+   "dev": "iPhone 13",
+   "browser": "chromium",
+   "net": "slow3g",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 139.4,
+   "ready_sec": 137.4,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 137.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:神戸駅",
+     "ok": true,
+     "sec": 0.7,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.8,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "遅い時の案内(約7MB)が出た",
+    "神戸駅→神戸駅",
+    "経路3本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 85,
+   "label": "55歳女性・古いAndroid・遅い回線",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "net": "slow3g",
+   "geo": "none",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 133.3,
+   "ready_sec": 132.4,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 132.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:北野",
+     "ok": true,
+     "sec": 0.3,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.3,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "from:三宮駅",
+     "ok": true,
+     "sec": 0.3,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "遅い時の案内(約7MB)が出た",
+    "北野→北野町一丁目",
+    "経路2本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 86,
+   "label": "53歳男性・キーボードで操作",
+   "dev": "Desktop Chrome",
+   "browser": "chromium",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 1.9,
+   "ready_sec": 1.0,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 1.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "kb_search:神戸駅",
+     "ok": true,
+     "sec": 0.5,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.3,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路3本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 87,
+   "label": "46歳女性・スクリーンリーダー",
+   "dev": "Desktop Chrome",
+   "browser": "chromium",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 2.2,
+   "ready_sec": 1.0,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 1.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "a11y",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "kb_search:北野",
+     "ok": true,
+     "sec": 0.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 0.5,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "a11y",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路2本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 88,
+   "label": "37歳男性・Tabで進む",
+   "dev": "Desktop Chrome",
+   "browser": "chromium",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 2.2,
+   "ready_sec": 1.6,
+   "steps": [
+    {
+     "step": "link:kitano",
+     "ok": true,
+     "sec": 1.6,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.3,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "tab_walk",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路3本",
+    "Tab 29回: 名前なし0・画面外0"
+   ],
+   "findings": []
+  },
+  {
+   "id": 89,
+   "label": "58歳女性・使い方を見たい",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 1.3,
+   "ready_sec": 0.9,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 0.9,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "menu",
+     "ok": true,
+     "sec": 0.3,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "menu_help",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "使い方→初回の説明が出た"
+   ],
+   "findings": []
+  },
+  {
+   "id": 90,
+   "label": "27歳男性・計算の説明を見たい",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 6.4,
+   "ready_sec": 5.5,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 5.5,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "page:safety.html",
+     "ok": true,
+     "sec": 0.8,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "safety.html→← 地図にもどる 交通事故の記録の目安について  経路に出している「交通事故の記"
+   ],
+   "findings": [
+    {
+     "kind": "禁句",
+     "text": "安心（画面）…消防）・#7119（救急安心センター）と、近くの",
+     "n": 1,
+     "step": "page:safety.html"
+    }
+   ]
+  },
+  {
+   "id": 91,
+   "label": "40歳女性・航空写真にする",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 1.2,
+   "ready_sec": 0.9,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 0.9,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "menu",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "menu_map:航空写真",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "menu_close",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [],
+   "findings": []
+  },
+  {
+   "id": 92,
+   "label": "35歳男性・注意の付き方を見る",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 4.2,
+   "ready_sec": 3.8,
+   "steps": [
+    {
+     "step": "link:kitano,night",
+     "ok": true,
+     "sec": 3.8,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "details",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路2本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 93,
+   "label": "29歳女性・夜の画面",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 1.2,
+   "ready_sec": 1.1,
+   "steps": [
+    {
+     "step": "link:kitano,night",
+     "ok": true,
+     "sec": 1.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路2本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 94,
+   "label": "52歳男性・位置を断った",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "net": "normal",
+   "geo": "deny",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 1.3,
+   "ready_sec": 1.2,
+   "steps": [
+    {
+     "step": "link:kobe,night",
+     "ok": true,
+     "sec": 1.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路3本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 95,
+   "label": "30歳男性・言葉の意味で探す",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 3.7,
+   "ready_sec": 2.8,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 2.8,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:神戸 ベビーカー||神戸駅",
+     "ok": true,
+     "sec": 0.8,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "神戸 ベビーカー→神戸駅"
+   ],
+   "findings": []
+  },
+  {
+   "id": 96,
+   "label": "72歳女性・iPadでゆっくり歩く",
+   "dev": "iPad (gen 7)",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 4.0,
+   "ready_sec": 1.2,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 1.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "search:神戸駅",
+     "ok": true,
+     "sec": 0.5,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "to_place",
+     "ok": true,
+     "sec": 1.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "guide",
+     "ok": true,
+     "sec": 0.9,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "walk:4",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "stop",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "神戸駅→神戸駅",
+    "経路3本",
+    "案内の最初: 次の分かれ道でやや左へ進む",
+    "4回動かして案内の文が4通り",
+    "経路を外れた表示が出た（直線で歩かせたため）"
+   ],
+   "findings": []
+  },
+  {
+   "id": 97,
+   "label": "56歳男性・案内中に戻る",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 1.8,
+   "ready_sec": 1.4,
+   "steps": [
+    {
+     "step": "link:kitano",
+     "ok": true,
+     "sec": 1.4,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "guide",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "back",
+     "ok": true,
+     "sec": 0.1,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "経路3本",
+    "案内の最初: 次の角を左に曲がる",
+    "戻る→経路の一覧A22分最短・1.4km▲ 41件B25分新神戸停車場線経由・1.7k"
+   ],
+   "findings": []
+  },
+  {
+   "id": 98,
+   "label": "43歳女性・メニューで戻る",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "net": "normal",
+   "geo": "none",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 1.2,
+   "ready_sec": 0.8,
+   "steps": [
+    {
+     "step": "open",
+     "ok": true,
+     "sec": 0.8,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "menu",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "back_menu",
+     "ok": true,
+     "sec": 0.2,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [],
+   "findings": []
+  },
+  {
+   "id": 99,
+   "label": "59歳女性・LINEで受け取った",
+   "dev": "Pixel 7",
+   "browser": "chromium",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 1.0,
+   "ready_sec": 0.9,
+   "steps": [
+    {
+     "step": "link:kitano,night,sh",
+     "ok": true,
+     "sec": 0.9,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "共有リンクの最初: 経路の一覧  送られてきた経路です。経路A（22分）。出発地などが違うため、近い経路を出しています。  A 22分 最短・1.4km ▲ 1",
+    "経路2本"
+   ],
+   "findings": []
+  },
+  {
+   "id": 100,
+   "label": "31歳男性・出張・共有リンクを開く",
+   "dev": "iPhone 13",
+   "browser": "webkit",
+   "net": "normal",
+   "geo": "allow",
+   "status": "通った",
+   "failed": null,
+   "detours": [],
+   "goal_sec": 2.0,
+   "ready_sec": 1.6,
+   "steps": [
+    {
+     "step": "link:kobe,sh,me",
+     "ok": true,
+     "sec": 1.8,
+     "err": null,
+     "cat": null
+    },
+    {
+     "step": "routes",
+     "ok": true,
+     "sec": 0.0,
+     "err": null,
+     "cat": null
+    }
+   ],
+   "notes": [
+    "共有リンクの最初: 経路の一覧  送られてきた経路です。経路A（36分）。出発地などが違うため、近い経路を出しています。  A 36分 最短・2.6km ▲ 7",
+    "経路4本"
+   ],
+   "findings": []
+  }
+ ]
+}
