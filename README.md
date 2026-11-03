@@ -100,12 +100,41 @@ OpenStreetMap から作った派生データで、© OpenStreetMap contributors�
 
 ## データの作り直し
 
+`public/data/` の派生データは、公開データを `data/raw/`（git の外）に置いて `pipeline/` で作り直せます。
+次はリポジトリの直下で実行します。Python 3.12 で動かしました（版は下の一覧）。
+
 ```sh
-python -m venv .venv && .venv/Scripts/pip install pandas osmium numpy shapely pillow pykakasi
-# data/raw に事故データ(honhyo_年.csv)と kansai.osm.pbf を置いてから
-PYTHONPATH=pipeline .venv/Scripts/python pipeline/00_kobe.py
-PYTHONPATH=pipeline .venv/Scripts/python pipeline/01_accidents.py
-PYTHONPATH=pipeline .venv/Scripts/python pipeline/02_graph.py
-# 注意書きと段階の境目（ひったくり・町丁目境界を data/raw/stats に置いてから）
-PYTHONPATH=pipeline .venv/Scripts/python pipeline/03_cautions.py
+python -m venv .venv
+.venv/Scripts/pip install pandas==3.1.0 numpy==2.5.4 osmium==4.3.2 shapely==2.2.0 pillow==13.0.0 pykakasi==2.3.0 pyshp==3.1.6
+# macOS・Linux は .venv/bin/pip と .venv/bin/python
 ```
+
+### 1. 生データを置く
+
+取得日はいずれも 2026-11-02〜03 です。再取得すると中身が変わることがあります（OSM は日々更新、統計は年が増える）。
+
+| 置き場所 | 中身 | 取得元 | 取得日 |
+| --- | --- | --- | --- |
+| `data/raw/honhyo_2020.csv` 〜 `honhyo_2025.csv` | 交通事故の本票（Shift_JIS） | <https://www.npa.go.jp/publications/statistics/koutsuu/opendata/index_opendata.html>（各年のページ） | 2026-11-02 |
+| `data/raw/kansai.osm.pbf` | OpenStreetMap の関西の抽出 | Geofabrik <https://download.geofabrik.de/asia/japan/kansai.html> | 2026-11-02 |
+| `data/raw/stats/hittakuri/hyogo_2018hittakuri.csv` 〜 `hyogo_2025hittakuri.csv` | 兵庫県警 ひったくり（町丁目単位） | 兵庫県オープンデータカタログ <https://web.pref.hyogo.lg.jp/kk26/johoseisaku/opendata.html> | 2026-11-03 |
+| `data/raw/stats/estat/<区コード>/r2ka<区コード>.shp`（28101・28102・28105〜28111） | 2020年国勢調査 小地域（町丁・字等）境界 | e-Stat 統計地理情報システム <https://www.e-stat.go.jp/gis/statmap-search>（2020年国勢調査・小地域・世界測地系緯度経度のシェイプ形式。区ごとの取得先は `https://www.e-stat.go.jp/gis/statmap-search/data?dlserveyId=A002005212020&code=<区コード>&coordSys=1&format=shape&downloadType=5&datum=2011`） | 2026-11-03 |
+| `data/raw/stats/6_safety_places/hyogo_police_koban/kobe_police_geocoded.csv` | 交番・警察署・駐在所（2026年9月1日時点）の住所に座標を付けた物（UTF-8） | 兵庫県警「警察署・交番・駐在所の所在地」（上の兵庫県のページの `r8-9-police.xlsx`）の住所を、国土地理院の住所検索 <https://msearch.gsi.go.jp/> で座標にした物。座標を付ける小さなスクリプトはこのリポジトリに無い | 2026-11-03 |
+| `data/raw/dem/` | 標高タイルの置き場 | 国土地理院 標高タイル（02 が自動で取得して置く。<https://maps.gsi.go.jp/development/demtile.html>） | 実行時 |
+
+ひったくりの CSV は 2024年だけ UTF-8、ほかは Shift_JIS です（`03_cautions.py` がファイル名の年で切り替えます）。
+
+### 2. 実行の順番
+
+前の段の出力を次の段が読むので、この順に実行します。
+
+```sh
+export PYTHONPATH=pipeline
+.venv/Scripts/python pipeline/00_kobe.py       # 行政界と地名: kobe.geojson, places.json
+.venv/Scripts/python pipeline/01_accidents.py  # 事故: accidents.json
+.venv/Scripts/python pipeline/02_graph.py      # 歩ける道: graph.bin, graph.meta.json, names.json, graph.ids.bin（標高を取得するため通信が要る）
+.venv/Scripts/python pipeline/03_cautions.py   # 注意書きと段階の境目: cautions.json（01・02・00 の出力を読む）
+.venv/Scripts/python pipeline/04_koban.py      # 近くの交番: koban.json
+```
+
+作り直した後は `npx tsc --noEmit`、`npm run build`、`python tools/check.py` で動きを確かめてください。
