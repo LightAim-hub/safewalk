@@ -297,6 +297,22 @@ export function bindGrip(): void {
   });
 }
 
+/** 幅が変わった時の後始末。スマホで動かしたシートの高さを PC 幅に持ち越さず、著作権表示は狭い画面で畳んだ状態にする。 */
+function bindNarrowLayout(): void {
+  const narrow = window.matchMedia("(max-width: 720px)");
+  const collapseAttribution = () => {
+    if (!narrow.matches) return;
+    // maplibre は狭い画面で最初だけ全文を開く。3 行になり縮尺を覆うので、ⓘ の畳んだ表示から始める。
+    document.querySelector(".maplibregl-ctrl-attrib.maplibregl-compact")?.classList.remove("maplibregl-compact-show");
+  };
+  narrow.addEventListener("change", () => {
+    if (!narrow.matches) sheet.style.removeProperty("--sheet-h");
+    // 幅の変更で maplibre が表示を作り直すので、その後で畳む。
+    setTimeout(collapseAttribution, 0);
+  });
+  map.once("load", collapseAttribution);
+}
+
 /** 検索欄の ✕ は、欄に文字がある間だけ出す。 */
 export function syncClearButton(): void {
   $("clear-q").hidden = !qInput.value;
@@ -326,6 +342,7 @@ export function bindMapUi(): void {
     });
   });
   bindGrip();
+  bindNarrowLayout();
   $("locate").addEventListener("click", async () => {
     const me = await locateMe();
     if (me) map.flyTo({ center: [me.lon, me.lat], zoom: 16, padding: mapPadding() });
