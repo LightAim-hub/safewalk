@@ -1,4 +1,5 @@
 import * as maplibregl from "maplibre-gl";
+import { track } from "./telemetry";
 import { type GeoJSONSource } from "maplibre-gl";
 import { metres, type LatLon } from "./graph";
 import { findRoutes, joinRoutes, minutesFor, type Period, type Route } from "./routes";
@@ -137,7 +138,10 @@ function disclaimerBar(): HTMLElement {
 }
 
 /** 表示中の経路を消す。経路を出せない時は、古い経路を残さず理由を出す。offerCurrent は「現在地を使う」ボタンを添える。 */
+const replacedSent = new WeakSet<object>();
+
 export function clearRoutes(message = "", offerCurrent = false): void {
+  if (message) track("route_none", message);
   resetAgent();
   periodSwitched = false;
   state.routes = [];
@@ -352,6 +356,7 @@ export function showRoutes(): void {
   selectRoute(first);
   fitRoutes(500);
   announce(`経路が${state.routes.length}本出ました`);
+  track("route", `${state.routes.length}本・${state.period === "night" ? "夜" : "昼"}${state.stops.some(Boolean) ? "・経由地あり" : ""}${state.from?.name === CURRENT ? "・現在地から" : ""}`);
 }
 
 // ---------------------------------------------------------------- 経路を人に送る（選んだ経路を開いた側で再現する）
@@ -1005,6 +1010,7 @@ function restoreSheetHeight(): void {
 }
 
 function showEmergency(): void {
+  track("emergency", "相談の文から");
   emergencyNode = emergencyPanel(state.from, routeToKoban, dismissEmergency);
   raiseSheetForEmergency();
   if (state.routes.length) selectRoute(state.selected);
@@ -1105,6 +1111,8 @@ async function askClaude(text: string): Promise<void> {
   if (!result) agentUi = { ...idleAgent(), ...flags, error: FIXED.failed };
   else if (!result.ok) agentUi = { ...idleAgent(), ...flags, error: result.error ?? FIXED.failed };
   else agentUi = { ...idleAgent(), ...flags, result };
+  if (!result || !result.ok) track("consult_error", result?.error ?? "例外");
+  else track("consult", `${state.period === "night" ? "夜" : "昼"}・理由${result.reasons.length}件${result.declined ? "・お断り" : ""}`);
   const chosen = agentUi.result?.declined ? null : agentUi.result?.chosenRouteIndex;
   if (agentUi.result && chosen != null && sameRoutes(agentUi.result)) selectRoute(chosen);
   else renderAgent();
@@ -1146,6 +1154,10 @@ function agentResultView(result: AgentResult, disaster: boolean): HTMLElement[] 
     nodes.push(el("p", "agent-hint", "確認を通らなかった一部の文は、固定の文に差し替えました。"));
     // どの欄が・なぜ落ちたかを開発者向けの記録に残す(画面には出さない。原因を追うため)。
     console.info("[SafeWalk 相談] 差し替え", result.replaced);
+    if (!replacedSent.has(result)) {
+      replacedSent.add(result);
+      track("consult_replaced", result.replaced.join(" / "));
+    }
   }
   nodes.push(el("p", "agent-disclaimer", `${result.disclaimer}。`));
   return nodes;

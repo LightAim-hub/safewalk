@@ -1,3 +1,4 @@
+import { track } from "./telemetry";
 import * as maplibregl from "maplibre-gl";
 import { metres, type LatLon } from "./graph";
 import { qInput, sheet, GENRES, state, map, markers, toast, el, mapPadding } from "./app";
@@ -207,6 +208,7 @@ export function externalLink(raw: string): HTMLAnchorElement | null {
 }
 
 export function showPlace(place: Place): void {
+  track("place", place.kind ?? "");
   state.picked = place;
   qInput.value = place.name;
   markers.picked.setLngLat([place.lon, place.lat]).addTo(map);

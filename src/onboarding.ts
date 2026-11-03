@@ -1,3 +1,4 @@
+import { track } from "./telemetry";
 import "./onboarding.css";
 
 /** 位置情報が使えなかった理由。 */
@@ -105,6 +106,7 @@ export function confirmLocate(): Promise<boolean> {
 
 /** 位置情報が使えなかった理由を、消えない案内で出す。 */
 export function showLocateFail(kind: LocateFail): void {
+  track("locate_fail", kind);
   openNote("alert", (box) => {
     const steps = (title: string, lines: string[]) => {
       const d = el("div", "note-steps");

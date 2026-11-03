@@ -1,3 +1,4 @@
+import { track } from "./telemetry";
 import { $, CURRENT, el, sheet as sheetEl, state } from "./app";
 import { openDirections, renderStops, SAFETY_PAGE } from "./directions";
 import { emergencyPanel, KOBAN_HEADING_HERE } from "./emergency";
@@ -128,6 +129,7 @@ function locateForEmergency(): Promise<Place | null> {
 }
 
 function showEmergency(origin: Place | null): void {
+  track("emergency", "メニュー");
   const box = $("menu-emg-box");
   const onRoute = (k: KobanHit) => {
     if (!origin) return;

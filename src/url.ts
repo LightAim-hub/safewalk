@@ -1,3 +1,4 @@
+import { track } from "./telemetry";
 import { type LatLon } from "./graph";
 import { $, qInput, sheet, CURRENT, GENRES, state, map, markers, toast, mapPadding } from "./app";
 import { openDirections, closeDirections, renderStops, fillCurrent, setSharedRoute, distinguishingPoints, formatMinutes, MAX_STOPS } from "./directions";
@@ -18,6 +19,7 @@ function cleanName(name: string | null | undefined): string {
 const copiedTimers = new WeakMap<HTMLButtonElement, number>();
 
 export async function copyLink(button: HTMLButtonElement, text = location.href, done = "コピーしました"): Promise<void> {
+  track("share");
   try {
     await navigator.clipboard.writeText(text);
     const original = button.dataset.label ?? button.textContent ?? "";

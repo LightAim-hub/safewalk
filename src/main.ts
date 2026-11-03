@@ -10,6 +10,10 @@ import { bindOffline } from "./offline";
 import { bindOnboarding } from "./onboarding";
 import { bindSearchUi } from "./search";
 import { applyUrl, renderPeriod, bindUrl, listenHistory } from "./url";
+import { startTelemetry, track } from "./telemetry";
+
+startTelemetry();
+const startedAt = performance.now();
 
 
 bindSearchUi();
@@ -43,6 +47,7 @@ const mapReady = new Promise<void>((resolve, reject) => {
 const slowTimer = setTimeout(() => {
   $("loading").textContent = "通信に時間がかかっています。読み込みを続けています…";
   $("load-slow").hidden = false;
+  track("slow");
 }, SLOW_MS);
 $("load-slow-reload").addEventListener("click", () => location.reload());
 Promise.all([loadData(), mapReady]).then(
@@ -54,6 +59,7 @@ Promise.all([loadData(), mapReady]).then(
       ui.inert = false;
       locateButton.disabled = false;
       $("loading").hidden = true;
+      track("ready", `${Math.round((performance.now() - startedAt) / 100) / 10}秒${navigator.onLine ? "" : "・電波なし"}${navigator.serviceWorker?.controller ? "・端末の控え" : ""}`);
     } catch (err) {
       showLoadError(err);
       return;
@@ -64,6 +70,7 @@ Promise.all([loadData(), mapReady]).then(
       applyUrl();
     } catch (err) {
       console.error(err);
+      track("js_error", `共有リンク: ${(err as Error)?.message ?? err}`);
       history.replaceState(null, "", location.pathname);
       toast("共有された地点を読めませんでした。");
     }
@@ -77,6 +84,7 @@ function showLoadError(err: unknown): void {
   console.error(err);
   if (loadFailed) return;
   loadFailed = true;
+  track("load_error", `${(err as Error)?.message ?? String(err)}${navigator.onLine ? "" : "・電波なし"}`);
   clearTimeout(slowTimer);
   $("load-slow").hidden = true;
   $("loading").hidden = true;

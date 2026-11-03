@@ -1,4 +1,5 @@
 import type { GeoJSONSource } from "maplibre-gl";
+import { track } from "./telemetry";
 import { metres, type LatLon } from "./graph";
 import { findRoutes, minutesFor, type Route } from "./routes";
 import { $, CURRENT, state, map, markers, toast, el } from "./app";
@@ -301,6 +302,7 @@ export function joinBack(p: LatLon, route: Route, idx: number, leg: Route): Rout
  * 探せない時は元の経路を残し、戻るように伝える。
  */
 export function reroute(p: LatLon, route: Route, startOfGuide = false): boolean {
+  track("guide_reroute", startOfGuide ? "開始時" : "");
   const idx = nearestIndex(p, route, guideProgress);
   const join = route.coords[idx];
   const here = snap(p);
@@ -379,6 +381,7 @@ export function showTurn(arrow: string, distance: string): void {
 /** 位置が取れていない間は、古い案内を正しいように見せない。 */
 export function setLost(on: boolean, reason = "", aloud = true): void {
   const wasLost = lost;
+  if (on && !wasLost) track("guide_lost", reason === STALE_TEXT ? "更新が止まった" : "取得できない");
   lost = on;
   $("guide").classList.toggle("lost", on);
   if (on) {
@@ -431,6 +434,7 @@ export function updateGuide(p: LatLon, accuracy?: number): void {
   // 誤差が大きすぎる位置では、判定も表示も変えない(数km先と判定して経路を組み替えないように)。
   if (accuracy && accuracy > UNSURE_ACCURACY_M) {
     showAlert("gps", "位置が不確かです。屋外の開けた場所で少し待つと戻ります", 6000);
+    track("guide_unsure", `${Math.round(accuracy)}m`);
     return;
   }
   map.easeTo({ center: [p.lon, p.lat], zoom: Math.max(map.getZoom(), 17), duration: 500 });
@@ -457,7 +461,10 @@ export function updateGuide(p: LatLon, accuracy?: number): void {
   const loop = metres({ lat: begin[1], lon: begin[0] }, { lat: end[1], lon: end[0] }) <= STEP_REACHED_M * 2;
   if (metres(p, { lat: end[1], lon: end[0] }) <= STEP_REACHED_M && (!loop || rest.metresLeft <= STEP_REACHED_M * 2)) {
     arrivedFlag = true;
-    if ($("guide-next").textContent !== "目的地に着きました") speak("目的地に到着しました。お疲れさまでした。");
+    if ($("guide-next").textContent !== "目的地に着きました") {
+      speak("目的地に到着しました。お疲れさまでした。");
+      track("guide_arrive");
+    }
     put("guide-next", "目的地に着きました");
     showTurn("⚑", "");
     put("guide-then", "");
@@ -487,6 +494,7 @@ export function startGuide(index: number): void {
   if (watchId !== null) return;
   // 終了の二度押しが、すぐ下の「案内を始める」に当たって再開するのを防ぐ。
   if (Date.now() - endedAt < RESTART_GUARD_MS) return;
+  track("guide_start", `${Math.round((state.routes[index]?.metres ?? 0) / 100) / 10}km`);
   if (!navigator.geolocation) {
     toast("この端末では現在地を取得できません。");
     return;
@@ -554,6 +562,7 @@ export function toggleEmergency(open?: boolean): void {
   if (!box || !button) return;
   const show = open ?? box.hidden;
   button.setAttribute("aria-expanded", String(show));
+  if (show) track("emergency", "案内中");
   if (!show) {
     box.hidden = true;
     box.replaceChildren();
@@ -591,6 +600,7 @@ export function stopGuide(): void {
   const wasGuiding = watchId !== null;
   watchId = null;
   if (wasGuiding) {
+    track("guide_stop", arrivedFlag ? "到着後" : "途中");
     // 案内で出した現在地の点と誤差の円は、終えたら消す(古い場所を今の場所のように見せないため)。
     markers.me.remove();
     (map.getSource("accuracy") as GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features: [] });

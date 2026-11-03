@@ -1,3 +1,4 @@
+import { track } from "./telemetry";
 import * as maplibregl from "maplibre-gl";
 import { type GeoJSONSource } from "maplibre-gl";
 import { metres, type LatLon } from "./graph";
@@ -751,6 +752,7 @@ export function bindSuggest(
       note = "検索しています…";
     } else if (!items.length && value) {
       // 見つからない知らせは、この一か所だけに出す（下の知らせには出さない）。
+      noteNone(unavailable);
       note = unavailable
         ? "神戸市内の場所が見つかりません（住所検索は今使えませんでした。SafeWalk の検索は神戸市内のみです）"
         : "神戸市内で見つかりません（SafeWalk の検索は神戸市内のみです）";
@@ -880,4 +882,12 @@ export function bindSearchUi(): void {
   );
   renderChips();
   $("research").addEventListener("click", () => state.genre && searchGenre(state.genre));
+}
+
+/** 「見つからない」を記録する(打っている途中で何度も出るので、同じ入力欄で10秒に1回まで)。打った文字は送らない。 */
+let noneAt = 0;
+function noteNone(unavailable: boolean): void {
+  if (Date.now() - noneAt < 10000) return;
+  noneAt = Date.now();
+  track("search_none", unavailable ? "住所検索が使えない" : "");
 }

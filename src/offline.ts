@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import { toast, toastEl } from "./app";
+import { track } from "./telemetry";
 /**
  * 電波が弱い・無い時の備え(Service Worker の登録と、オフライン表示)。
  * 中身は public/sw.js。使えない端末・プライベートブラウズ・開発中(vite dev)では何もせず、今まで通り通信で動く。
@@ -11,6 +12,7 @@ const UPDATE_CHECK_MIN_MS = 10 * 60 * 1000;
 let note: HTMLElement | null = null;
 
 function showNote(): void {
+  track("offline", "前に読み込んだ地図で表示");
   if (!note) {
     note = document.createElement("p");
     note.id = "offline-note";
@@ -64,6 +66,7 @@ export function bindOffline(): void {
             navigator.storage?.persist?.().catch(() => {});
             worker.addEventListener("statechange", () => {
               if (worker.state !== "activated") return;
+              track("sw_ready");
               // 今の画面が読み込んだ地図は、この仕組みが動く前に取った物なので残っていない。取り直して残すよう頼む。
               const urls = performance
                 .getEntriesByType("resource")

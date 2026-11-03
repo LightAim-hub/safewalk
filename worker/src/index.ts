@@ -21,6 +21,8 @@ export interface Env {
   ENABLE_FALLBACKS?: string;
   /** 回数の上限(1端末ごと)から外す回線。secret に入れる(リポジトリに書かない)。カンマ区切り。IPv6 は先頭 64 ビットで比べる。 */
   UNLIMITED_IPS?: string;
+  /** 使われ方の記録を読み出す合言葉。secret に入れる(リポジトリに書かない)。無ければ読み出しは閉じる。 */
+  LOG_READ_TOKEN?: string;
 }
 
 const ALLOWED_ORIGINS = [
@@ -180,6 +182,8 @@ export default {
     const origin = request.headers.get("origin");
     const allowed = origin !== null && ALLOWED_ORIGINS.includes(origin);
 
+    if (url.pathname === "/api/log") return handleLog(request, env, origin, allowed);
+    if (url.pathname === "/api/log/read") return readLog(request, env, url);
     if (url.pathname !== "/api/claude") {
       return new Response("safewalk-claude relay", { status: url.pathname === "/" ? 200 : 404 });
     }
@@ -278,6 +282,77 @@ export function isUnlimited(ip: string, list: string | undefined): boolean {
   return list.split(/[\s,]+/).filter(Boolean).some((x) => key(x) === me);
 }
 
+
+// ---------------------------------------------------------------- 使われ方の記録(デモの集計用)
+// 送ってよいのは、決まった種類の出来事と、短い説明だけ。座標・検索の文字・IP は受け取らない・残さない。
+const LOG_TYPES = new Set([
+  "open", "ready", "load_error", "slow", "js_error", "offline", "sw_ready",
+  "search", "search_none", "place", "route", "route_none", "period", "share",
+  "guide_start", "guide_stop", "guide_arrive", "guide_reroute", "guide_lost", "guide_unsure",
+  "emergency", "consult", "consult_error", "consult_replaced", "locate", "locate_fail", "menu",
+]);
+const LOG_MAX_BODY = 16_000;
+const LOG_MAX_EVENTS = 60;
+const LOG_PER_IP_DAY = 3000;
+
+/** 説明の文から、座標らしい数字・URL の ? 以降・長すぎる部分を落とす。 */
+export function scrubDetail(v: unknown): string {
+  if (typeof v !== "string") return "";
+  return v
+    .replace(/\?[^\s"']*/g, "?…")
+    .replace(/\d{2,3}\.\d{3,}/g, "#")
+    .slice(0, 300);
+}
+
+async function handleLog(request: Request, env: Env, origin: string | null, allowed: boolean): Promise<Response> {
+  const h = { ...cors(origin) };
+  if (!allowed) return new Response(null, { status: 403, headers: h });
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: h });
+  if (request.method !== "POST") return new Response(null, { status: 405, headers: h });
+  const text = await request.text();
+  if (text.length > LOG_MAX_BODY) return new Response(null, { status: 413, headers: h });
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    return new Response(null, { status: 400, headers: h });
+  }
+  if (!isObj(body) || typeof body.sid !== "string" || !Array.isArray(body.events)) return new Response(null, { status: 400, headers: h });
+  const sid = body.sid.replace(/[^a-z0-9]/gi, "").slice(0, 16);
+  const dev = isObj(body.dev) ? JSON.stringify({
+    os: scrubDetail(body.dev.os).slice(0, 20), br: scrubDetail(body.dev.br).slice(0, 20),
+    w: Number(body.dev.w) | 0, h: Number(body.dev.h) | 0, app: body.dev.app === true, ver: scrubDetail(body.dev.ver).slice(0, 20),
+  }) : "{}";
+  const now = Date.now();
+  const rows = body.events.slice(0, LOG_MAX_EVENTS).flatMap((e) => {
+    if (!isObj(e) || typeof e.type !== "string" || !LOG_TYPES.has(e.type)) return [];
+    const at = Number(e.at);
+    const ts = Number.isFinite(at) && Math.abs(now - at) < 3600_000 ? at : now;
+    return [{ ts, type: e.type, detail: scrubDetail(e.detail) }];
+  });
+  if (!sid || !rows.length) return new Response(null, { status: 204, headers: h });
+  try {
+    const ip = await sha(request.headers.get("cf-connecting-ip") ?? "unknown");
+    const stub = env.LIMITER.get(env.LIMITER.idFromName("global"));
+    await stub.log(ip, sid, dev, rows, now, LOG_PER_IP_DAY);
+  } catch {
+    // 記録できなくても、アプリの動きには関わらない。
+  }
+  return new Response(null, { status: 204, headers: h });
+}
+
+/** 合言葉が合う時だけ、記録を JSON で返す(?since=ミリ秒)。 */
+async function readLog(request: Request, env: Env, url: URL): Promise<Response> {
+  const token = request.headers.get("x-log-token") ?? "";
+  if (!env.LOG_READ_TOKEN || token.length !== env.LOG_READ_TOKEN.length || token !== env.LOG_READ_TOKEN) {
+    return new Response("not found", { status: 404 });
+  }
+  const since = Number(url.searchParams.get("since") ?? 0) || Date.now() - 86400_000;
+  const stub = env.LIMITER.get(env.LIMITER.idFromName("global"));
+  const rows = await stub.readLog(since);
+  return new Response(JSON.stringify(rows), { headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
+}
+
 // ---------------------------------------------------------------- 回数の数え方
 
 type Limits = { daily: number; ip10: number; ipDay: number };
@@ -293,6 +368,21 @@ export class Limiter extends DurableObject {
     ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS hits (ip TEXT NOT NULL, ts INTEGER NOT NULL)");
     ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS hits_ip_ts ON hits (ip, ts)");
     ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS daily (day TEXT PRIMARY KEY, n INTEGER NOT NULL)");
+    ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS events (ts INTEGER NOT NULL, ip TEXT NOT NULL, sid TEXT NOT NULL, type TEXT NOT NULL, detail TEXT NOT NULL, dev TEXT NOT NULL)");
+    ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS events_ts ON events (ts)");
+  }
+
+  /** 使われ方の記録を足す。1つの回線(元に戻せない短い値)あたり1日の件数に上限。30日より古い物は消す。 */
+  log(ip: string, sid: string, dev: string, rows: { ts: number; type: string; detail: string }[], now: number, perIpDay: number): void {
+    const sql = this.ctx.storage.sql;
+    const n = sql.exec("SELECT COUNT(*) AS c FROM events WHERE ip = ? AND ts > ?", ip, now - 86400_000).one().c as number;
+    const room = Math.max(0, perIpDay - n);
+    for (const r of rows.slice(0, room)) sql.exec("INSERT INTO events (ts, ip, sid, type, detail, dev) VALUES (?, ?, ?, ?, ?, ?)", r.ts, ip, sid, r.type, r.detail, dev);
+    sql.exec("DELETE FROM events WHERE ts < ?", now - 30 * 86400_000);
+  }
+
+  readLog(since: number): Record<string, unknown>[] {
+    return this.ctx.storage.sql.exec("SELECT ts, ip, sid, type, detail, dev FROM events WHERE ts >= ? ORDER BY ts LIMIT 20000", since).toArray() as Record<string, unknown>[];
   }
 
   hit(ip: string, now: number, limits: Limits): HitResult {
