@@ -66,11 +66,13 @@ export const SAFETY_RULES = {
   /** 同じ種類の知らせは、さらにこれだけ空ける(ms) */
   noticeKindGapMs: 12 * 60 * 1000,
   /** ひったくりの注意を出す町丁目の最小の記録数(2018〜2025年の合計)。1件だけの所では出さない。 */
+  /** ひったくりの注意を出す町丁目の下限（8年合計）。絞り込みは pipeline/03_cautions.py の TOWN_MIN で済ませてある（同じ値にする） */
   snatchMinTown: 2,
 };
 
 type Hot = [lat: number, lon: number, all: number, night: number];
-type Town = { name: string; ward: string; n: number; rings: [number, number][][] };
+/** ひったくりの注意を出す町丁目の形。町名・件数は公開データに持たない（pipeline/03_cautions.py の TOWN_MIN 件以上の町だけ）。 */
+type Town = { rings: [number, number][][] };
 type TierEdges = { lo: number; hi: number; quantiles: Record<string, number>; roadKm: number; cells: number; accidents: number; zeroShare: number };
 
 export type Cautions = {
@@ -327,17 +329,16 @@ function cautionsFor(s: Safety, route: Route, pts: [number, number][], period: P
   const towns = new Map<number, number>();
   for (const [lon, lat] of densify(route.coords, 25)) {
     const t = townAt(s, lon, lat);
-    if (t >= 0 && s.cautions.towns[t].n >= SAFETY_RULES.snatchMinTown) towns.set(t, (towns.get(t) ?? 0) + 1);
+    if (t >= 0) towns.set(t, (towns.get(t) ?? 0) + 1);
   }
   const alerts: RouteAlert[] = [];
   for (const t of towns.keys()) {
-    const town = s.cautions.towns[t];
     alerts.push({
-      id: `town:${town.ward}${town.name}`,
+      id: `town:${t}`,
       kind: "snatch",
       at: null,
       town: t,
-      count: town.n,
+      count: 1,
       text: "この付近では、荷物は車道と反対の手で持ってください",
     });
   }

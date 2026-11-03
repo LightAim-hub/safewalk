@@ -90,6 +90,10 @@ def town_polygons():
     return polys
 
 
+# ひったくりの注意を出す町丁目の下限（8年合計）。src/safety.ts はこの一覧にある町を通る時だけ注意を出す。
+TOWN_MIN = 2
+
+
 def towns():
     counts = load_hittakuri()
     polys = town_polygons()
@@ -106,12 +110,16 @@ def towns():
         g = unary_union(geoms).simplify(0.00004, preserve_topology=True)
         parts = list(g.geoms) if g.geom_type == "MultiPolygon" else [g]
         rings = [[[round(x, 5), round(y, 5)] for x, y in p.exterior.coords] for p in parts if not p.is_empty]
-        out.append({"name": label, "ward": city.replace("神戸市", ""), "n": n, "rings": rings})
-    out.sort(key=lambda t: -t["n"])
+        out.append({"n": n, "rings": rings})
     print("ひったくり", sum(c for c in counts.values()), "件 町丁目", len(merged), "うち境界に結べた", len(out))
     for m in missed:
         print("  結べなかった", m)
-    return out, sum(t["n"] for t in out), missed
+    total = sum(t["n"] for t in out)
+    # 公開するデータに町名・区・件数・件数の順位を残さない（町の危険度を示さないため）。
+    # 8年で TOWN_MIN 件以上の町丁目の形だけを、位置の順に並べて出す。
+    out = [{"rings": t["rings"]} for t in out if t["n"] >= TOWN_MIN]
+    out.sort(key=lambda t: (t["rings"][0][0][0], t["rings"][0][0][1]))
+    return out, total, missed
 
 
 # ---------------------------------------------------------------- 交通事故
