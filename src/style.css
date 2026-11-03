@@ -8,9 +8,67 @@
   --good: #188038;
   --mid: #b06000;
   --bad: #c5221f;
+
+  /* 青の文字は 4.5:1 を満たす濃さにする（#1a73e8 は薄い青地の上で 3.9:1）。塗りの青は --accent。 */
+  --link: #1557b0;
+  --accent: #1a73e8;
+  --on-accent: #fff;
+  --tint: #e8f0fe;
+  --tint2: #f4f8fe;
+  --edge: #80868b; /* 入力欄・ボタンの縁（背景に対して 3:1 以上） */
+  --warn-bg: #fef7e0;
+  --warn-ink: #7a4f01;
+  --bad-bg: #fce8e6;
+  --grip-bar: #c4c7cc;
+  --toast-bg: #303134;
+  --toast-ink: #fff;
+  --focus: #0b57d0;
   --shadow: 0 1px 3px rgb(60 64 67 / 30%), 0 4px 10px rgb(60 64 67 / 15%);
   font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", system-ui, sans-serif;
   color: var(--ink);
+  color-scheme: light dark;
+
+  /* 横向きにしたとき iOS が文字を勝手に大きくしない（拡大は端末の設定とピンチに任せる）。none にはしない。 */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* 端末が暗い設定の時は暗い配色にする。夜に眩しくなく、文字は 4.5:1 以上を保つ。 */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e8eaed;
+    --sub: #9aa0a6;
+    --line: #3c4043;
+    --paper: #202124;
+    --wash: #303134;
+    --blue: #5b9cf5;
+    --good: #81c995;
+    --mid: #fdd663;
+    --bad: #f28b82;
+    --link: #8ab4f8;
+    --accent: #8ab4f8;
+    --on-accent: #202124;
+    --tint: #1f3a5f;
+    --tint2: #1a2a40;
+    --edge: #8a8f95;
+    --warn-bg: #3a2e0a;
+    --warn-ink: #fdd663;
+    --bad-bg: #4a1f1d;
+    --grip-bar: #80868b;
+    --toast-bg: #3c4043;
+    --toast-ink: #e8eaed;
+    --focus: #8ab4f8;
+    --shadow: 0 1px 3px rgb(0 0 0 / 60%), 0 4px 10px rgb(0 0 0 / 40%);
+  }
+}
+
+/* iPhone / iPad の Safari だけ、設定の「文字の大きさ」（Dynamic Type）に本文を合わせる。
+   Mac の Safari は body が 13px になり小さくなるので、-webkit-touch-callout で iOS に絞る。 */
+@supports (font: -apple-system-body) and (-webkit-touch-callout: none) {
+  html {
+    font: -apple-system-body;
+    font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", system-ui, sans-serif;
+  }
 }
 
 * {
@@ -40,10 +98,22 @@ button {
   cursor: pointer;
 }
 
-button:focus-visible,
-input:focus-visible {
-  outline: 2px solid var(--blue);
-  outline-offset: 1px;
+/* キーボードで操作した時の枠。青い塗りのボタンの上でも見えるよう、太く・間を空けて描く。 */
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* 検索欄は input の枠を消して外側の枠で示すので、外側に出す。 */
+.bar:has(input:focus-visible),
+.dir-fields .field:has(input:focus-visible),
+.stop-row .field:has(input:focus-visible) {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+summary {
+  cursor: pointer;
 }
 
 .ui {
@@ -56,6 +126,7 @@ input:focus-visible {
   flex-direction: column;
   gap: 10px;
   width: 392px;
+  max-width: calc(100vw - 24px);
   pointer-events: none;
 }
 
@@ -85,45 +156,54 @@ input:focus-visible {
 
 .field input {
   width: 100%;
-  height: 40px;
+  height: 2.75rem;
+  min-height: 44px;
   border: 0;
   background: transparent;
   color: var(--ink);
-  font-size: 16px;
+  font-size: max(16px, 1rem); /* 16px 未満だと iOS が入力欄を拡大してしまう */
 }
 
-.field input:focus {
+.field input:focus,
+.field input:focus-visible {
   outline: none;
+}
+
+.field input::placeholder {
+  color: var(--sub);
+  opacity: 1;
 }
 
 .icon {
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: 2.75rem;
+  height: 2.75rem;
+  min-width: 44px;
+  min-height: 44px;
   flex: none;
   border: 0;
   border-radius: 50%;
-  background: var(--blue);
-  color: #fff;
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 .icon svg {
-  width: 22px;
+  width: 1.375rem;
   fill: currentColor;
 }
 
 .icon.plain {
   background: transparent;
   color: var(--sub);
-  font-size: 18px;
+  font-size: 1.125rem;
 }
 
 .suggest {
   position: absolute;
   top: calc(100% + 6px);
   left: -14px;
-  right: -52px;
+  right: calc(-2.75rem - 12px);
   z-index: 5;
   max-height: 52dvh;
   margin: 0;
@@ -136,7 +216,7 @@ input:focus-visible {
 }
 
 .directions .suggest {
-  right: -40px;
+  right: -2.75rem;
 }
 
 .suggest button {
@@ -144,9 +224,11 @@ input:focus-visible {
   justify-content: space-between;
   gap: 12px;
   width: 100%;
+  min-height: 44px;
   padding: 10px 14px;
   border: 0;
   background: transparent;
+  color: inherit;
   text-align: left;
 }
 
@@ -158,13 +240,13 @@ input:focus-visible {
 .suggest .empty {
   padding: 10px 14px;
   color: var(--sub);
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 .suggest .kind {
   flex: none;
   color: var(--sub);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .directions {
@@ -183,22 +265,22 @@ input:focus-visible {
   position: relative;
   display: grid;
   gap: 6px;
-  padding-right: 40px;
+  padding-right: 2.75rem;
 }
 
 .dir-fields .field {
   padding: 0 10px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--edge);
   border-radius: 8px;
 }
 
 .dir-fields .field:focus-within {
-  border-color: var(--blue);
+  border-color: var(--link);
 }
 
 .swap {
   position: absolute;
-  top: 24px;
+  top: calc(2.75rem - 18px);
   right: 0;
 }
 
@@ -215,24 +297,25 @@ input:focus-visible {
   display: flex;
   align-items: center;
   gap: 2px;
-  margin-right: -40px;
+  margin-right: -2.75rem;
 }
 
 .stop-row .field {
   flex: 1;
   min-width: 0;
   padding: 0 10px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--edge);
   border-radius: 8px;
 }
 
 .add-stop {
   justify-self: start;
-  padding: 4px 2px;
+  min-height: 44px;
+  padding: 4px 8px;
   border: 0;
   background: transparent;
-  color: var(--blue);
-  font-size: 13px;
+  color: var(--link);
+  font-size: 0.875rem;
 }
 
 .chips {
@@ -255,20 +338,20 @@ input:focus-visible {
 
 .chip {
   flex: none;
-  min-height: 32px;
+  min-height: 2.25rem;
   padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: 16px;
   background: var(--paper);
   box-shadow: 0 1px 2px rgb(60 64 67 / 20%);
   color: var(--ink);
-  font-size: 13px;
+  font-size: 0.875rem;
 }
 
 .chip[aria-pressed="true"] {
-  border-color: var(--blue);
-  background: #e8f0fe;
-  color: var(--blue);
+  border-color: var(--link);
+  background: var(--tint);
+  color: var(--link);
   font-weight: 600;
 }
 
@@ -278,14 +361,14 @@ body.routing .chips:not(.inline) {
 
 .research {
   align-self: center;
-  min-height: 34px;
-  padding: 0 16px;
+  min-height: 2.75rem;
+  padding: 0 18px;
   border: 0;
-  border-radius: 17px;
+  border-radius: 22px;
   background: var(--paper);
   box-shadow: var(--shadow);
-  color: var(--blue);
-  font-size: 13px;
+  color: var(--link);
+  font-size: 0.875rem;
   font-weight: 600;
   pointer-events: auto;
 }
@@ -297,17 +380,17 @@ body.routing .chips:not(.inline) {
 }
 
 .period button {
-  min-height: 36px;
-  border: 1px solid var(--line);
-  border-radius: 18px;
+  min-height: 2.75rem;
+  border: 1px solid var(--edge);
+  border-radius: 22px;
   background: var(--paper);
   color: var(--sub);
 }
 
 .period button[aria-pressed="true"] {
-  border-color: var(--blue);
-  background: #e8f0fe;
-  color: var(--blue);
+  border-color: var(--link);
+  background: var(--tint);
+  color: var(--link);
   font-weight: 600;
 }
 
@@ -320,24 +403,24 @@ body.routing .chips:not(.inline) {
 
 .place h2 {
   margin: 0;
-  font-size: 19px;
+  font-size: 1.1875rem;
 }
 
 .place p {
   margin: 4px 0 12px;
   color: var(--sub);
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 .sheet-title {
   margin: 0 0 8px;
-  font-size: 16px;
+  font-size: 1rem;
 }
 
 .sub-title {
   margin: 14px 0 6px !important;
   color: var(--ink) !important;
-  font-size: 13px !important;
+  font-size: 0.875rem !important;
   font-weight: 600;
 }
 
@@ -345,7 +428,7 @@ body.routing .chips:not(.inline) {
   display: grid;
   gap: 6px;
   margin-top: 12px;
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 .info {
@@ -356,11 +439,14 @@ body.routing .chips:not(.inline) {
 
 .info .label {
   color: var(--sub);
-  font-size: 13px;
+  font-size: 0.875rem;
 }
 
 .info a {
-  color: var(--blue);
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--link);
   word-break: break-all;
 }
 
@@ -375,6 +461,8 @@ body.routing .chips:not(.inline) {
 .results button {
   display: grid;
   width: 100%;
+  min-height: 44px;
+  color: inherit;
   padding: 8px;
   border: 0;
   border-radius: 8px;
@@ -387,7 +475,7 @@ body.routing .chips:not(.inline) {
 }
 
 .results .name {
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
 }
 
@@ -399,22 +487,22 @@ body.routing .chips:not(.inline) {
 
 .primary,
 .secondary {
-  min-height: 40px;
+  min-height: 2.75rem;
   padding: 0 18px;
-  border-radius: 20px;
+  border-radius: 22px;
 }
 
 .primary {
   border: 0;
-  background: var(--blue);
-  color: #fff;
+  background: var(--accent);
+  color: var(--on-accent);
   font-weight: 600;
 }
 
 .secondary {
-  border: 1px solid var(--line);
+  border: 1px solid var(--edge);
   background: var(--paper);
-  color: var(--blue);
+  color: var(--link);
 }
 
 .routes {
@@ -434,16 +522,17 @@ body.routing .chips:not(.inline) {
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--paper);
+  color: inherit;
   text-align: left;
 }
 
 .routes button[aria-current] {
-  border-color: var(--blue);
-  background: #f4f8fe;
+  border-color: var(--link);
+  background: var(--tint2);
 }
 
 .time {
-  font-size: 20px;
+  font-size: 1.25rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -453,7 +542,7 @@ body.routing .chips:not(.inline) {
   grid-column: 2;
   align-self: center;
   text-align: right;
-  font-size: 22px;
+  font-size: 1.375rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -461,34 +550,34 @@ body.routing .chips:not(.inline) {
 .safety small {
   display: block;
   color: var(--sub);
-  font-size: 11px;
+  font-size: 0.75rem;
   font-weight: 400;
 }
 
 .facts {
   color: var(--sub);
-  font-size: 13px;
+  font-size: 0.875rem;
 }
 
 .via {
   grid-column: 1 / -1;
   color: var(--sub);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .warn {
   margin: 8px 0 0;
   padding: 8px 10px;
   border-radius: 8px;
-  background: #fef7e0;
-  color: #7a4f01;
-  font-size: 13px;
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+  font-size: 0.875rem;
   line-height: 1.5;
 }
 
 .detail {
   margin-top: 12px;
-  font-size: 13px;
+  font-size: 0.875rem;
 }
 
 .detail summary {
@@ -511,7 +600,9 @@ body.routing .chips:not(.inline) {
 
 .detail li button {
   width: 100%;
+  min-height: 44px;
   padding: 7px 8px;
+  color: inherit;
   border: 0;
   border-radius: 6px;
   background: var(--wash);
@@ -526,7 +617,7 @@ body.routing .chips:not(.inline) {
 }
 
 .profile polygon {
-  fill: #e8f0fe;
+  fill: var(--tint);
 }
 
 .profile polyline {
@@ -538,7 +629,7 @@ body.routing .chips:not(.inline) {
 .note {
   margin: 12px 0 0;
   color: var(--sub);
-  font-size: 11px;
+  font-size: 0.75rem;
   line-height: 1.6;
 }
 
@@ -548,29 +639,29 @@ body.routing .chips:not(.inline) {
   background: var(--paper);
   box-shadow: var(--shadow);
   color: var(--sub);
-  font-size: 13px;
+  font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
 }
 
 .time-tag.on {
-  background: var(--blue);
-  color: #fff;
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 .popup-actions {
   display: grid;
   gap: 6px;
-  font-size: 13px;
+  font-size: 0.875rem;
 }
 
 .popup-actions button {
-  min-height: 32px;
+  min-height: 2.75rem;
   padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: 16px;
   background: var(--paper);
-  color: var(--blue);
+  color: var(--link);
 }
 
 .start {
@@ -591,10 +682,12 @@ body.routing .chips:not(.inline) {
   justify-content: space-between;
   gap: 10px;
   width: 100%;
+  min-height: 44px;
   padding: 8px;
   border: 0;
   border-radius: 6px;
   background: transparent;
+  color: inherit;
   text-align: left;
 }
 
@@ -619,14 +712,14 @@ body.routing .chips:not(.inline) {
 
 .guide .next {
   margin: 0;
-  font-size: 18px;
+  font-size: 1.125rem;
   font-weight: 700;
 }
 
 .guide .rest {
   margin: 4px 0 8px;
   color: var(--sub);
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 body.guiding .ui {
@@ -669,17 +762,18 @@ body.guiding .ui {
 }
 
 .layer-menu button {
-  min-height: 34px;
+  min-height: 2.75rem;
   padding: 0 14px;
   border: 0;
   border-radius: 8px;
   background: transparent;
+  color: inherit;
   text-align: left;
 }
 
 .layer-menu button[aria-pressed="true"] {
-  background: #e8f0fe;
-  color: var(--blue);
+  background: var(--tint);
+  color: var(--link);
   font-weight: 600;
 }
 
@@ -731,9 +825,9 @@ body.guiding .ui {
   padding: 10px 16px;
   transform: translateX(-50%);
   border-radius: 8px;
-  background: #303134;
-  color: #fff;
-  font-size: 14px;
+  background: var(--toast-bg);
+  color: var(--toast-ink);
+  font-size: 0.875rem;
 }
 
 .load-error {
@@ -751,7 +845,7 @@ body.guiding .ui {
 
 .load-error p {
   margin: 0;
-  font-size: 15px;
+  font-size: 0.9375rem;
   line-height: 1.6;
 }
 
@@ -786,7 +880,7 @@ body.guiding .ui {
     position: relative;
     display: block;
     flex: none;
-    height: 22px;
+    height: 34px;
     margin-top: auto;
     margin-bottom: -10px;
     border-radius: 12px 12px 0 0;
@@ -795,6 +889,13 @@ body.guiding .ui {
     cursor: grab;
     pointer-events: auto;
     touch-action: none;
+  }
+
+  /* つまみの見た目より上にも触れる範囲を広げる（指で掴みやすくする）。 */
+  .grip::before {
+    content: "";
+    position: absolute;
+    inset: -12px 0 0;
   }
 
   .grip::after {
@@ -806,7 +907,7 @@ body.guiding .ui {
     height: 4px;
     margin-left: -18px;
     border-radius: 2px;
-    background: #c4c7cc;
+    background: var(--grip-bar);
   }
 
   .grip:has(+ .sheet[hidden]) {
@@ -816,17 +917,17 @@ body.guiding .ui {
   /* ジャンルのボタン（上から 66〜102px）の下に置き、重ならないようにする。 */
   .locate {
     right: 10px;
-    top: 112px;
+    top: calc(5.5rem + 24px);
     bottom: auto;
   }
 
   .layers {
-    top: 164px;
+    top: calc(5.5rem + 76px);
     bottom: auto;
   }
 
   .layer-menu {
-    top: 164px;
+    top: calc(5.5rem + 76px);
     right: 62px;
     bottom: auto;
   }
@@ -850,27 +951,31 @@ body.guiding .ui {
   }
 
   .chip {
-    min-height: 44px;
+    min-height: 2.75rem;
     padding: 0 16px;
     border-radius: 22px;
   }
 
   .layer-menu button {
-    min-height: 44px;
+    min-height: 2.75rem;
+  }
+
+  .time-tag {
+    padding: 8px 12px;
   }
 }
 
 @media (max-width: 720px) {
   .locate {
-    top: 126px;
+    top: calc(5.5rem + 40px);
   }
 
   .layers {
-    top: 178px;
+    top: calc(5.5rem + 92px);
   }
 
   .layer-menu {
-    top: 178px;
+    top: calc(5.5rem + 92px);
   }
 }
 
@@ -879,5 +984,79 @@ body.guiding .ui {
   .chips:not(.inline) {
     flex-wrap: nowrap;
     overflow-x: auto;
+  }
+}
+
+/* 暗い設定の端末: 地図の部品も暗い配色に揃える。 */
+@media (prefers-color-scheme: dark) {
+  .maplibregl-ctrl-group {
+    background: var(--paper);
+  }
+
+  .maplibregl-ctrl-group button + button {
+    border-top-color: var(--line);
+  }
+
+  .maplibregl-ctrl-group button .maplibregl-ctrl-icon {
+    filter: invert(1) brightness(1.1);
+  }
+
+  .maplibregl-ctrl-attrib.maplibregl-compact,
+  .maplibregl-ctrl-attrib {
+    background: rgb(32 33 36 / 80%);
+    color: var(--sub);
+  }
+
+  .maplibregl-ctrl-attrib a {
+    color: var(--link);
+  }
+
+  .maplibregl-popup-content {
+    background: var(--paper);
+    color: var(--ink);
+  }
+
+  .maplibregl-popup-anchor-top .maplibregl-popup-tip {
+    border-bottom-color: var(--paper);
+  }
+
+  .maplibregl-popup-anchor-bottom .maplibregl-popup-tip {
+    border-top-color: var(--paper);
+  }
+
+  .maplibregl-popup-anchor-left .maplibregl-popup-tip {
+    border-right-color: var(--paper);
+  }
+
+  .maplibregl-popup-anchor-right .maplibregl-popup-tip {
+    border-left-color: var(--paper);
+  }
+
+  .maplibregl-popup-close-button {
+    color: var(--ink);
+  }
+
+  /* 地図そのものの配色（app.ts）は明るいままなので、夜に眩しくないよう画面側で少し落とす。 */
+  #map .maplibregl-canvas {
+    filter: brightness(0.78);
+  }
+}
+
+/* 横向きのスマホ（幅は広いが高さが低い）: 現在地・地図の種類は、拡大ボタンと重ならないよう右上に置く。 */
+@media (min-width: 721px) and (max-height: 500px) {
+  .locate {
+    top: 12px;
+    bottom: auto;
+  }
+
+  .layers {
+    top: 68px;
+    bottom: auto;
+  }
+
+  .layer-menu {
+    top: 68px;
+    right: 64px;
+    bottom: auto;
   }
 }
