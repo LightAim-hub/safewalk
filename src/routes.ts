@@ -132,7 +132,7 @@ export function findRoutes(
   const known = found.filter((r) => r.safety !== null);
   const safest = known.reduce<Route | null>((a, b) => (!a || b.safety! > a.safety! ? b : a), null);
   found.forEach((r, i) => {
-    r.label = i === 0 ? "最短" : r === safest ? "最も安全" : "別の道";
+    r.label = i === 0 ? "最短" : r === safest ? "事故の記録が少ない道" : "別の道";
   });
   if (found.length === 1) found[0].label = "おすすめ";
   distinctVias(found);
