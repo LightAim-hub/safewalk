@@ -2,7 +2,7 @@ import maplibregl, { type GeoJSONSource } from "maplibre-gl";
 import { metres, type LatLon } from "./graph";
 import { findRoutes, joinRoutes, minutesFor, type Period, type Route } from "./routes";
 import { showAccidents, accidentDetail } from "./accidents-ui";
-import { $, qInput, fromInput, toInput, searchbar, directions, sheet, COLORS, GENRES, state, map, markers, stopMarkers, toast, scoreColor, el } from "./app";
+import { $, qInput, fromInput, toInput, searchbar, directions, sheet, COLORS, CURRENT, GENRES, state, map, markers, stopMarkers, toast, scoreColor, el } from "./app";
 import { graph, accidents, meta, places, names, emptyCollection, snap } from "./data";
 import { startGuide, stopGuide } from "./guide";
 import { popup } from "./place";
@@ -22,10 +22,32 @@ export function openDirections(ends: Partial<Record<End, Place>>): void {
   if (ends.from) setEnd("from", ends.from, false);
   if (ends.to) setEnd("to", ends.to, false);
   if (state.from && state.to) search();
-  else (state.from ? toInput : fromInput).focus();
+  // 出発地が空なら現在地を入れる。出発地へは焦点を当てない（候補の一覧が目的地欄・昼夜ボタンを覆うため）。
+  else if (!state.to) toInput.focus();
+  if (!state.from) fillCurrentFrom();
+}
+
+let locating = 0;
+
+/** 出発地の既定は現在地。取れない・神戸市外の時は何も出さず空のままにする（知らせで目的地欄を覆わない）。 */
+function fillCurrentFrom(): void {
+  if (!navigator.geolocation) return;
+  const mine = ++locating;
+  navigator.geolocation.getCurrentPosition(
+    ({ coords }) => {
+      // 待つ間に、経路の画面を閉じた・出発地を選んだ・文字を打った時は、何もしない。
+      if (mine !== locating || state.mode !== "directions" || state.from || fromInput.value.trim()) return;
+      const place: Place = { lat: coords.latitude, lon: coords.longitude, name: CURRENT };
+      if (snap(place) === null) return;
+      setEnd("from", place);
+    },
+    () => undefined,
+    { timeout: 8000, maximumAge: 60000 },
+  );
 }
 
 export function closeDirections(): void {
+  locating++;
   stopGuide();
   popup?.remove();
   state.mode = "browse";
@@ -90,6 +112,9 @@ export function renderStops(): void {
         if (state.from && state.to) search();
       });
       row.append(field, remove);
+      input.addEventListener("blur", () => {
+        input.value = state.stops[i]?.name ?? "";
+      });
       bindSuggest(
         input,
         (place) => {
@@ -131,7 +156,7 @@ export function searchThrough(): Route | null {
   if (anchors.some((a) => a === null)) return null;
   const parts = anchors.slice(1).map((a, i) => {
     const options = findRoutes(graph, anchors[i]!, a!, state.period, accidents, meta, names);
-    return options[state.period === "night" ? safestIndex(options) : 0];
+    return options[0];
   });
   if (parts.some((part) => !part)) return null;
   return joinRoutes(parts, points.slice(1, -1).map((p) => p.name));
@@ -165,11 +190,17 @@ export function search(): void {
 export function showRoutes(): void {
   for (const route of state.routes) connectEnds(route, state.from!, state.to!);
   replaceUrl();
-  // 昼は Google マップと同じく最短を選び、夜は最も安全な経路を選ぶ。
-  selectRoute(state.period === "night" ? safestIndex(state.routes) : 0);
+  // 昼も夜も Google マップと同じく最短を選ぶ。「最も安全」などは一覧に並べたままにする。
+  selectRoute(0);
+  fitRoutes(500);
+}
+
+/** 経路の全体が、入力欄とシートを避けた見える範囲に収まるようにする。 */
+export function fitRoutes(duration: number): void {
+  if (!state.routes.length) return;
   const all = state.routes.flatMap((r) => r.coords);
   const bounds = all.reduce((b, c) => b.extend(c), new maplibregl.LngLatBounds(all[0], all[0]));
-  map.fitBounds(bounds, { padding: routePadding(), duration: 500 });
+  map.fitBounds(bounds, { padding: routePadding(), duration });
 }
 
 /** 交差点から実際の地点までの区間を、線と距離に足す。 */
@@ -276,8 +307,23 @@ export function drawTimeTags(): void {
   layoutTimeTags();
 }
 
+/** 安全度の数字の意味。出し方を変えたら、ここだけ直す。 */
+export const SAFETY_MEANING = "安全度は、交通事故の記録から計算した目安です。高いほど記録が少ない道です。安全を保証するものではありません。";
+
+/** 最短との差。最短そのもの・差が無い時は空。 */
+export function diffFromShortest(route: Route, shortest: Route): string {
+  const dm = route.metres - shortest.metres;
+  const dmin = route.minutes - shortest.minutes;
+  if (route === shortest || (Math.abs(dm) < 10 && dmin === 0)) return "";
+  const sign = (n: number) => (n >= 0 ? "+" : "−");
+  const parts = [`${sign(dm)}${formatMetres(Math.abs(dm))}`];
+  if (dmin !== 0) parts.push(`${sign(dmin)}${formatMinutes(Math.abs(dmin))}`);
+  return `最短より ${parts.join("・")}`;
+}
+
 export function routeList(): HTMLOListElement {
   const list = el("ol", "routes");
+  const shortest = state.routes.reduce((a, b) => (b.metres < a.metres ? b : a), state.routes[0]);
   list.append(
     ...state.routes.map((route, i) => {
       const li = el("li");
@@ -293,6 +339,7 @@ export function routeList(): HTMLOListElement {
         safety,
         el("span", "facts", `${route.label}・${(route.metres / 1000).toFixed(1)}km・上り${route.climb}m`),
         ...(route.via ? [el("span", "via", `${route.via} 経由`)] : []),
+        ...(diffFromShortest(route, shortest) ? [el("span", "diff", diffFromShortest(route, shortest))] : []),
       );
       li.append(button);
       return li;
@@ -316,19 +363,24 @@ export function selectRoute(index: number): void {
   drawTimeTags();
   const start = el("button", "primary start", "案内を始める");
   start.type = "button";
-  start.addEventListener("click", () => startGuide(index));
+  start.addEventListener("click", () => startGuide(state.selected));
+  // 一覧が長くても届くよう、案内ボタンは一覧の上に置き、スクロールしても上端に残す。
+  const startBar = el("div", "start-bar");
+  startBar.append(start);
   sheet.replaceChildren(
+    startBar,
+    el("p", "safety-note", SAFETY_MEANING),
     routeList(),
     ...routeWarnings(route),
-    start,
     stepList(route),
     elevationDetail(route),
     alongDetail(route),
     accidentDetail(route),
-    el("p", "note", "安全度は公開データから計算した目安で、その道の安全を保証するものではありません。"),
   );
   sheet.hidden = false;
-  sheet.querySelector(".routes [aria-current]")?.scrollIntoView({ block: "nearest" });
+  // 最短（先頭）の時は上端のまま。説明の行を半端に隠さない。
+  if (index === 0) sheet.scrollTop = 0;
+  else sheet.querySelector(".routes [aria-current]")?.scrollIntoView({ block: "nearest" });
 }
 
 export const FLAT_M = 10;
@@ -462,6 +514,23 @@ export function bindDirectionsUi(): void {
   };
   bindSuggest(fromInput, (p) => setEnd("from", p), { offerCurrent: true, onEdit: clearEnd("from") });
   bindSuggest(toInput, (p) => setEnd("to", p), { offerCurrent: true, onEdit: clearEnd("to") });
+  // 打ちかけて欄を離れた時は、今の地点の名前に戻す（経路と食い違わせない）。
+  for (const [which, input] of [["from", fromInput], ["to", toInput]] as const) {
+    input.addEventListener("blur", () => {
+      input.value = state[which]?.name ?? "";
+    });
+  }
+  // 画面の幅・向きが変わったら、経路を収め直し、札を置き直す。
+  let resizeTimer = 0;
+  window.addEventListener("resize", () => {
+    window.clearTimeout(resizeTimer);
+    resizeTimer = window.setTimeout(() => {
+      if (state.mode !== "directions" || !state.routes.length || document.body.classList.contains("guiding")) return;
+      map.resize();
+      fitRoutes(0);
+      layoutTimeTags();
+    }, 200);
+  });
   $("open-directions").addEventListener("click", () => {
     openDirections(state.picked ? { to: state.picked } : {});
     pushUrl();
