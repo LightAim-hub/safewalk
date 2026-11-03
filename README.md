@@ -70,6 +70,7 @@ npm run dev
 | 道路網 | [OpenStreetMap](https://www.openstreetmap.org/copyright)（Geofabrik 抽出） | ODbL |
 | 地名・神戸市の行政界 | [OpenStreetMap](https://www.openstreetmap.org/copyright) | ODbL |
 | 背景地図 | [OpenFreeMap](https://openfreemap.org/) / OpenMapTiles / OpenStreetMap | 各提供元の条件 |
+| 書体 | BIZ UDPゴシック（Morisawa / SIL OFL 1.1）。[Google Fonts の配布物](https://github.com/google/fonts/tree/main/ofl/bizudpgothic)から、使う文字だけに絞った woff2 を同梱（`public/fonts/`、全文 `public/fonts/OFL.txt`） | [SIL Open Font License 1.1](https://openfontlicense.org/) |
 | 住所検索 | [国土地理院 住所検索](https://msearch.gsi.go.jp/) | 国土地理院コンテンツ利用規約 |
 | 郵便番号から町名 | [zipcloud 郵便番号検索API](https://zipcloud.ibsnet.co.jp/doc/api)（株式会社アイビス） | zipcloud 利用規約 |
 | 地点の住所（逆ジオコーダー） | [国土地理院](https://mreversegeocoder.gsi.go.jp/) | 国土地理院コンテンツ利用規約 |

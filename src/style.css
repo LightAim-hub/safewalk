@@ -25,7 +25,7 @@
   --toast-ink: #fff;
   --focus: #0b57d0;
   --shadow: 0 1px 3px rgb(60 64 67 / 30%), 0 4px 10px rgb(60 64 67 / 15%);
-  font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", system-ui, sans-serif;
+  font-family: "BIZ UDPGothic", "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", system-ui, sans-serif;
   color: var(--ink);
   color-scheme: light dark;
 
@@ -69,7 +69,7 @@
 @supports (font: -apple-system-body) and (-webkit-touch-callout: none) {
   html {
     font: -apple-system-body;
-    font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", system-ui, sans-serif;
+    font-family: "BIZ UDPGothic", "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", system-ui, sans-serif;
   }
 }
 
