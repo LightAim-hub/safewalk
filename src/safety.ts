@@ -246,7 +246,7 @@ export function assess(s: Safety, route: Route, period: Period): Assessment {
   let unknown: string | null = null;
   if (unfit > total * SAFETY_RULES.unknownShare || unfit >= SAFETY_RULES.unknownMetres) {
     const parts = [];
-    if (route.remoteMetres >= SAFETY_RULES.remoteNoteM) parts.push(`人家から離れた区間 ${km(route.remoteMetres)}`);
+    if (route.remoteMetres >= SAFETY_RULES.remoteNoteM) parts.push(`家が少ない区間 ${km(route.remoteMetres)}`);
     if (route.outsideMetres >= SAFETY_RULES.remoteNoteM) parts.push(`神戸市の外の区間 ${km(route.outsideMetres)}`);
     unknown = parts.join("、") || "評価できない区間が長い";
   } else if (route.metres < SAFETY_RULES.minMetres) {
@@ -256,7 +256,7 @@ export function assess(s: Safety, route: Route, period: Period): Assessment {
   const reasons: string[] = [];
   if (!unknown) {
     reasons.push(
-      `${night ? "夜間の" : ""}歩行者・自転車が関わる事故の記録が、1kmあたり${perKmText(perKm)}（神戸市の道では${perKmText(edges.hi)}以上が上位2割、${
+      `${night ? "夜の" : ""}歩行者・自転車が関わる事故の記録が、1kmあたり${perKmText(perKm)}（神戸市の道では${perKmText(edges.hi)}以上が上位2割、${
         edges.lo > 0 ? `${perKmText(edges.lo)}以下が下位2割` : `記録が無い道が${Math.round(edges.zeroShare * 10)}割`
       }）`,
     );
@@ -270,13 +270,11 @@ export function assess(s: Safety, route: Route, period: Period): Assessment {
     const lines: string[] = [];
     lines.push(
       route.remoteMetres >= SAFETY_RULES.remoteNoteM
-        ? `人家から離れた区間が ${km(route.remoteMetres)} あります`
-        : "人家から離れた区間はほとんどありません",
+        ? `家が少ない区間 ${km(route.remoteMetres)}`
+        : "家が少ない区間はほとんどありません",
     );
     lines.push(
-      shops > 0
-        ? `経路沿い${SAFETY_RULES.shopNearM}m以内に、深夜も開いている店の記録が${shops}軒あります（営業時間が記録されている店のみ）`
-        : `経路沿い${SAFETY_RULES.shopNearM}m以内に、営業時間の記録で深夜も開いている店は見つかりません`,
+      shops > 0 ? `深夜営業の店 ${shops}軒（経路から${SAFETY_RULES.shopNearM}m以内）` : "深夜営業の店は記録にありません",
     );
     nightPart = { remoteMetres: route.remoteMetres, lateShops: shops, lines };
   }
@@ -310,7 +308,7 @@ function cautionsFor(s: Safety, route: Route, pts: [number, number][], period: P
     list.push({
       kind,
       count,
-      text: `この経路の近くで、${span}${useNight ? "の夜間" : ""}に${who}の記録が${count}件あります。${advice}`,
+      text: `この経路の近くで、${span}${useNight ? "の夜" : ""}に${who}の記録が${count}件あります。${advice}`,
     });
   };
   make("bike", "自転車との事故", "周りの自転車に注意してください");
