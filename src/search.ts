@@ -503,6 +503,14 @@ export function renderChips(): void {
 /** 外部の検索を待つ長さ。これを過ぎたら手元の候補だけで続ける。 */
 export const EXTERNAL_TIMEOUT_MS = 2500;
 
+/** 指定の時間で中断する signal。AbortSignal.timeout が無い古い端末(iOS 16 以前など)でも例外にならない。 */
+export function timeoutSignal(ms: number): AbortSignal {
+  if (typeof AbortSignal.timeout === "function") return AbortSignal.timeout(ms);
+  const ctl = new AbortController();
+  setTimeout(() => ctl.abort(), ms);
+  return ctl.signal;
+}
+
 export interface Lookup {
   places: Place[];
   /** 時間切れ・通信の失敗で、外部の検索が使えなかった。 */
@@ -513,7 +521,7 @@ export interface Lookup {
 export async function lookupAddress(
   query: string,
   limit = 4,
-  signal: AbortSignal = AbortSignal.timeout(EXTERNAL_TIMEOUT_MS),
+  signal: AbortSignal = timeoutSignal(EXTERNAL_TIMEOUT_MS),
 ): Promise<Lookup> {
   const url = `https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(query)}`;
   try {
@@ -547,7 +555,7 @@ export async function searchAddress(query: string, limit = 4): Promise<Place[]> 
  */
 export async function lookupPostcode(
   code: string,
-  signal: AbortSignal = AbortSignal.timeout(EXTERNAL_TIMEOUT_MS),
+  signal: AbortSignal = timeoutSignal(EXTERNAL_TIMEOUT_MS),
 ): Promise<Lookup> {
   try {
     const res = await fetch(`https://zipcloud.ibsnet.co.jp/api/search?zipcode=${code.replace("-", "")}`, { signal });

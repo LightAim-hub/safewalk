@@ -20,6 +20,7 @@ await esbuild.build({
       export * from ${JSON.stringify(path.join(root, "src/agent-tools.ts").replace(/\\/g, "/"))};
       export { Graph } from ${JSON.stringify(path.join(root, "src/graph.ts").replace(/\\/g, "/"))};
       export { AccidentIndex } from ${JSON.stringify(path.join(root, "src/routes.ts").replace(/\\/g, "/"))};
+      export { FIXED_SYSTEM, FIXED_TOOLS } from ${JSON.stringify(path.join(root, "worker/src/fixed.ts").replace(/\\/g, "/"))};
       export { createSafety } from ${JSON.stringify(path.join(root, "src/safety.ts").replace(/\\/g, "/"))};
     `,
     resolveDir: root,
@@ -65,6 +66,7 @@ const arima = pick("有馬温泉駅");
 
 // ---- 模擬の Claude
 let failed = 0;
+let maxMessagesChars = 0;
 const check = (name, cond, detail = "") => {
   console.log(`${cond ? "PASS" : "FAIL"}  ${name}${cond ? "" : "  " + detail}`);
   if (!cond) failed++;
@@ -91,6 +93,7 @@ function mockFetch(script) {
   const fetchImpl = async (_url, init) => {
     const body = JSON.parse(init.body);
     calls.push(structuredClone(body));
+    maxMessagesChars = Math.max(maxMessagesChars, JSON.stringify(body.messages).length);
     const r = script(body, calls.length, factsOf(body));
     if (r instanceof Response) return r;
     return new Response(JSON.stringify(r), { status: 200, headers: { "content-type": "application/json" } });
@@ -220,7 +223,7 @@ const thinking = { type: "thinking", thinking: "", signature: "sig-abc" };
   let x = await run({}, () => e429());
   check("中継の 429: 日本語の文をそのまま出す", !x.r.ok && x.r.error.includes("今日の Claude") && x.r.summary === M.FIXED.failed, x.r.error);
   x = await run({}, () => new Response("<html>bad gateway</html>", { status: 502 }));
-  check("日本語でない失敗は固定の文", !x.r.ok && x.r.error.includes("502"), x.r.error);
+  check("日本語でない 5xx は固定の文(状態の番号は出さない)", !x.r.ok && x.r.error === M.FIXED.down, x.r.error);
   x = await run({}, () => reply([], "refusal"));
   check("refusal は失敗として返す", !x.r.ok && x.r.error.includes("答えられません"));
   x = await run({}, () => reply([{ type: "text", text: "{" }], "max_tokens"));
@@ -292,5 +295,11 @@ const thinking = { type: "thinking", thinking: "", signature: "sig-abc" };
 }
 
 fs.rmSync(path.dirname(out), { recursive: true, force: true });
+// Worker に固定した system と tools が、ブラウザ側(agent.ts・agent-tools.ts)と同じ
+console.log("  (messages の最大 " + maxMessagesChars + " 字 / Worker の上限 80000 字)");
+check("実際の会話の長さが Worker の上限の半分以下", maxMessagesChars < 40000, String(maxMessagesChars));
+check("Worker の system が agent.ts の SYSTEM_PROMPT と同じ", M.FIXED_SYSTEM === M.SYSTEM_PROMPT);
+check("Worker の tools が agent-tools.ts の TOOLS と同じ", JSON.stringify(M.FIXED_TOOLS) === JSON.stringify(M.TOOLS));
+
 console.log(failed ? `\n${failed} 件失敗` : "\n全て通りました");
 process.exit(failed ? 1 : 0);

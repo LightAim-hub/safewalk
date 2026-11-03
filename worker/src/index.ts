@@ -8,6 +8,7 @@
  *       1つの IP の回数 / 1日の全体の回数(Durable Objects の SQLite。無料プランで使える)。
  */
 import { DurableObject } from "cloudflare:workers";
+import { FIXED_SYSTEM, FIXED_TOOLS } from "./fixed";
 
 export interface Env {
   ANTHROPIC_API_KEY?: string;
@@ -29,7 +30,11 @@ const MAX_TOKENS_CAP = 6000;
 const MAX_BODY_BYTES = 100_000;
 const MAX_MESSAGES = 40;
 const ANTHROPIC_VERSION = "2026-10-21";
-const FORWARD_KEYS = ["model", "max_tokens", "system", "messages", "tools", "tool_choice", "output_config", "thinking"];
+const FORWARD_KEYS = ["model", "max_tokens", "tool_choice", "output_config", "thinking"];
+// messages の検査の上限。agent.ts は最大 7 往復(最大 15 件)。余裕を見ている。
+const MAX_MESSAGES_CHARS = 80_000;
+const MAX_STRING_CHARS = 40_000;
+const TOOL_NAMES = FIXED_TOOLS.map((t) => t.name);
 
 const MSG = {
   origin: "この場所からは Claude を利用できません。",
@@ -39,6 +44,7 @@ const MSG = {
   badModel: "このモデルは利用できません。",
   badTool: "利用できない道具が含まれています。",
   badBody: "送られた内容に不足または不正があります。",
+  badMessages: "送られた会話の形式が正しくないか、長すぎます。",
   ip10: "短い時間に回数が多すぎます。しばらくしてから、もう一度お試しください。",
   ipDay: "この端末からの 1 日の利用回数の上限に達しました。明日、もう一度お試しください。",
   daily: "今日の Claude の利用回数の上限に達しました。日本時間の朝 9 時以降にもう一度お試しください。経路の検索は Claude なしでお使いいただけます。",
@@ -67,16 +73,70 @@ function json(status: number, message: string, origin: string | null, extra: Rec
   });
 }
 
+const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+const str = (v: unknown): v is string => typeof v === "string" && v.length <= MAX_STRING_CHARS;
+
+/** 1つのブロックを、許す形だけに作り直す(余計な項目は落とす)。形が違えば null。 */
+function checkBlock(b: unknown, role: string): Record<string, unknown> | null {
+  if (!isObj(b)) return null;
+  if (b.type === "text" && str(b.text)) return { type: "text", text: b.text };
+  if (role === "user" && b.type === "tool_result") {
+    if (!str(b.tool_use_id) || !str(b.content)) return null;
+    if (b.is_error !== undefined && typeof b.is_error !== "boolean") return null;
+    return { type: "tool_result", tool_use_id: b.tool_use_id, content: b.content, ...(b.is_error ? { is_error: true } : {}) };
+  }
+  if (role === "assistant") {
+    if (b.type === "thinking" && typeof b.thinking === "string" && b.thinking.length <= MAX_STRING_CHARS && str(b.signature)) {
+      return { type: "thinking", thinking: b.thinking, signature: b.signature };
+    }
+    if (b.type === "redacted_thinking" && str(b.data)) return { type: "redacted_thinking", data: b.data };
+    if (b.type === "tool_use" && str(b.id) && typeof b.name === "string" && TOOL_NAMES.includes(b.name) && isObj(b.input)) {
+      return { type: "tool_use", id: b.id, name: b.name, input: b.input };
+    }
+  }
+  return null;
+}
+
+/** messages を検査して作り直す。役割・件数・ブロックの種類と形・全体の長さに上限がある。 */
+function checkMessages(input: unknown): Record<string, unknown>[] | null {
+  if (!Array.isArray(input) || !input.length || input.length > MAX_MESSAGES) return null;
+  const out: Record<string, unknown>[] = [];
+  for (let i = 0; i < input.length; i++) {
+    const m = input[i];
+    if (!isObj(m) || (m.role !== "user" && m.role !== "assistant")) return null;
+    if (i === 0 && m.role !== "user") return null;
+    if (typeof m.content === "string") {
+      if (!str(m.content)) return null;
+      out.push({ role: m.role, content: m.content });
+      continue;
+    }
+    if (!Array.isArray(m.content) || !m.content.length || m.content.length > 20) return null;
+    const blocks: Record<string, unknown>[] = [];
+    for (const b of m.content) {
+      const c = checkBlock(b, m.role);
+      if (!c) return null;
+      blocks.push(c);
+    }
+    out.push({ role: m.role, content: blocks });
+  }
+  if (JSON.stringify(out).length > MAX_MESSAGES_CHARS) return null;
+  return out;
+}
+
 /** 本文を検査して、転送してよい形に直す。通らなければ理由の文を返す。 */
 function sanitize(input: unknown, fallbacks: boolean): { body: Record<string, unknown> } | { error: string } {
   if (!input || typeof input !== "object" || Array.isArray(input)) return { error: MSG.badBody };
   const src = input as Record<string, unknown>;
   if (typeof src.model !== "string" || !ALLOWED_MODELS.includes(src.model)) return { error: MSG.badModel };
-  if (!Array.isArray(src.messages) || !src.messages.length || src.messages.length > MAX_MESSAGES) return { error: MSG.badBody };
-  if (src.system !== undefined && typeof src.system !== "string") return { error: MSG.badBody };
+  const messages = checkMessages(src.messages);
+  if (!messages) return { error: MSG.badMessages };
 
   const body: Record<string, unknown> = {};
   for (const k of FORWARD_KEYS) if (src[k] !== undefined) body[k] = src[k];
+  // system と tools は Worker 側に固定する。ブラウザから来た物は(古いブラウザ側が送っても)使わない。
+  body.system = FIXED_SYSTEM;
+  body.tools = FIXED_TOOLS;
+  body.messages = messages;
 
   // max_tokens は上限で頭打ちにする(指定が無い・不正でも上限を入れる)。
   const asked = typeof src.max_tokens === "number" && Number.isFinite(src.max_tokens) && src.max_tokens > 0 ? Math.floor(src.max_tokens) : MAX_TOKENS_CAP;
