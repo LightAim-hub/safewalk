@@ -449,13 +449,15 @@ form.directions {
 
 .dir-top {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   min-height: 44px;
 }
 
+/* 拡大・文字200%で幅が足りない時は、昼夜と ✕ が次の行へ回る（✕ が画面の外へ出ない）。 */
 .dir-summary {
-  flex: 1;
+  flex: 1 1 9rem;
   min-width: 0;
   min-height: 44px;
   padding: 0 12px;
@@ -472,8 +474,10 @@ form.directions {
 }
 
 form.directions .add-stop {
+  flex: 1 1 auto;
   min-height: 44px;
-  margin-right: auto;
+  text-align: left;
+  white-space: nowrap;
   padding: 0 6px;
   font-size: 0.875rem;
 }
@@ -489,9 +493,9 @@ form.directions .period {
 }
 
 form.directions .period button {
-  min-width: 52px;
-  min-height: 42px;
-  padding: 0 14px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 12px;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -506,6 +510,7 @@ form.directions .period button[aria-pressed="true"] {
 
 form.directions .dir-top .icon {
   flex: none;
+  margin-left: auto;
 }
 
 form.directions.folded .add-stop,

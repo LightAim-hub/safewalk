@@ -3,7 +3,7 @@ import { findRoutes, minutesFor, type Route } from "./routes";
 import { $, CURRENT, state, map, markers, toast, el } from "./app";
 import { snap, safety, graph, accidents, meta, names, inKobe } from "./data";
 import { assess, newGuideState, nextNotice, type GuideState, type RouteAlert } from "./safety";
-import { setEnd, renderStops, selectRoute, formatMetres, fitRoutes, toKoban } from "./directions";
+import { setEnd, renderStops, selectRoute, formatMetres, fitRoutes, toKoban, focusResultHeading } from "./directions";
 import { replaceUrl } from "./url";
 import type { Place } from "./types";
 import { showAccuracy } from "./map-ui";
@@ -289,8 +289,8 @@ export function reroute(p: LatLon, route: Route, startOfGuide = false): boolean 
   const leg = here && there ? findRoutes(graph, here, there, state.period, accidents, meta, names)[0] : undefined;
   if (!leg) {
     showTurn("!", "");
-    $("guide-then").textContent = "";
-    $("guide-next").textContent = "元の経路へ戻ってください";
+    put("guide-then", "");
+    put("guide-next", "元の経路へ戻ってください");
     showAlert("off", "経路から離れています。元の経路へ戻ってください");
     offStuck = true;
     return false;
@@ -327,7 +327,8 @@ const alertTimers: Partial<Record<AlertKind, number>> = {};
 
 export function showAlert(kind: AlertKind, text: string, ms = 0): void {
   const box = $(ALERT_ID[kind]);
-  box.textContent = text;
+  // 同じ文を毎回書き直すと、読み上げが繰り返される。出ていて同じ文なら触らない。
+  if (box.hidden || box.textContent !== text) box.textContent = text;
   box.hidden = false;
   window.clearTimeout(alertTimers[kind]);
   if (ms) alertTimers[kind] = window.setTimeout(() => (box.hidden = true), ms);
@@ -343,10 +344,16 @@ export function setStopped(on: boolean): void {
   $("guide-status").hidden = !on;
 }
 
+/** 文字が変わった時だけ書き換える（位置の更新のたびに同じ文を書くと、読み上げが連発する）。 */
+function put(id: string, text: string): void {
+  const node = $(id);
+  if (node.textContent !== text) node.textContent = text;
+}
+
 /** 案内の矢印と、次の曲がり角までの距離。 */
 export function showTurn(arrow: string, distance: string): void {
-  $("guide-arrow").textContent = arrow;
-  $("guide-dist").textContent = distance;
+  put("guide-arrow", arrow);
+  put("guide-dist", distance);
   $("guide-dist").hidden = !distance;
 }
 
@@ -394,9 +401,9 @@ export function updateGuide(p: LatLon, accuracy?: number): void {
     outside = true;
     offStuck = true;
     showTurn("!", "");
-    $("guide-next").textContent = OUTSIDE_TEXT;
-    $("guide-then").textContent = "";
-    $("guide-rest").textContent = "";
+    put("guide-next", OUTSIDE_TEXT);
+    put("guide-then", "");
+    put("guide-rest", "");
     showAlert("off", `${OUTSIDE_TEXT}。このアプリは神戸市の中だけで案内します`);
     return;
   }
@@ -416,10 +423,10 @@ export function updateGuide(p: LatLon, accuracy?: number): void {
   const end = route.coords[route.coords.length - 1];
   if (metres(p, { lat: end[1], lon: end[0] }) <= STEP_REACHED_M) {
     if ($("guide-next").textContent !== "目的地に着きました") speak("目的地に到着しました。お疲れさまでした。");
-    $("guide-next").textContent = "目的地に着きました";
+    put("guide-next", "目的地に着きました");
     showTurn("⚑", "");
-    $("guide-then").textContent = "";
-    $("guide-rest").textContent = "";
+    put("guide-then", "");
+    put("guide-rest", "");
     return;
   }
   const { next, then, metresLeft, metresToNext } = remainingFrom(p, route);
@@ -432,9 +439,9 @@ export function updateGuide(p: LatLon, accuracy?: number): void {
   }
   checkNotice(p, route);
   showTurn(next ? arrowFor(next.text) : "↑", next ? (metresToNext < 15 ? "まもなく" : `${formatMetres(metresToNext)}先`) : "");
-  $("guide-next").textContent = next ? next.text : "このまま目的地へ進む";
-  $("guide-then").textContent = next && then ? `そのあと ${formatMetres(next.metres)}進んで ${arrowFor(then.text)} ${then.text.replace(/（.*）/, "")}` : "";
-  $("guide-rest").textContent = `残り ${formatMetres(metresLeft)}・約${minutesFor(metresLeft, 0)}分`;
+  put("guide-next", next ? next.text : "このまま目的地へ進む");
+  put("guide-then", next && then ? `そのあと ${formatMetres(next.metres)}進んで ${arrowFor(then.text)} ${then.text.replace(/（.*）/, "")}` : "");
+  put("guide-rest", `残り ${formatMetres(metresLeft)}・約${minutesFor(metresLeft, 0)}分`);
 }
 
 export function startGuide(index: number): void {
@@ -452,9 +459,9 @@ export function startGuide(index: number): void {
   primeVoice();
   document.body.classList.add("guiding");
   $("guide").hidden = false;
-  $("guide-next").textContent = "現在地を確認しています…";
-  $("guide-rest").textContent = "";
-  $("guide-then").textContent = "";
+  put("guide-next", "現在地を確認しています…");
+  put("guide-rest", "");
+  put("guide-then", "");
   showTurn("…", "");
   setLost(false);
   setStopped(false);
@@ -582,6 +589,9 @@ export function buildGuideParts(): void {
   dist.hidden = true;
   const then = el("p", "guide-then");
   then.id = "guide-then";
+  // 読み上げるのは次の曲がり角の案内だけ。残り距離・次の次の案内は読み上げの対象にしない。
+  next.setAttribute("aria-live", "polite");
+  next.setAttribute("aria-atomic", "true");
   column.append(dist, next, then);
   main.append(arrow, column);
   // 知らせは案内の枠(main)のすぐ下に縦に並べる。枠にも下の帯にも重ならない。
@@ -629,7 +639,11 @@ export function bindGuideUi(): void {
   // 見える文字と読み上げの名前をそろえる（音声操作で「終了」と言えば押せる）。
   $("guide-stop").removeAttribute("aria-label");
   $("guide-stop").title = "案内を終わる";
-  $("guide-stop").addEventListener("click", finishGuide);
+  $("guide-stop").addEventListener("click", () => {
+    // 押した「終了」は消える。焦点は、戻った経路の一覧の見出しへ移す。
+    finishGuide();
+    focusResultHeading();
+  });
   // 声を出せない端末では、効かない「音声 オン」を出さない。
   if (!("speechSynthesis" in window)) $("guide-voice").hidden = true;
   $("guide-voice").addEventListener("click", () => {

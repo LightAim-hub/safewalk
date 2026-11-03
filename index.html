@@ -21,10 +21,10 @@
         </button>
       </form>
 
-      <div id="chips" class="chips" role="group" aria-label="ジャンルで探す"></div>
+      <div id="chips" class="chips" role="region" aria-label="ジャンルで探す"></div>
       <button id="research" type="button" class="research" hidden>この範囲で再検索</button>
 
-      <form id="directions" class="card directions" autocomplete="off" hidden>
+      <form id="directions" class="card directions" autocomplete="off" aria-label="経路の入力" hidden>
         <div class="dir-top">
           <button id="dir-summary" type="button" class="dir-summary" aria-expanded="false" aria-controls="dir-fields" hidden></button>
           <button id="add-stop" type="button" class="add-stop">＋ 経由地</button>
@@ -43,14 +43,14 @@
       </form>
 
       <div id="grip" class="grip" role="button" aria-label="パネルの高さを変える"></div>
-      <section id="sheet" class="card sheet" hidden aria-live="polite"></section>
+      <section id="sheet" class="card sheet" hidden aria-label="結果"></section>
     </div>
 
     <button id="locate" type="button" class="locate" aria-label="現在地を表示" title="現在地">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm9 3h-2.100A7 7 0 0 0 13 5.100V3h-2v2.100A7 7 0 0 0 5.100 11H3v2h2.100A7 7 0 0 0 11 18.900V21h2v-2.100A7 7 0 0 0 18.900 13H21v-2zm-9 6a5 5 0 1 1 0-10 5 5 0 0 1 0 10z"/></svg>
     </button>
     <button id="menu-open" type="button" class="locate menu-btn" aria-label="メニュー" title="メニュー" aria-haspopup="dialog">≡</button>
-    <section id="guide" class="card guide" hidden aria-live="polite">
+    <section id="guide" class="card guide" aria-label="案内" hidden>
       <p id="guide-next" class="next"></p>
       <p id="guide-rest" class="rest"></p>
       <div class="guide-actions">
@@ -58,6 +58,7 @@
         <button id="guide-voice" type="button" class="secondary" aria-pressed="true">音声 オン</button>
       </div>
     </section>
+    <p id="announce" class="sr-only" role="status"></p>
     <p id="toast" class="toast" role="status" hidden></p>
     <div id="load-error" class="card load-error" role="alert" hidden>
       <p>読み込みに失敗しました。通信を確かめて、もう一度お試しください。</p>

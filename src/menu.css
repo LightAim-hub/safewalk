@@ -74,9 +74,9 @@
 
 .menu-emg {
   width: 100%;
-  border: 2px solid #d93025;
+  border: 2px solid var(--emg);
   background: var(--paper);
-  color: #d93025;
+  color: var(--emg);
   font-weight: 700;
   text-align: left;
 }
