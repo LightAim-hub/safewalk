@@ -2,8 +2,9 @@ import maplibregl, { type GeoJSONSource } from "maplibre-gl";
 import { metres, type LatLon } from "./graph";
 import { findRoutes, joinRoutes, minutesFor, type Period, type Route } from "./routes";
 import { showAccidents, accidentDetail } from "./accidents-ui";
-import { $, qInput, fromInput, toInput, searchbar, directions, sheet, COLORS, CURRENT, GENRES, state, map, markers, stopMarkers, toast, scoreColor, el } from "./app";
-import { graph, accidents, meta, places, names, emptyCollection, snap } from "./data";
+import { $, qInput, fromInput, toInput, searchbar, directions, sheet, COLORS, CURRENT, GENRES, state, map, markers, stopMarkers, toast, el } from "./app";
+import { graph, accidents, meta, places, names, emptyCollection, snap, safety } from "./data";
+import { assess, SAFETY_DISCLAIMER, type Assessment } from "./safety";
 import { startGuide, stopGuide } from "./guide";
 import { popup } from "./place";
 import { placeRows, showResultDots, clearGenre, bindSuggest } from "./search";
@@ -162,10 +163,6 @@ export function searchThrough(): Route | null {
   return joinRoutes(parts, points.slice(1, -1).map((p) => p.name));
 }
 
-export function safestIndex(routes: Route[]): number {
-  return routes.reduce((a, b, i, all) => ((b.safety ?? -1) > (all[a].safety ?? -1) ? i : a), 0);
-}
-
 export function search(): void {
   const start = snap(state.from!);
   const goal = snap(state.to!);
@@ -190,7 +187,7 @@ export function search(): void {
 export function showRoutes(): void {
   for (const route of state.routes) connectEnds(route, state.from!, state.to!);
   replaceUrl();
-  // 昼も夜も Google マップと同じく最短を選ぶ。「最も安全」などは一覧に並べたままにする。
+  // 昼も夜も Google マップと同じく最短を選ぶ。他の経路は一覧に並べたままにする。
   selectRoute(0);
   fitRoutes(500);
 }
@@ -307,8 +304,40 @@ export function drawTimeTags(): void {
   layoutTimeTags();
 }
 
-/** 安全度の数字の意味。出し方を変えたら、ここだけ直す。 */
-export const SAFETY_MEANING = "安全度は、交通事故の記録から計算した目安です。高いほど記録が少ない道です。安全を保証するものではありません。";
+/** 一覧の上の説明の一行。文は src/safety.ts の SAFETY_DISCLAIMER に揃える。 */
+export const SAFETY_MEANING = `${SAFETY_DISCLAIMER}。`;
+
+/** 説明ページ(public/safety.html)。サブパスでも動くよう、ページの位置から求める。 */
+export const SAFETY_PAGE = new URL("safety.html", document.baseURI).href;
+
+const assessed = new WeakMap<Route, { period: Period; value: Assessment }>();
+
+/** 経路の交通事故の記録の目安。経路と昼夜ごとに1回だけ計算する(経路の線は connectEnds の後に確定する)。 */
+export function assessment(route: Route): Assessment {
+  const hit = assessed.get(route);
+  if (hit && hit.period === state.period) return hit.value;
+  const value = assess(safety, route, state.period);
+  assessed.set(route, { period: state.period, value });
+  return value;
+}
+
+/** routes.ts が付ける旧い札。画面には出さない。 */
+const OLD_BEST = "最も" + "安全";
+
+/** 経路の札。「記録が少ない道」と言えるのは、段階が「比較的記録が少ない」の時だけ。 */
+export function routeLabel(route: Route, a: Assessment): string {
+  if (route.label !== OLD_BEST) return route.label;
+  return a.accident.tier === "low" ? "事故の記録が少ない道" : "別の道";
+}
+
+/** 一覧に出す理由(2つまで)。段階が不明の時は理由を出し、夜は夜の歩きやすさの言葉を出す。 */
+export function listReasons(a: Assessment): string[] {
+  const lines: string[] = [];
+  if (a.unknown) lines.push(a.unknown);
+  else if (!a.night) lines.push(a.accident.reasons[1]);
+  if (a.night) lines.push(...a.night.lines.slice(a.unknown && a.night.remoteMetres >= 100 ? 1 : 0));
+  return lines.slice(0, 2);
+}
 
 /** 最短との差。最短そのもの・差が無い時は空。 */
 export function diffFromShortest(route: Route, shortest: Route): string {
@@ -331,14 +360,15 @@ export function routeList(): HTMLOListElement {
       button.type = "button";
       button.toggleAttribute("aria-current", i === state.selected);
       button.addEventListener("click", () => selectRoute(i));
-      const safety = el("span", "safety", route.safety === null ? "不明" : `${route.safety}%`);
-      safety.style.color = scoreColor(route.safety);
-      safety.append(el("small", "", "安全度の目安"));
+      const a = assessment(route);
+      const tier = el("span", `tier tier-${a.accident.tier}`, a.accident.label);
+      tier.prepend(el("small", "", "交通事故の記録"));
       button.append(
         el("span", "time", formatMinutes(route.minutes)),
-        safety,
-        el("span", "facts", `${route.label}・${(route.metres / 1000).toFixed(1)}km・上り${route.climb}m`),
+        tier,
+        el("span", "facts", `${routeLabel(route, a)}・${(route.metres / 1000).toFixed(1)}km・上り${route.climb}m`),
         ...(route.via ? [el("span", "via", `${route.via} 経由`)] : []),
+        ...listReasons(a).map((line) => el("span", "reason", line)),
         ...(diffFromShortest(route, shortest) ? [el("span", "diff", diffFromShortest(route, shortest))] : []),
       );
       li.append(button);
@@ -369,8 +399,9 @@ export function selectRoute(index: number): void {
   startBar.append(start);
   sheet.replaceChildren(
     startBar,
-    el("p", "safety-note", SAFETY_MEANING),
+    safetyNote(),
     routeList(),
+    safetyDetail(assessment(route)),
     ...routeWarnings(route),
     stepList(route),
     elevationDetail(route),
@@ -477,8 +508,43 @@ export function routeWarnings(route: Route): HTMLElement[] {
         : `人家から離れた道を${km}km通ります。`,
     );
   }
-  if (route.safety === null) lines.push("事故データで評価できない道が多いため、安全度は不明です。");
   return lines.map((line) => el("p", "warn", line));
+}
+
+/** 一覧の上の説明の一行と、説明ページへのリンク。 */
+export function safetyNote(): HTMLElement {
+  const note = el("p", "safety-note", SAFETY_MEANING);
+  const link = el("a", "", "くわしい説明");
+  link.href = SAFETY_PAGE;
+  link.target = "_blank";
+  link.rel = "noopener";
+  note.append(" ", link);
+  return note;
+}
+
+/** 選んだ経路の、注意書きと夜の歩きやすさ。注意書きは最大3つ。 */
+export function safetyDetail(a: Assessment): HTMLElement {
+  const wrap = el("section", "safety-detail");
+  if (a.cautions.length) {
+    wrap.append(el("h3", "", "この経路の注意書き"));
+    const list = el("ul", "cautions");
+    for (const c of a.cautions) list.append(el("li", `caution caution-${c.kind}`, c.text));
+    wrap.append(list);
+  }
+  if (a.night) {
+    wrap.append(el("h3", "", "夜の歩きやすさ"));
+    const list = el("ul", "night-lines");
+    for (const line of a.night.lines) list.append(el("li", "", line));
+    wrap.append(list);
+  }
+  if (!a.unknown) {
+    wrap.append(el("h3", "", "交通事故の記録の段階の理由"));
+    const list = el("ul", "night-lines");
+    for (const line of a.accident.reasons) list.append(el("li", "", line));
+    wrap.append(list);
+  }
+  wrap.hidden = !wrap.childElementCount;
+  return wrap;
 }
 
 export function formatMetres(m: number): string {
