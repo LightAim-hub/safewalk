@@ -76,8 +76,11 @@ export async function onMapPick(place: Place, labelled: boolean): Promise<void> 
     return;
   }
   if (!labelled) {
+    // 住所を待つ間に画面が変わった（場所を閉じた・経路の画面に移った・地点が入った）時は、古い結果を捨てる。
+    const { mode, picked, from, to } = state;
     const address = await addressOf(place);
     if (mine !== pickSeq) return;
+    if (state.mode !== mode || state.picked !== picked || state.from !== from || state.to !== to) return;
     place.name = address ?? place.name;
   }
   if (state.mode === "browse") {
@@ -204,7 +207,7 @@ export function showPlace(place: Place): void {
   markers.picked.setLngLat([place.lon, place.lat]).addTo(map);
 
   const wrap = el("div", "place");
-  const facts = place.name.startsWith("神戸市")
+  const facts = !place.kind && place.name.startsWith("神戸市")
     ? "地図で選んだ地点"
     : [place.kind, place.operator, place.ward ? `神戸市${place.ward}` : "神戸市"].filter(Boolean).join("・");
   const go = el("button", "primary", "経路");

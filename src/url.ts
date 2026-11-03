@@ -1,10 +1,18 @@
 import { type LatLon } from "./graph";
 import { $, qInput, sheet, CURRENT, GENRES, state, map, markers, toast, mapPadding } from "./app";
-import { openDirections, closeDirections, renderStops, fillCurrent, setSharedRoute, distinguishingPoints, formatMinutes } from "./directions";
+import { openDirections, closeDirections, renderStops, fillCurrent, setSharedRoute, distinguishingPoints, formatMinutes, MAX_STOPS } from "./directions";
 import { matchPlace, showPlace } from "./place";
 import { clearGenre, searchGenre } from "./search";
 import { syncClearButton } from "./map-ui";
 import { type Place } from "./types";
+
+/** アドレスに載せる・アドレスから読む地点名の長さの上限。 */
+const MAX_NAME = 40;
+
+/** 地点名をアドレスに載せる形にする。経由地の区切り「|」を含まず、長すぎない。 */
+function cleanName(name: string | null | undefined): string {
+  return (name ?? "").replace(/[|\r\n]/g, " ").trim().slice(0, MAX_NAME);
+}
 
 /** ボタンごとの「コピーしました」を元に戻すタイマー。 */
 const copiedTimers = new WeakMap<HTMLButtonElement, number>();
@@ -41,7 +49,7 @@ export function urlForState(opts: { share?: boolean } = {}): string {
     // 出発地・目的地は、片方だけ決まった時も残す。再読込・共有で同じ画面へ戻れる。
     // 現在地は座標をアドレスに載せず「me」とする（開いた人の現在地として扱う）。送り主の居場所が人に渡らない。
     const coords = (p: Place) => (p.name === CURRENT ? "me" : `${p.lat.toFixed(5)},${p.lon.toFixed(5)}`);
-    const label = (p: Place) => p.name;
+    const label = (p: Place) => cleanName(p.name);
     if (!state.from || !state.to) q.set("mode", "directions");
     if (state.from) {
       q.set("from", coords(state.from));
@@ -134,6 +142,7 @@ export function applyUrl(): void {
   const q = new URLSearchParams(location.search);
   // 読めない座標（空・文字・範囲外）は捨てて、通常の起動にする。
   let unreadable = false;
+  const notes: string[] = [];
   const point = (key: string, anywhere = false): LatLon | null => {
     if (!q.has(key)) return null;
     const parsed = (anywhere ? parseEndpoint : parsePoint)(q.get(key));
@@ -145,6 +154,8 @@ export function applyUrl(): void {
   const toMe = q.get("to") === "me";
   const from = fromMe ? null : point("from", true);
   const to = toMe ? null : point("to", true);
+  const fromBroken = q.has("from") && !fromMe && !from;
+  const toBroken = q.has("to") && !toMe && !to;
   const place = point("place");
   const period = q.get("period");
   if (period === "day" || period === "night") state.period = period;
@@ -154,14 +165,15 @@ export function applyUrl(): void {
   state.picked = null;
   qInput.value = "";
   clearGenre();
-  state.stops = (q.get("via") ?? "")
-    .split("|")
-    .filter(Boolean)
+  const viaTexts = (q.get("via") ?? "").split("|").filter(Boolean);
+  const tooManyStops = viaTexts.length > MAX_STOPS;
+  state.stops = viaTexts
+    .slice(0, MAX_STOPS)
     .map((text) => {
       const [lat, lon, ...name] = text.split(",");
       const point = parsePoint(`${lat},${lon}`);
       if (!point) unreadable = true;
-      return point && { ...point, name: name.join(",") };
+      return point && { ...point, name: cleanName(name.join(",")) };
     })
     .filter((stop): stop is Place => stop !== null);
   renderStops();
@@ -177,10 +189,13 @@ export function applyUrl(): void {
     );
     // 出発地・目的地は片方だけでも開く。
     openDirections({
-      ...(from && { from: { ...from, name: q.get("fromName") || "共有された地点" } }),
-      ...(to && { to: { ...to, name: q.get("toName") || "共有された地点" } }),
+      ...(from && { from: { ...from, name: cleanName(q.get("fromName")) || "共有された地点" } }),
+      ...(to && { to: { ...to, name: cleanName(q.get("toName")) || "共有された地点" } }),
     });
-    if (toMe && !state.to) fillCurrent("to");
+    // 出発地と目的地の両方が現在地では、経路にならない。出発地だけを現在地にする。
+    if (toMe && !fromMe && !state.to) fillCurrent("to");
+    if (fromMe && toMe) notes.push("出発地と目的地の両方が現在地になっています。目的地を入れてください。");
+    else if ((fromMe || toMe) && q.get("sh") !== "1") void explainCurrent(fromMe ? "出発地" : "目的地");
   } else {
     const genre = GENRES.find((g) => g.label === q.get("g"));
     if (genre) {
@@ -204,8 +219,28 @@ export function applyUrl(): void {
   syncClearButton();
   if (unreadable) {
     // アドレス欄から壊れた座標を外し、再読込しても同じ知らせが出続けないようにする。
-    toast("共有された地点を読めませんでした。");
+    notes.unshift(
+      fromBroken ? "共有された出発地を読めませんでした。出発地を確かめてください。"
+        : toBroken ? "共有された目的地を読めませんでした。目的地を確かめてください。"
+        : "共有された地点を読めませんでした。",
+    );
     replaceUrl();
+  } else if (tooManyStops) {
+    notes.push(`経由地は${MAX_STOPS}か所までです。それより後ろは外しました。`);
+    replaceUrl();
+  }
+  if (notes.length) toast(notes[0]);
+}
+
+/** 「現在地」を入れられない時の理由を一言出す(許可の確認は新しく出さない)。 */
+async function explainCurrent(what: string): Promise<void> {
+  try {
+    if (!navigator.geolocation) return toast("この端末では現在地を取得できません。");
+    const status = await navigator.permissions?.query({ name: "geolocation" });
+    if (status?.state === "denied") toast(`位置情報が許可されていないため、${what}に現在地を入れられません。${what}を入れてください。`);
+    else if (status?.state === "prompt") toast(`${what}に現在地を入れるには、「現在地を使う」を押してください。`);
+  } catch {
+    // 許可の状態が分からない時は何も出さない。
   }
 }
 
@@ -245,9 +280,21 @@ function followDirectionsState(): void {
   new MutationObserver(sync).observe($("stops"), { childList: true });
 }
 
+/** 「戻る」「進む」を受け始める。データの読み込みが終わってから呼ぶ(読み込み前に画面を作らないため)。 */
+export function listenHistory(): void {
+  window.addEventListener("popstate", () => {
+    // 案内中は、「戻る」で画面を変えない。履歴を積み直して、終え方を知らせる。
+    if (document.body.classList.contains("guiding")) {
+      history.pushState(null, "", urlForState());
+      toast("案内を終えるには「終了」を押してください。");
+      return;
+    }
+    applyUrl();
+  });
+}
+
 export function bindUrl(): void {
   followDirectionsState();
-  window.addEventListener("popstate", applyUrl);
   // 検索側のコードを変えずに、一覧・場所の画面が変わった時に履歴を積む。
   // 経路の画面は directions.ts が自分で積む。
   new MutationObserver(() => {

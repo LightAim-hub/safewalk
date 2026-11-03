@@ -18,16 +18,35 @@ export let places: IndexedPlace[] = [];
 export let names: string[] = [];
 export let kobeRings: [number, number][][] = [];
 
+/** 取得に失敗した（200 でない）時は読み込み失敗として投げる。 */
+function ok(r: Response): Response {
+  if (!r.ok) throw new Error(`${r.url} ${r.status}`);
+  return r;
+}
+
+/**
+ * graph.bin の長さが、先頭の件数から求めた長さと一致するか確かめる。
+ * Wi-Fi のログイン画面などが 200 で返ってきても、道が空のまま「歩ける道がありません」と出さないため。
+ */
+function checkGraph(buf: ArrayBuffer): ArrayBuffer {
+  if (buf.byteLength < 12) throw new Error("graph.bin が短すぎます");
+  const [n, m, k] = new Uint32Array(buf, 0, 3);
+  const expected = 12 + n * 8 + m * 36 + (m + 1) * 4 + k * 8;
+  if (!n || !m || buf.byteLength !== expected) throw new Error("graph.bin の形が正しくありません");
+  return buf;
+}
+
 export async function loadData(): Promise<void> {
   const [bin, acc, m, rows, roadNames, kobe, cautions] = await Promise.all([
-    fetch(DATA_URL + "graph.bin").then((r) => r.arrayBuffer()),
-    fetch(DATA_URL + "accidents.json").then((r) => r.json() as Promise<Accidents>),
-    fetch(DATA_URL + "graph.meta.json").then((r) => r.json() as Promise<Meta>),
-    fetch(DATA_URL + "places.json").then((r) => r.json() as Promise<PlaceRow[]>),
-    fetch(DATA_URL + "names.json").then((r) => r.json() as Promise<string[]>),
-    fetch(DATA_URL + "kobe.geojson").then((r) => r.json() as Promise<GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>>),
+    fetch(DATA_URL + "graph.bin").then((r) => ok(r).arrayBuffer()).then(checkGraph),
+    fetch(DATA_URL + "accidents.json").then((r) => ok(r).json() as Promise<Accidents>),
+    fetch(DATA_URL + "graph.meta.json").then((r) => ok(r).json() as Promise<Meta>),
+    fetch(DATA_URL + "places.json").then((r) => ok(r).json() as Promise<PlaceRow[]>),
+    fetch(DATA_URL + "names.json").then((r) => ok(r).json() as Promise<string[]>),
+    fetch(DATA_URL + "kobe.geojson").then((r) => ok(r).json() as Promise<GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>>),
     loadCautions(),
   ]);
+  if (!Array.isArray(rows) || !Array.isArray(roadNames)) throw new Error("データの形が正しくありません");
   const shape = kobe.geometry;
   kobeRings = (shape.type === "Polygon" ? [shape.coordinates] : shape.coordinates).flat() as [number, number][][];
   graph = new Graph(bin);
