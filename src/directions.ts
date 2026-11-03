@@ -3,7 +3,8 @@ import { metres, type LatLon } from "./graph";
 import { findRoutes, joinRoutes, minutesFor, type Period, type Route } from "./routes";
 import { showAccidents, accidentDetail } from "./accidents-ui";
 import { $, qInput, fromInput, toInput, searchbar, directions, sheet, COLORS, CURRENT, GENRES, state, map, markers, stopMarkers, toast, el } from "./app";
-import { graph, accidents, meta, places, names, emptyCollection, snap, safety } from "./data";
+import { graph, accidents, meta, places, names, emptyCollection, snap, safety, agentContext } from "./data";
+import { runAgent, SITUATION_MAX, FIXED, type AgentResult } from "./agent";
 import { assess, SAFETY_DISCLAIMER, type Assessment } from "./safety";
 import { startGuide, stopGuide } from "./guide";
 import { popup } from "./place";
@@ -49,6 +50,7 @@ function fillCurrentFrom(): void {
 
 export function closeDirections(): void {
   locating++;
+  resetAgent();
   stopGuide();
   popup?.remove();
   state.mode = "browse";
@@ -66,6 +68,7 @@ export function closeDirections(): void {
 
 /** 表示中の経路を消す。経路を出せない時は、古い経路を残さず理由を出す。 */
 export function clearRoutes(message = ""): void {
+  resetAgent();
   state.routes = [];
   timeTags.splice(0).forEach((tag) => tag.remove());
   (map.getSource("routes") as GeoJSONSource).setData(emptyCollection());
@@ -164,6 +167,7 @@ export function searchThrough(): Route | null {
 }
 
 export function search(): void {
+  resetAgent();
   const start = snap(state.from!);
   const goal = snap(state.to!);
   showResultDots([]);
@@ -401,6 +405,7 @@ export function selectRoute(index: number): void {
     startBar,
     safetyNote(),
     routeList(),
+    agentSection(),
     safetyDetail(assessment(route)),
     ...routeWarnings(route),
     stepList(route),
@@ -412,6 +417,181 @@ export function selectRoute(index: number): void {
   // 最短（先頭）の時は上端のまま。説明の行を半端に隠さない。
   if (index === 0) sheet.scrollTop = 0;
   else sheet.querySelector(".routes [aria-current]")?.scrollIntoView({ block: "nearest" });
+}
+
+// ---------------------------------------------------------------- Claude に事情を伝えて道を選んでもらう
+
+/** 候補の事情。押すとそのまま送る。 */
+export const AGENT_PRESETS = ["子どもが一人で帰る", "荷物が多い", "終電後に長く歩く", "坂が少ない道がいい"];
+
+type AgentUi = { busy: boolean; progress: string; result: AgentResult | null; error: string };
+let agentUi: AgentUi = { busy: false, progress: "", result: null, error: "" };
+/** 経路を出し直したら古い答えを捨てるための番号。待っている間に変わったら、返ってきた答えは使わない。 */
+let agentRun = 0;
+let agentNode: HTMLElement | null = null;
+let agentInput: HTMLInputElement | null = null;
+let agentOut: HTMLElement | null = null;
+let agentButtons: HTMLButtonElement[] = [];
+
+/** 道具の名前から、進み具合の文。 */
+const TOOL_PROGRESS: Record<string, string> = {
+  find_routes: "経路の記録を調べています…",
+  assess_route: "経路ごとの事故の記録と注意書きを調べています…",
+  places_along: "経路の沿いの場所を数えています…",
+};
+
+function resetAgent(): void {
+  agentRun++;
+  agentUi = { busy: false, progress: "", result: null, error: "" };
+  if (agentNode) renderAgent();
+}
+
+/** fetch を包み、Claude が呼んだ道具の名前を進み具合に出す。 */
+function trackedFetch(run: number): typeof fetch {
+  return async (input, init) => {
+    const res = await fetch(input, init);
+    try {
+      const body = (await res.clone().json()) as { content?: { type: string; name?: string }[] };
+      const tool = body.content?.find((b) => b.type === "tool_use");
+      if (tool && run === agentRun) {
+        agentUi.progress = TOOL_PROGRESS[tool.name ?? ""] ?? "記録を調べています…";
+        renderAgent();
+      }
+    } catch {
+      /* 進み具合が出せないだけ */
+    }
+    return res;
+  };
+}
+
+/** 画面の経路(state.routes)が、Claude が調べた経路と同じ物か。 */
+function sameRoutes(result: AgentResult): boolean {
+  return (
+    result.routes.length === state.routes.length &&
+    result.routes.every((r, i) => {
+      const mine = state.routes[i].coords;
+      // どちらも先頭と末尾に実際の地点が足してある(connectEnds)ので、そのまま比べる。
+      return r.coords.length === mine.length && r.coords[1][0] === mine[1][0] && r.coords[1][1] === mine[1][1];
+    })
+  );
+}
+
+async function askClaude(text: string): Promise<void> {
+  if (agentUi.busy || !state.from || !state.to || !state.routes.length) return;
+  const run = ++agentRun;
+  const { from, to } = state;
+  agentUi = { busy: true, progress: "事情を Claude に伝えています…", result: null, error: "" };
+  renderAgent();
+  let result: AgentResult | null = null;
+  try {
+    result = await runAgent(
+      {
+        situation: text,
+        from: state.from,
+        to: state.to,
+        period: state.period,
+        // 一覧と同じ数字・同じ段階で調べさせる(一覧の経路は connectEnds で出発地・目的地までの区間を足してある)。
+        ctx: { ...agentContext(), afterFind: (routes) => routes.forEach((r) => connectEnds(r, from, to)) },
+      },
+      { fetchImpl: trackedFetch(run) },
+    );
+  } catch {
+    result = null;
+  }
+  if (run !== agentRun) return;
+  if (!result) agentUi = { busy: false, progress: "", result: null, error: FIXED.failed };
+  else if (!result.ok) agentUi = { busy: false, progress: "", result: null, error: result.error ?? FIXED.failed };
+  else agentUi = { busy: false, progress: "", result, error: "" };
+  const chosen = agentUi.result?.chosenRouteIndex;
+  if (agentUi.result && chosen != null && sameRoutes(agentUi.result)) selectRoute(chosen);
+  else renderAgent();
+  // 答えの先頭(まとめの文)が見えるようにする。
+  agentNode?.scrollIntoView({ block: "start" });
+}
+
+const routeLetter = (i: number) => "ABCDEFGH"[i] ?? String(i + 1);
+
+function agentResultView(result: AgentResult): HTMLElement[] {
+  const nodes: HTMLElement[] = [el("p", "agent-summary", result.summary)];
+  const chosen = result.chosenRouteIndex;
+  if (chosen != null && state.routes[chosen] && sameRoutes(result)) {
+    nodes.push(el("p", "agent-chosen", `選んだ経路: 経路${routeLetter(chosen)}（${formatMinutes(state.routes[chosen].minutes)}）を地図で選びました。`));
+  }
+  nodes.push(el("p", "agent-hint", "経路A・Bは、上の一覧の上から順です。"));
+  const reasons = el("ul", "agent-reasons");
+  for (const r of result.reasons) {
+    const li = el("li", "", r.text);
+    if (r.evidence.length) {
+      const d = el("details", "agent-evidence");
+      d.append(el("summary", "", "根拠の記録"));
+      const ul = el("ul");
+      ul.append(...r.evidence.map((t) => el("li", "", t)));
+      d.append(ul);
+      li.append(d);
+    }
+    reasons.append(li);
+  }
+  nodes.push(el("h3", "", "理由"), reasons);
+  if (result.cautions.length) {
+    const ul = el("ul", "cautions");
+    ul.append(...result.cautions.map((c) => el("li", "caution", c.text)));
+    nodes.push(el("h3", "", "注意書き"), ul);
+  }
+  if (result.caveats) nodes.push(el("p", "agent-caveats", `記録の限界: ${result.caveats}`));
+  if (result.replaced.length) nodes.push(el("p", "agent-hint", "確認を通らなかった一部の文は、固定の文に差し替えました。"));
+  nodes.push(el("p", "agent-disclaimer", `${result.disclaimer}。`));
+  return nodes;
+}
+
+function renderAgent(): void {
+  if (!agentNode || !agentOut || !agentInput) return;
+  const blocked = state.stops.some(Boolean);
+  agentButtons.forEach((b) => (b.disabled = agentUi.busy || blocked));
+  agentInput.disabled = agentUi.busy || blocked;
+  agentNode.setAttribute("aria-busy", String(agentUi.busy));
+  if (blocked) return void agentOut.replaceChildren(el("p", "agent-hint", "経由地がある時は、Claude への相談は使えません。"));
+  if (agentUi.busy) return void agentOut.replaceChildren(el("p", "agent-progress", agentUi.progress));
+  if (agentUi.error) return void agentOut.replaceChildren(el("p", "agent-error", agentUi.error));
+  agentOut.replaceChildren(...(agentUi.result ? agentResultView(agentUi.result) : []));
+}
+
+/** 「事情を伝えて道を選んでもらう」入口と、答え。選び直しで作り直されても同じ物を返す。 */
+export function agentSection(): HTMLElement {
+  if (!agentNode) {
+    agentNode = el("section", "agent");
+    agentNode.append(el("h3", "", "事情を伝えて、道を選んでもらう"));
+    const presets = el("div", "chips inline");
+    const form = el("form", "agent-form");
+    const input = el("input");
+    agentInput = input;
+    input.type = "text";
+    input.maxLength = SITUATION_MAX;
+    input.placeholder = "例: 子どもが一人で帰る";
+    input.setAttribute("aria-label", "歩く事情");
+    const send = el("button", "primary", "相談する");
+    send.type = "submit";
+    form.append(input, send);
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      void askClaude(input.value);
+    });
+    agentButtons = [send];
+    for (const text of AGENT_PRESETS) {
+      const chip = el("button", "chip", text);
+      chip.type = "button";
+      chip.addEventListener("click", () => {
+        input.value = text;
+        void askClaude(text);
+      });
+      agentButtons.push(chip);
+      presets.append(chip);
+    }
+    agentOut = el("div", "agent-out");
+    agentOut.setAttribute("aria-live", "polite");
+    agentNode.append(form, presets, agentOut);
+  }
+  renderAgent();
+  return agentNode;
 }
 
 export const FLAT_M = 10;

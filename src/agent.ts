@@ -15,7 +15,9 @@ import type { Period, Route } from "./routes";
 import type { Place } from "./types";
 
 /** 中継(Worker)の URL。deploy 後にここだけ書き換える。 */
-export const AGENT_ENDPOINT = "https://safewalk-claude.REPLACE-WITH-SUBDOMAIN.workers.dev/api/claude";
+export const AGENT_ENDPOINT = "https://safewalk-claude.matomaru-yotei.workers.dev/api/claude";
+/** 中継の URL がまだ書き換えられていない(deploy 前)か。 */
+export const agentEndpointUnset = (endpoint: string = AGENT_ENDPOINT) => endpoint.includes("REPLACE-WITH");
 /** 使うモデル。ここだけ変えれば切り替わる(Worker の許可リストにある物のみ)。 */
 export const AGENT_MODEL = "claude-opus-5-5";
 /** 考える深さ。Opus 5.5 の既定は medium。 */
@@ -32,6 +34,7 @@ export const FIXED = {
   reason: "この経路の記録は、上の一覧に表示されています。",
   failed: "Claude の説明を表示できませんでした。経路の一覧と記録は、そのままご利用いただけます。",
   noRoute: "経路を調べられませんでした。",
+  unavailable: "Claude への相談は、今は使えません。経路の一覧と記録は、そのままご利用いただけます。",
 };
 
 export const SYSTEM_PROMPT = `あなたは神戸市の徒歩専用の地図アプリ SafeWalk の、経路の相談役です。利用者の事情を聞いて、道具で調べた事実だけをもとに、どの徒歩経路が合うかを日本語で説明します。
@@ -208,6 +211,8 @@ async function post(body: unknown, deps: AgentDeps): Promise<ApiResponse> {
       body: JSON.stringify(body),
     });
   } catch {
+    // 中継の URL が未設定(deploy 前)の時は、通信の失敗ではなく「今は使えない」と言う。
+    if (agentEndpointUnset(deps.endpoint ?? AGENT_ENDPOINT)) throw new RelayError(FIXED.unavailable);
     throw new RelayError("Claude に接続できませんでした。通信の状態を確かめてください。");
   }
   if (!res.ok) {

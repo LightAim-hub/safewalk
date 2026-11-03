@@ -230,3 +230,20 @@
   font-weight: 600;
   line-height: 1.5;
 }
+
+/* Claude に事情を伝えて道を選んでもらう */
+.agent { margin: 12px 0; padding: 12px 0 4px; border-top: 1px solid var(--line); }
+.agent h3 { margin: 0 0 8px; font-size: 14px; }
+.agent-form { display: flex; gap: 8px; margin-bottom: 8px; }
+.agent-form input { flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: inherit; font: inherit; }
+.agent-form button { flex: none; }
+.agent-out p, .agent-out ul { font-size: 13px; line-height: 1.6; }
+.agent-out h3 { margin: 10px 0 4px; }
+.agent-summary { margin: 8px 0 4px; font-size: 14px; font-weight: 600; }
+.agent-chosen { margin: 4px 0; color: var(--blue); font-weight: 600; }
+.agent-hint, .agent-disclaimer, .agent-caveats, .agent-progress { margin: 4px 0; color: var(--sub); font-size: 12px; }
+.agent-error { margin: 8px 0; padding: 8px 10px; border-radius: 8px; background: #fef7e0; color: #5f4b00; }
+.agent-reasons { margin: 0; padding-left: 18px; }
+.agent-evidence summary { color: var(--sub); font-size: 12px; cursor: pointer; }
+.agent-evidence ul { margin: 2px 0 6px; padding-left: 16px; color: var(--sub); font-size: 12px; }
+.agent { scroll-margin-top: 72px; }

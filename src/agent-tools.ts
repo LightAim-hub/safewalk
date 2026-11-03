@@ -21,6 +21,8 @@ export type AgentContext = {
   safety: Safety;
   places: Place[];
   snap: (p: LatLon) => Anchor | null;
+  /** 経路を作った直後に呼ぶ。画面の経路と数字を揃えるため、画面側が出発地・目的地までの区間を足す(directions.ts の connectEnds)。 */
+  afterFind?: (routes: Route[]) => void;
 };
 
 export type Fact = { id: string; text: string };
@@ -150,6 +152,7 @@ function findRoutesTool(s: ToolSession): ToolOutput {
   if (!to) return fail("目的地が、神戸市内の歩ける道の近くにありません。");
   const routes = findRoutes(ctx.graph, from, to, s.period, ctx.accidents, ctx.meta, ctx.names);
   s.routes = routes;
+  ctx.afterFind?.(routes);
   if (!routes.length) return fail("経路が見つかりませんでした。");
 
   const facts: Fact[] = [];
