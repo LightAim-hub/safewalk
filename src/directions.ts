@@ -322,7 +322,7 @@ export function assessment(route: Route): Assessment {
 }
 
 /** routes.ts が付ける旧い札。画面には出さない。 */
-const OLD_BEST = "最も" + "安全";
+const OLD_BEST = "事故の記録が少ない道";
 
 /** 経路の札。「記録が少ない道」と言えるのは、段階が「比較的記録が少ない」の時だけ。 */
 export function routeLabel(route: Route, a: Assessment): string {
