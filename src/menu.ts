@@ -7,6 +7,7 @@ import { setBaseLayer, type BaseLayer } from "./map-ui";
 import { openIntro } from "./onboarding";
 import { type Place } from "./types";
 import { copyLink } from "./url";
+import { WALK_M_PER_MIN } from "./routes";
 import { chosenVoiceName, onVoiceChange } from "./voice";
 import "./menu.css";
 
@@ -282,7 +283,8 @@ function buildMenu(): void {
     emg,
     emgBox,
     section("地図の種類", seg),
-    section("音声", voice, voiceName),
+    section("音声", voice, voiceName, el("p", "menu-note", "音が出ない時は、端末の音量とマナーモードを確かめてください。")),
+    section("所要時間", el("p", "menu-note", `分速${WALK_M_PER_MIN}m（時速${(WALK_M_PER_MIN * 0.06).toFixed(1)}km）で歩く計算です。上りは1mごとに3秒足しています。`)),
     section("説明", detail, sources, help, share),
   );
   back.append(sheet);

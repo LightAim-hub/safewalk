@@ -38,6 +38,7 @@
 .emg-hint { margin: 4px 0; color: var(--sub); font-size: 0.75rem; }
 .emergency.disaster { border-color: var(--warn-ink, #7a4f01); background: var(--warn-bg, #fef7e0); }
 .emg-disaster { margin: 0; color: var(--warn-ink, #7a4f01); font-weight: 600; }
+.emg-bosai { display: inline-block; padding: 10px 0; color: inherit; text-decoration: underline; }
 .agent-privacy { margin: 0 0 8px; color: var(--sub); font-size: 0.8125rem; line-height: 1.5; }
 .send-note { margin: 0; color: var(--sub); font-size: 0.6875rem; line-height: 1.4; }
 

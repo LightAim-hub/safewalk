@@ -59,6 +59,18 @@ export const EMERGENCY_NUMBERS = ["110", "119", "7119"];
 
 export const DISASTER_NOTICE = "地震・津波など災害の時の避難には使えません。自治体の避難情報に従ってください。";
 
+/** 神戸市の避難情報のページ（神戸市リアルタイム防災情報。2026-11-04 に開いて、避難情報・避難所のページだと確かめた）。 */
+export const KOBE_BOSAI_URL = "https://www.city.kobe.lg.jp/a46152/bosai/emergency/index.html";
+
+/** 災害の文の後ろに付ける、神戸市の避難情報へのリンク。 */
+export function bosaiLink(): HTMLAnchorElement {
+  const a = el("a", "emg-bosai", "神戸市の避難情報（外部サイト）");
+  a.href = KOBE_BOSAI_URL;
+  a.target = "_blank";
+  a.rel = "noopener";
+  return a;
+}
+
 const norm = (s: string) => s.normalize("NFKC");
 
 export function detectEmergency(text: string): boolean {
@@ -161,6 +173,8 @@ export function emergencyPanel(
 export function disasterPanel(): HTMLElement {
   const box = el("section", "emergency disaster");
   box.setAttribute("role", "region");
-  box.append(el("p", "emg-disaster", DISASTER_NOTICE));
+  const p = el("p", "emg-disaster", DISASTER_NOTICE);
+  p.append(" ", bosaiLink());
+  box.append(p);
   return box;
 }

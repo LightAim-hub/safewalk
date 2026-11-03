@@ -3,7 +3,7 @@ import { findRoutes, minutesFor, type Route } from "./routes";
 import { $, CURRENT, state, map, markers, toast, el } from "./app";
 import { snap, safety, graph, accidents, meta, names, inKobe } from "./data";
 import { assess, newGuideState, nextNotice, type GuideState, type RouteAlert } from "./safety";
-import { setEnd, renderStops, selectRoute, formatMetres, fitRoutes, toKoban, focusResultHeading } from "./directions";
+import { setEnd, renderStops, selectRoute, formatMetres, fitRoutes, toKoban, focusResultHeading, longStraight } from "./directions";
 import { replaceUrl } from "./url";
 import type { Place } from "./types";
 import { showAccuracy } from "./map-ui";
@@ -13,6 +13,11 @@ import "./guide.css";
 import { chosenVoiceName, loadVoices, onVoiceChange, primeVoice, say, stopSpeaking, turnSpeech, type SayKind } from "./voice";
 
 export const OFF_ROUTE_M = 60;
+/** GPS の誤差が大きい時は、その分だけ外れの判定をゆるめる。ゆるめ過ぎて外れに気づかない事を防ぐ上限。 */
+export const OFF_ROUTE_MAX_M = 120;
+export const offRouteLimit = (accuracy?: number): number => Math.min(OFF_ROUTE_MAX_M, Math.max(OFF_ROUTE_M, accuracy ?? 0));
+/** 経路の上にいるとみなす距離。進みが先へ飛んだ後、戻ったかを見るのに使う。 */
+export const ON_ROUTE_M = 30;
 export const STEP_REACHED_M = 20;
 export const ANNOUNCE_M = 40;
 /** 次に歩く座標を探す範囲。GPS の跳びで先へ進み過ぎないようにする。 */
@@ -194,10 +199,10 @@ export function arrowFor(text: string): string {
  * 頂点だけで測ると、頂点の間隔(直線では数十 m)ごとにしか距離が変わらず、歩いても「30m先」のまま止まって見える。
  * 往復する経路で帰りを行きと取り違えないよう、from(進んだ所)より先の線分だけを見る。
  */
-export function projectOnRoute(p: LatLon, route: Route, from = 0, limit = route.coords.length): { seg: number; t: number } {
+export function projectOnRoute(p: LatLon, route: Route, from = 0, limit = route.coords.length): { seg: number; t: number; d: number } {
   const last = route.coords.length - 2;
-  if (last < 0) return { seg: 0, t: 0 };
-  let best = { seg: Math.min(from, last), t: 0 };
+  if (last < 0) return { seg: 0, t: 0, d: Infinity };
+  let best = { seg: Math.min(from, last), t: 0, d: Infinity };
   let bestD = Infinity;
   const end = Math.min(last + 1, from + limit);
   const k = Math.cos((p.lat * Math.PI) / 180);
@@ -211,7 +216,7 @@ export function projectOnRoute(p: LatLon, route: Route, from = 0, limit = route.
     const d = metres(p, { lat: lat1 + dy * t, lon: lon1 + (lon2 - lon1) * t });
     if (d < bestD) {
       bestD = d;
-      best = { seg: i, t };
+      best = { seg: i, t, d };
     }
   }
   return best;
@@ -221,7 +226,13 @@ export function remainingFrom(
   p: LatLon,
   route: Route,
 ): { next: Route["steps"][number] | null; then: Route["steps"][number] | null; metresLeft: number; metresToNext: number } {
-  const { seg, t } = projectOnRoute(p, route, guideProgress, GUIDE_WINDOW);
+  let found = projectOnRoute(p, route, guideProgress, GUIDE_WINDOW);
+  // 先の遠い所へ一度飛んだ後に経路の手前へ戻った時は、進みも手前へ直す（先へだけ数えると残りが戻らない）。
+  if (guideProgress > 0 && found.d > ON_ROUTE_M) {
+    const back = projectOnRoute(p, route, 0, guideProgress);
+    if (back.d <= ON_ROUTE_M && back.d < found.d) found = back;
+  }
+  const { seg, t } = found;
   guideProgress = seg;
   // いま立っている線分の、先の頂点までの残り。ここから先は頂点どうしの道なりの長さを足す。
   const [lon1, lat1] = route.coords[seg];
@@ -291,7 +302,7 @@ export function reroute(p: LatLon, route: Route, startOfGuide = false): boolean 
     showTurn("!", "");
     put("guide-then", "");
     put("guide-next", "元の経路へ戻ってください");
-    showAlert("off", "経路から離れています。元の経路へ戻ってください");
+    showAlert("off", "経路から離れています。元の経路へ戻るか、案内を終えて選び直せます");
     offStuck = true;
     return false;
   }
@@ -411,7 +422,7 @@ export function updateGuide(p: LatLon, accuracy?: number): void {
   map.easeTo({ center: [p.lon, p.lat], zoom: Math.max(map.getZoom(), 17), duration: 500 });
   const first = firstFix;
   firstFix = false;
-  if (distanceToRoute(p, route) > OFF_ROUTE_M && !rerouting) {
+  if (distanceToRoute(p, route) > offRouteLimit(accuracy) && !rerouting) {
     // 選んだ経路へ戻る道ができたら、その新しい経路で続けて案内を出す。できなければ「戻って」の表示で終える。
     if (!reroute(p, route, first)) return;
     route = state.routes[state.selected];
@@ -439,7 +450,10 @@ export function updateGuide(p: LatLon, accuracy?: number): void {
   }
   checkNotice(p, route);
   showTurn(next ? arrowFor(next.text) : "↑", next ? (metresToNext < 15 ? "まもなく" : `${formatMetres(metresToNext)}先`) : "");
-  put("guide-next", next ? next.text : "このまま目的地へ進む");
+  // 長い直進は、曲がり角の手前に着いてから「この先◯kmは曲がりません」と出す。
+  const straight = next && metresToNext < 15 ? longStraight(next) : null;
+  if (straight) showTurn(arrowFor(next!.text), "");
+  put("guide-next", straight ?? (next ? next.text : "このまま目的地へ進む"));
   put("guide-then", next && then ? `そのあと ${formatMetres(next.metres)}進んで ${arrowFor(then.text)} ${then.text.replace(/（.*）/, "")}` : "");
   put("guide-rest", `残り ${formatMetres(metresLeft)}・約${minutesFor(metresLeft, 0)}分`);
 }

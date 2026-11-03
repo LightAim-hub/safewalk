@@ -136,6 +136,14 @@ export function showLocateFail(kind: LocateFail): void {
 
 // ---- 初回の説明 ----
 
+/** 初回の説明の「使い方」。どれも一行で。 */
+const INTRO_TIPS = [
+  "地図を長押しすると、その場所を選べます。",
+  "昼と夜では、数える事故が違います。夜は夜の事故だけです。",
+  "はじめは約7MBを読み込みます。",
+];
+const INTRO_EN = "A walking map of Kobe City. It shows past traffic-accident records along each route. The app is in Japanese only.";
+
 let intro: HTMLElement | null = null;
 let introReturn: HTMLElement | null = null;
 
@@ -197,7 +205,8 @@ function closeIntro(): void {
   introReturn = null;
 }
 
-export function openIntro(): void {
+/** 「使い方」から開いた時は、使い方の一覧も開いておく。初めて開いた時は閉じておく（説明で画面を埋めない）。 */
+export function openIntro(expanded = true): void {
   if (intro) return;
   introReturn = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const wrap = el("div", "intro-back");
@@ -209,9 +218,17 @@ export function openIntro(): void {
   h.id = "intro-title";
   box.append(
     h,
-    para("神戸市の、歩いて行くための地図です。道ごとに、むかしの交通事故の記録と、夜の歩きやすさを見られます。"),
-    para("安全を保証するものではありません。歩くときは、まわりをよく見てください。", "intro-warn"),
+    para("神戸市の、歩いて行くための地図です。道ごとに、警察に届いた交通事故の場所（2020〜2025年）と、夜の歩きやすさを見られます。今の工事や混み具合は入っていません。"),
   );
+  const how = el("details", "intro-how");
+  how.open = expanded;
+  how.append(el("summary", undefined, "使い方"));
+  const tips = el("ul");
+  for (const line of INTRO_TIPS) tips.append(el("li", undefined, line));
+  const english = el("p", "intro-en", INTRO_EN);
+  english.lang = "en";
+  how.append(tips, english);
+  box.append(how, para("安全を保証するものではありません。歩くときは、まわりをよく見てください。", "intro-warn"));
   if (inAppBrowser()) box.append(para("LINE や X などのアプリの中では、現在地がうまく使えないことがあります。Safari や Chrome で開くと確実です。", "intro-app"));
   const row = el("div", "note-actions");
   const ex = el("button", "secondary", "例を見る（三宮駅→北野）");
@@ -265,7 +282,7 @@ export function bindOnboarding(): void {
   help.setAttribute("aria-label", "使い方");
   help.title = "使い方";
   help.textContent = "?";
-  help.addEventListener("click", openIntro);
+  help.addEventListener("click", () => openIntro());
   document.body.append(help);
   bannerForInApp();
   // 経路の画面・案内に変わったら、位置情報のメモは畳む（一覧と「案内を始める」を覆わない）。
@@ -279,5 +296,5 @@ export function bindOnboarding(): void {
   const q = new URLSearchParams(location.search);
   // 共有された地点や経路を開いた時、intro=0 の時は出さない。
   const shared = location.search.length > 1;
-  if (!readSeen() && !shared && q.get("intro") !== "0") openIntro();
+  if (!readSeen() && !shared && q.get("intro") !== "0") openIntro(false);
 }
