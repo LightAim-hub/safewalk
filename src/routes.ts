@@ -60,6 +60,8 @@ const METRES_PER_RISK = 30;
 const SAFETY_WEIGHTS = [0, 1, 3, 8];
 const MAX_DETOUR = 1.7;
 const MAX_OVERLAP = 0.85;
+/** 距離がこの差以内で、時間が1分以内の差、件数が同じなら、ほぼ同じ経路として扱う(m)。 */
+const NEAR_SAME_M = 3;
 /** 夜に人家から離れた道を、何倍の長さとして扱うか。他に道があれば通らない。 */
 const REMOTE_NIGHT = 4;
 /** 評価できない道がこの割合を超える経路は、安全度を「不明」にする。 */
@@ -138,9 +140,11 @@ export function findRoutes(
   const known = found.filter((r) => r.safety !== null);
   const safest = known.reduce<Route | null>((a, b) => (!a || b.safety! > a.safety! ? b : a), null);
   const shortestCount = countNear(found[0], period, acc);
+  // 夜は人家から離れた道を避けるので、先頭より2分以上速い別の経路が出ることがある。その時は「最短」と名乗らない。
+  const beaten = found.some((r) => found[0].minutes - r.minutes >= 2);
   found.forEach((r, i) => {
     // 「事故の記録が少ない道」は、最短より記録が少ない時だけ名乗る。
-    r.label = i === 0 ? "最短" : r === safest && countNear(r, period, acc) < shortestCount ? "事故の記録が少ない道" : "別の道";
+    r.label = i === 0 ? (beaten ? "おすすめ" : "最短") : r === safest && countNear(r, period, acc) < shortestCount ? "事故の記録が少ない道" : "別の道";
   });
   if (found.length === 1) found[0].label = "おすすめ";
   distinctVias(found);
@@ -165,9 +169,13 @@ function dropWorse(g: Graph, routes: Route[], period: Period, acc: AccidentIndex
     if (i === 0) return true;
     return !routes.some((o, j) => {
       if (j === i) return false;
+      // 距離が数 m しか違わず時間が1分以内なら「同じ」とみなす。画面は出発地・目的地の端を足して分を切り上げ直すので、
+      // ここで1分速かった経路が画面では同じ分になり、1m 長いだけの経路が残ってしまう。
+      const nearSame = Math.abs(o.metres - r.metres) <= NEAR_SAME_M && Math.abs(o.minutes - r.minutes) <= 1 && count[j] === count[i];
+      if (nearSame && o.metres < r.metres) return true;
       const noWorse = o.metres <= r.metres && o.minutes <= r.minutes && count[j] <= count[i];
       if (!noWorse) return false;
-      const same = o.metres === r.metres && o.minutes === r.minutes && count[j] === count[i];
+      const same = (o.metres === r.metres && o.minutes === r.minutes && count[j] === count[i]);
       // 全部同じ値の時は、道が重なっていて、かつ先に出した方を残す。
       return same ? j < i && overlap(g, o.edges, r.edges) > 0.6 : true;
     });

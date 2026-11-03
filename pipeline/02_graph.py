@@ -112,8 +112,12 @@ class Ways(osmium.SimpleHandler):
         foot = tags.get("foot", "")
         if foot == "no":
             return
-        allowed = hw in WALKABLE or (hw in ("trunk", "trunk_link") and foot in ("yes", "designated"))
+        # 国道(trunk: 2号・43号・176号など)は、foot=no・自動車専用・有料・歩道なし(sidewalk=no)の明記が無い限り通す。
+        # 以前は foot=yes の明記が無い trunk を全部除いたため、国道の約 280km が歩けない道になっていた。
+        allowed = hw in WALKABLE or hw in ("trunk", "trunk_link")
         if not allowed:
+            return
+        if hw in ("trunk", "trunk_link") and foot not in ("yes", "designated") and tags.get("sidewalk") in ("no", "none"):
             return
         if tags.get("access") in ("private", "no") and foot not in ("yes", "designated"):
             return
@@ -124,8 +128,13 @@ class Ways(osmium.SimpleHandler):
         # 有料道路と自動車専用道路は歩けない。
         if tags.get("motorroad") == "yes" or (tags.get("toll") == "yes" and foot not in ("yes", "designated")):
             return
+        # 舗装も街灯の記録も無い path / track。路面が「土・砂利」などと書かれていれば山道として除く。
+        # 路面の記録が無いだけの物は、周囲に道か建物がある時は市街地の小道なので残し、drop_trails で人里離れた物を除く。
+        unsurfaced = False
         if hw in TRAILS and tags.get("surface") not in PAVED and tags.get("lit") != "yes":
-            return
+            if tags.get("surface"):
+                return
+            unsurfaced = True
         s, west, n, e = BBOX
         pts = []
         for nd in w.nodes:
@@ -138,7 +147,7 @@ class Ways(osmium.SimpleHandler):
         if shapely.contains_xy(AREA, lons, lats).any():
             flat = tags.get("bridge", "no") != "no" or tags.get("tunnel", "no") != "no"
             inside = bool(shapely.contains_xy(KOBE, lons, lats).any())
-            self.ways.append((pts, tags.get("name") or tags.get("ref") or "", flat, hw, inside, w.id))
+            self.ways.append((pts, tags.get("name") or tags.get("ref") or "", flat, hw, inside, w.id, unsurfaced))
 
 
 def drop_trails(handler):
@@ -146,12 +155,14 @@ def drop_trails(handler):
     kept = []
     dropped = 0.0
     for way in handler.ways:
-        pts, name, _, hw, _, _ = way
+        pts, name, _, hw, _, _, unsurfaced = way
         if hw in FOOT_ONLY:
             lonely = sum(
                 not is_near(handler.roads, p[1], p[2]) and not is_near(handler.buildings, p[1], p[2]) for p in pts
             )
-            if TRAIL_NAME.search(name) or lonely * 2 > len(pts):
+            # 路面の記録が無い小道は、人里離れた点が4分の1を超えたら山道とみなす(舗装・街灯のある道は半分)。
+            limit = 4 if unsurfaced else 2
+            if TRAIL_NAME.search(name) or lonely * limit > len(pts):
                 dropped += sum(metres(p[1], p[2], q[1], q[2]) for p, q in zip(pts, pts[1:]))
                 continue
         kept.append(way)
@@ -185,7 +196,7 @@ def split_edges(ways):
         use[pts[0][0]] += 1
         use[pts[-1][0]] += 1
     edges = []
-    for pts, name, flat, _, inside, way_id in ways:
+    for pts, name, flat, _, inside, way_id, _ in ways:
         cur = [pts[0]]
         for p in pts[1:]:
             cur.append(p)
