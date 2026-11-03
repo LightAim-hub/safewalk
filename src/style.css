@@ -794,19 +794,20 @@ body.guiding .ui {
     display: none;
   }
 
+  /* ジャンルのボタン（上から 66〜102px）の下に置き、重ならないようにする。 */
   .locate {
     right: 10px;
-    top: 72px;
+    top: 112px;
     bottom: auto;
   }
 
   .layers {
-    top: 124px;
+    top: 164px;
     bottom: auto;
   }
 
   .layer-menu {
-    top: 124px;
+    top: 164px;
     right: 62px;
     bottom: auto;
   }

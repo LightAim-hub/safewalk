@@ -1,8 +1,9 @@
 import { type LatLon } from "./graph";
-import { qInput, sheet, CURRENT, state, markers, toast } from "./app";
+import { qInput, sheet, CURRENT, GENRES, state, map, markers, toast, mapPadding } from "./app";
 import { openDirections, closeDirections, renderStops } from "./directions";
 import { matchPlace, showPlace } from "./place";
-import { clearGenre } from "./search";
+import { clearGenre, searchGenre } from "./search";
+import { syncClearButton } from "./map-ui";
 import { type Place } from "./types";
 
 export async function copyLink(button: HTMLButtonElement): Promise<void> {
@@ -12,6 +13,14 @@ export async function copyLink(button: HTMLButtonElement): Promise<void> {
   } catch {
     toast("コピーできませんでした。アドレス欄のリンクをお使いください。");
   }
+}
+
+/** 一覧を出した時の地図の範囲（緯度,経度,ズーム）。場所を開いて動いても、一覧に戻る時はこの範囲で出す。 */
+let genreView = "";
+
+function currentView(): string {
+  const c = map.getCenter();
+  return `${c.lat.toFixed(4)},${c.lng.toFixed(4)},${map.getZoom().toFixed(1)}`;
 }
 
 export function urlForState(): string {
@@ -32,9 +41,17 @@ export function urlForState(): string {
     q.set("period", state.period);
   } else if (state.mode === "directions") {
     q.set("mode", "directions");
-  } else if (state.picked) {
-    q.set("place", `${state.picked.lat.toFixed(5)},${state.picked.lon.toFixed(5)}`);
-    q.set("name", state.picked.name);
+  } else {
+    // ジャンル検索の一覧と、そこから開いた場所。戻ると一覧に戻れるよう、探した範囲も残す。
+    if (state.genre) {
+      if (!state.picked) genreView = currentView();
+      q.set("g", state.genre.label);
+      if (genreView) q.set("gv", genreView);
+    }
+    if (state.picked) {
+      q.set("place", `${state.picked.lat.toFixed(5)},${state.picked.lon.toFixed(5)}`);
+      q.set("name", state.picked.name);
+    }
   }
   const text = q.toString();
   return text ? `?${text}` : location.pathname;
@@ -57,6 +74,8 @@ export function parsePoint(text: string | null): LatLon | null {
 
 /** URL の内容を画面に映す。起動時と「戻る」「進む」の時に使う。 */
 export function applyUrl(): void {
+  restoring = true;
+  setTimeout(() => (restoring = false), 0);
   const q = new URLSearchParams(location.search);
   const from = parsePoint(q.get("from"));
   const to = parsePoint(q.get("to"));
@@ -85,11 +104,23 @@ export function applyUrl(): void {
     });
   } else if (q.get("mode") === "directions") {
     openDirections({});
-  } else if (place) {
-    const name = q.get("name") || "共有された地点";
-    showPlace(matchPlace(name, place) ?? { ...place, name });
+  } else {
+    const genre = GENRES.find((g) => g.label === q.get("g"));
+    if (genre) {
+      const [lat, lon, zoom] = (q.get("gv") ?? "").split(",").map(Number);
+      if (Number.isFinite(lat) && Number.isFinite(lon) && Number.isFinite(zoom)) {
+        map.jumpTo({ center: [lon, lat], zoom, padding: mapPadding() });
+      }
+      genreView = q.get("gv") ?? "";
+      searchGenre(genre);
+    }
+    if (place) {
+      const name = q.get("name") || "共有された地点";
+      showPlace(matchPlace(name, place) ?? { ...place, name });
+    }
   }
   renderPeriod();
+  syncClearButton();
 }
 
 export function renderPeriod(): void {
@@ -98,6 +129,20 @@ export function renderPeriod(): void {
   });
 }
 
+/** applyUrl が画面を変えている間は、履歴を積み足さない（進む履歴が消えるため）。 */
+let restoring = false;
+
 export function bindUrl(): void {
   window.addEventListener("popstate", applyUrl);
+  // 検索側のコードを変えずに、一覧・場所の画面が変わった時に履歴を積む。
+  // 経路の画面は directions.ts が自分で積む。
+  new MutationObserver(() => {
+    if (!restoring && state.mode === "browse") pushUrl();
+  }).observe(sheet, { childList: true, attributes: true, attributeFilter: ["hidden"] });
+  // 一覧を見ている間は、地図を動かした範囲を今の履歴に上書きして覚える。
+  map.on("moveend", () => {
+    if (restoring || state.mode !== "browse" || !state.genre || state.picked) return;
+    genreView = currentView();
+    replaceUrl();
+  });
 }

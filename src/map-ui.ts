@@ -1,6 +1,6 @@
 import { type ExpressionSpecification, type GeoJSONSource } from "maplibre-gl";
 import { type LatLon } from "./graph";
-import { $, sheet, COLORS, CURRENT, state, map, markers, toast, mapPadding } from "./app";
+import { $, qInput, sheet, COLORS, CURRENT, state, map, markers, toast, mapPadding } from "./app";
 import { emptyCollection, snap } from "./data";
 import { addStop, selectRoute } from "./directions";
 import { matchPlace, onMapPick, closePlace, showPlace } from "./place";
@@ -20,8 +20,47 @@ export function useJapaneseLabels(): void {
   }
 }
 
+/** 背景地図と航空写真が細かく表示できる範囲（国土地理院の航空写真は z18 まで）。これより寄ると無地になる。 */
+export const MAX_ZOOM = 18;
+
+/** 中くらいの拡大（z15〜16）でも出したい店・施設の種類。残りの種類は z17 から出す。 */
+export const MAIN_POI_CLASSES = [
+  "shop", "grocery", "fast_food", "cafe", "restaurant", "bakery", "clothing_store", "pharmacy", "bank", "atm",
+  "post", "hospital", "doctors", "library", "museum", "attraction", "cinema", "theatre", "lodging", "police",
+  "school", "college", "town_hall", "park", "place_of_worship", "stadium", "fuel",
+];
+
+/**
+ * 背景地図は店や施設の層が z15 / z16 / z17 から出る作りで、少し拡大しただけでは駅とバス停しか見えない。
+ * 主な種類は早い拡大から出し、バス停は z16 からにして、全体を読みやすく保つ。
+ */
+export function showMorePois(): void {
+  const byId = (id: string) => map.getStyle().layers.find((l) => l.id === id);
+  const mid = byId("poi_r7");
+  const low = byId("poi_r20");
+  const main: ExpressionSpecification = ["in", ["get", "class"], ["literal", MAIN_POI_CLASSES]];
+  if (mid && mid.type === "symbol") map.setLayerZoomRange(mid.id, 15, 24);
+  if (low && low.type === "symbol") {
+    // 主な種類は z16 から。残りは複製した層で z17 から。
+    map.addLayer({ ...low, id: "poi_r20_other", minzoom: 17, filter: ["all", low.filter as ExpressionSpecification, ["!", main]] }, low.id);
+    map.setFilter(low.id, ["all", low.filter as ExpressionSpecification, main]);
+    map.setLayerZoomRange(low.id, 16, 24);
+  }
+  for (const id of ["poi_r1", "poi_r7", "poi_r20", "poi_r20_other"]) {
+    if (map.getLayer(id)) map.setLayoutProperty(id, "text-font", ["Noto Sans Regular"]);
+  }
+  const transit = byId("poi_transit");
+  if (transit && transit.type === "symbol") {
+    // バス停は多いので z16 から。駅は今まで通り。
+    map.addLayer({ ...transit, id: "poi_bus", minzoom: 16, filter: ["==", ["get", "class"], "bus"] }, transit.id);
+    map.setFilter(transit.id, ["match", ["get", "class"], ["airport", "rail"], true, false]);
+  }
+}
+
 export function addLayers(): void {
+  map.setMaxZoom(MAX_ZOOM);
   useJapaneseLabels();
+  showMorePois();
   addBaseLayers();
   map.addSource("kobe", { type: "geojson", data: "/data/kobe.geojson" });
   map.addSource("results", { type: "geojson", data: emptyCollection() });
@@ -258,7 +297,24 @@ export function bindGrip(): void {
   });
 }
 
+/** 検索欄の ✕ は、欄に文字がある間だけ出す。 */
+export function syncClearButton(): void {
+  $("clear-q").hidden = !qInput.value;
+}
+
 export function bindMapUi(): void {
+  // 検索欄を空にしたら、開いている場所・ジャンルの一覧とピンも閉じる。
+  qInput.addEventListener("input", () => {
+    if (!qInput.value.trim()) closePlace();
+    syncClearButton();
+  });
+  $("clear-q").addEventListener("click", () => {
+    qInput.value = "";
+    closePlace();
+    syncClearButton();
+    qInput.focus();
+  });
+  new MutationObserver(syncClearButton).observe(sheet, { childList: true, attributes: true, attributeFilter: ["hidden"] });
   $("layers").addEventListener("click", () => {
     const menu = $("layer-menu");
     menu.hidden = !menu.hidden;
