@@ -1,3 +1,4 @@
+import type maplibregl from "maplibre-gl";
 import { type ExpressionSpecification, type GeoJSONSource } from "maplibre-gl";
 import { type LatLon } from "./graph";
 import { $, qInput, sheet, COLORS, CURRENT, state, map, markers, toast, mapPadding } from "./app";
@@ -17,6 +18,55 @@ export function useJapaneseLabels(): void {
     if (field !== undefined && JSON.stringify(field).includes("name")) {
       map.setLayoutProperty(layer.id, "text-field", label);
     }
+  }
+}
+
+/** 地図の文字（POI）の subclass / class から、種別を日本語で返す。分からない時は undefined。 */
+const POI_KIND: Record<string, string> = {
+  bus_stop: "バス停", bus_station: "バスターミナル", station: "駅", halt: "駅", subway_entrance: "地下鉄の出入口",
+  tram_stop: "路面電車の停留所", ferry_terminal: "フェリーのりば", aerodrome: "空港", airport: "空港",
+  convenience: "コンビニ", supermarket: "スーパー", mall: "ショッピングモール", department_store: "百貨店",
+  cafe: "カフェ", restaurant: "飲食店", fast_food: "ファストフード", bakery: "パン屋", pub: "居酒屋", bar: "バー",
+  pharmacy: "薬局", bank: "銀行", atm: "ATM", post_office: "郵便局", post_box: "ポスト",
+  hospital: "病院", clinic: "診療所", doctors: "診療所", dentist: "歯科", police: "警察", fire_station: "消防署",
+  toilets: "トイレ", telephone: "公衆電話", parking: "駐車場", bicycle_rental: "レンタサイクル",
+  library: "図書館", books: "書店", museum: "博物館", artwork: "アート作品", art_gallery: "ギャラリー",
+  attraction: "観光地", cinema: "映画館", theatre: "劇場", hotel: "ホテル", hostel: "ホステル", lodging: "宿泊",
+  school: "学校", kindergarten: "幼稚園", college: "大学・専門学校", university: "大学", town_hall: "市役所",
+  government: "官公庁", park: "公園", playground: "遊び場", place_of_worship: "寺社・教会", stadium: "スタジアム",
+  fuel: "ガソリンスタンド", cosmetics: "化粧品店", travel_agency: "旅行代理店", beauty: "美容", hairdresser: "美容室・理容室",
+  sports: "スポーツ用品店", clothing_store: "衣料品店", car: "自動車販売", car_repair: "自動車整備", office: "事務所",
+  shop: "お店", grocery: "食料品店", zoo: "動物園", garden: "庭園", swimming_pool: "プール", fitness_centre: "フィットネス",
+  sports_centre: "スポーツ施設", community_centre: "公民館", social_facility: "福祉施設", veterinary: "動物病院",
+  laundry: "クリーニング", butcher: "精肉店", florist: "花屋", jewelry: "宝飾店", electronics: "家電店", furniture: "家具店",
+  hardware: "ホームセンター", bicycle: "自転車店", optician: "眼鏡店", mobile_phone: "携帯ショップ", gift: "ギフトショップ",
+  confectionery: "菓子店", ice_cream: "アイスクリーム", food_court: "フードコート", nightclub: "ナイトクラブ", karaoke_box: "カラオケ",
+  amusement_arcade: "ゲームセンター", bus: "バス停", rail: "駅", railway: "駅", lodging_other: "宿泊",
+};
+
+export function poiKind(props: Record<string, unknown>): string | undefined {
+  for (const key of ["subclass", "class"]) {
+    const value = props[key];
+    if (typeof value === "string" && POI_KIND[value]) return POI_KIND[value];
+  }
+  return undefined;
+}
+
+/**
+ * 番号だけ・「〜号線」だけの道の名前（例: 生田北１２９号線）は読んで分からないので出さない。
+ * 道の名前の層の filter に足す。
+ */
+export function hideNumberedRoads(): void {
+  const name: ExpressionSpecification = ["to-string", ["coalesce", ["get", "name:ja"], ["get", "name"], ""]];
+  const numbered: ExpressionSpecification = [
+    "any",
+    ["!=", ["to-number", name, -1], -1],
+    ["all", [">=", ["index-of", "号線", name], 0], ["==", ["index-of", "号線", name], ["-", ["length", name], 2]]],
+  ];
+  for (const id of ["highway-name-path", "highway-name-minor", "highway-name-major"]) {
+    const layer = map.getStyle().layers.find((l) => l.id === id);
+    if (!layer || layer.type !== "symbol") continue;
+    map.setFilter(id, layer.filter ? ["all", layer.filter as ExpressionSpecification, ["!", numbered]] : ["!", numbered]);
   }
 }
 
@@ -61,6 +111,7 @@ export function addLayers(): void {
   map.setMaxZoom(MAX_ZOOM);
   useJapaneseLabels();
   showMorePois();
+  hideNumberedRoads();
   addBaseLayers();
   map.addSource("kobe", { type: "geojson", data: DATA_URL + "kobe.geojson" });
   map.addSource("results", { type: "geojson", data: emptyCollection() });
@@ -143,22 +194,26 @@ export function addLayers(): void {
     if (typeof index === "number") selectRoute(index);
     e.preventDefault();
   });
+  // ダブルクリックは拡大だけにする。1回目のクリックはしばらく待ち、2回目が来たら地点を開かない。
+  let pendingClick = 0;
+  map.on("dblclick", () => {
+    clearTimeout(pendingClick);
+    pendingClick = 0;
+  });
   map.on("click", (e) => {
     if (e.defaultPrevented || longPressed) {
       longPressed = false;
       return;
     }
-    const { x, y } = e.point;
-    const labelled = map
-      .queryRenderedFeatures([
-        [x - 6, y - 6],
-        [x + 6, y + 6],
-      ])
-      .find((f) => f.layer.type === "symbol" && f.properties.name);
-    if (!labelled && TOUCH && state.mode === "browse") return closePlace();
-    const name = labelled ? String(labelled.properties["name:ja"] ?? labelled.properties.name) : "地図で選んだ地点";
-    const at = { lat: e.lngLat.lat, lon: e.lngLat.lng };
-    onMapPick(labelled ? (matchPlace(name, at) ?? { ...at, name }) : { ...at, name }, labelled !== undefined);
+    if (pendingClick) {
+      clearTimeout(pendingClick);
+      pendingClick = 0;
+      return;
+    }
+    pendingClick = window.setTimeout(() => {
+      pendingClick = 0;
+      pickAt(e);
+    }, DOUBLE_CLICK_MS);
   });
   bindLongPress();
   for (const layer of ["route-line", "result-dots"]) {
@@ -168,6 +223,29 @@ export function addLayers(): void {
   map.on("moveend", (e) => {
     if (state.genre && (e as { originalEvent?: Event }).originalEvent) $("research").hidden = false;
   });
+}
+
+/** この時間内に2回目のクリックが来たら、ダブルクリック（拡大）として扱う。 */
+export const DOUBLE_CLICK_MS = 260;
+
+/** 地図を1回押した時の処理。文字（駅・店など）の上なら、その種別とアイコンの位置で地点を開く。 */
+function pickAt(e: maplibregl.MapMouseEvent): void {
+  const { x, y } = e.point;
+  const labelled = map
+    .queryRenderedFeatures([
+      [x - 6, y - 6],
+      [x + 6, y + 6],
+    ])
+    .find((f) => f.layer.type === "symbol" && f.properties.name);
+  if (!labelled && TOUCH && state.mode === "browse") return closePlace();
+  const name = labelled ? String(labelled.properties["name:ja"] ?? labelled.properties.name) : "地図で選んだ地点";
+  // ピンは押した位置でなく、そのアイコンの位置に立てる（道の名前など線の文字は押した位置のまま）。
+  const at =
+    labelled && labelled.geometry.type === "Point"
+      ? { lat: labelled.geometry.coordinates[1], lon: labelled.geometry.coordinates[0] }
+      : { lat: e.lngLat.lat, lon: e.lngLat.lng };
+  const kind = labelled && labelled.sourceLayer === "poi" ? poiKind(labelled.properties) : undefined;
+  onMapPick(labelled ? (matchPlace(name, at) ?? { ...at, name, ...(kind && { kind }) }) : { ...at, name }, labelled !== undefined);
 }
 
 /** 指が主な操作の端末では、何もない所の短いタップで地点を選ばない。 */
@@ -270,30 +348,97 @@ export function locateMe(): Promise<Place | null> {
 
 export const SHEET_STOPS = [0.2, 0.44, 0.82];
 
-/** シートの高さを、つまみのドラッグで3段階に切り替える。 */
+/** シート本体の上端、この高さ（px）の帯もドラッグで高さを変えられる。中の一覧のスクロールとは干渉しない。 */
+export const SHEET_DRAG_ZONE_PX = 36;
+
+/** いちばん近い段の番号。 */
+function nearestStop(heightPx: number): number {
+  const now = heightPx / window.innerHeight;
+  return SHEET_STOPS.reduce((best, stop, i) => (Math.abs(stop - now) < Math.abs(SHEET_STOPS[best] - now) ? i : best), 0);
+}
+
+/** シートの高さを、つまみのドラッグで3段階に切り替える。つまみを押すと1段ずつ縮み、いちばん低い段からは最大に戻る。 */
 export function bindGrip(): void {
   const grip = $("grip");
   let startY = 0;
   let startH = 0;
   let moved = false;
   const setHeight = (px: number) => sheet.style.setProperty("--sheet-h", `${px}px`);
-  grip.addEventListener("pointerdown", (e) => {
-    grip.setPointerCapture(e.pointerId);
-    startY = e.clientY;
+  const drag = (clientY: number) => {
+    if (Math.abs(clientY - startY) > 4) moved = true;
+    setHeight(Math.min(window.innerHeight * 0.9, Math.max(60, startH + startY - clientY)));
+  };
+  const release = () => {
+    const index = nearestStop(sheet.getBoundingClientRect().height);
+    const target = moved ? index : index === 0 ? SHEET_STOPS.length - 1 : index - 1;
+    setHeight(SHEET_STOPS[target] * window.innerHeight);
+  };
+  const begin = (clientY: number) => {
+    startY = clientY;
     startH = sheet.getBoundingClientRect().height;
     moved = false;
+  };
+  grip.addEventListener("pointerdown", (e) => {
+    grip.setPointerCapture(e.pointerId);
+    begin(e.clientY);
   });
   grip.addEventListener("pointermove", (e) => {
-    if (!grip.hasPointerCapture(e.pointerId)) return;
-    if (Math.abs(e.clientY - startY) > 4) moved = true;
-    setHeight(Math.max(60, startH + startY - e.clientY));
+    if (grip.hasPointerCapture(e.pointerId)) drag(e.clientY);
   });
-  grip.addEventListener("pointerup", () => {
-    const now = sheet.getBoundingClientRect().height / window.innerHeight;
-    const nearest = SHEET_STOPS.reduce((a, b) => (Math.abs(b - now) < Math.abs(a - now) ? b : a));
-    const index = SHEET_STOPS.indexOf(nearest);
-    const target = moved ? nearest : SHEET_STOPS[(index + 1) % SHEET_STOPS.length];
-    setHeight(target * window.innerHeight);
+  grip.addEventListener("pointerup", release);
+
+  // シート本体の上端付近の指のドラッグ。帯の外から始まった動きは一覧のスクロールに任せる。
+  let dragging = false;
+  sheet.addEventListener(
+    "touchstart",
+    (e) => {
+      const touch = e.touches[0];
+      dragging = e.touches.length === 1 && touch.clientY - sheet.getBoundingClientRect().top <= SHEET_DRAG_ZONE_PX && grip.offsetParent !== null;
+      if (dragging) begin(touch.clientY);
+    },
+    { passive: true },
+  );
+  sheet.addEventListener(
+    "touchmove",
+    (e) => {
+      if (!dragging) return;
+      e.preventDefault();
+      drag(e.touches[0].clientY);
+    },
+    { passive: false },
+  );
+  const end = () => {
+    if (!dragging) return;
+    dragging = false;
+    if (moved) release();
+  };
+  sheet.addEventListener("touchend", end);
+  sheet.addEventListener("touchcancel", end);
+}
+
+const CONTROL_LABELS: [string, string][] = [
+  [".maplibregl-ctrl-zoom-in", "拡大"],
+  [".maplibregl-ctrl-zoom-out", "縮小"],
+  [".maplibregl-ctrl-compass", "方位を北に戻す"],
+  [".maplibregl-ctrl-attrib-button", "地図の出典を表示"],
+];
+
+/** MapLibre の部品の説明（title・aria-label）を日本語にする。部品が作り直されても追従する。 */
+export function bindJapaneseControls(): void {
+  const apply = () => {
+    for (const [selector, label] of CONTROL_LABELS) {
+      document.querySelectorAll<HTMLElement>(selector).forEach((node) => {
+        if (node.title !== label) node.title = label;
+        if (node.getAttribute("aria-label") !== label) node.setAttribute("aria-label", label);
+      });
+    }
+  };
+  apply();
+  new MutationObserver(apply).observe(document.querySelector(".maplibregl-control-container")!, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["title", "aria-label"],
   });
 }
 
@@ -342,6 +487,7 @@ export function bindMapUi(): void {
     });
   });
   bindGrip();
+  bindJapaneseControls();
   bindNarrowLayout();
   $("locate").addEventListener("click", async () => {
     const me = await locateMe();

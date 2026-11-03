@@ -841,3 +841,43 @@ body.guiding .ui {
     width: max-content;
   }
 }
+
+/* 指で押す端末と狭い画面では、拡大・方位・地図の種類・ジャンルのボタンを 44px 前後にする。 */
+@media (pointer: coarse), (max-width: 720px) {
+  .maplibregl-ctrl-group button {
+    width: 44px;
+    height: 44px;
+  }
+
+  .chip {
+    min-height: 44px;
+    padding: 0 16px;
+    border-radius: 22px;
+  }
+
+  .layer-menu button {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 720px) {
+  .locate {
+    top: 126px;
+  }
+
+  .layers {
+    top: 178px;
+  }
+
+  .layer-menu {
+    top: 178px;
+  }
+}
+
+/* 横向きのスマホ（高さが低い）では、ジャンルのボタンを折り返さず 1 行で横に流し、シートの高さを残す。 */
+@media (min-width: 721px) and (max-height: 500px) {
+  .chips:not(.inline) {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+}
