@@ -1,7 +1,7 @@
 # SafeWalk
 
-出発地と目的地を入れると、経路が3〜4本出て、それぞれに安全度が付く歩行ナビです。
-経路を選ぶと、その道で過去に何があったかを、公開データに基づいて確かめられます。
+神戸市の徒歩専用の地図アプリです。場所の検索、場所の情報、徒歩の経路と歩きながらの案内に加えて、
+経路ごとに、公開データから計算した安全度の目安を表示します。車・電車の経路は扱いません。
 
 Built with Claude: Japan 2026（テーマ2「本来、誰にでも届くべきものを。」）の参加作品です。
 このリポジトリは 2026-11-02 のキックオフ後に新規作成しました。コードはすべてハッカソン期間中に書いています。
@@ -17,7 +17,25 @@ SafeWalk はこの壁を取り払います。
 ## 安全度の扱い
 
 安全度は公開データから計算した**目安**です。その道の安全を保証するものではありません。
-犯罪の公開データは町丁目単位までのため、「この道で犯罪が何件」とは表示しません。
+現在の計算に使っているのは交通事故のデータだけで、犯罪や道の明るさはまだ反映していません。
+
+## 今の状態（2026-11-03）
+
+開発中です。地図・検索・徒歩経路・案内はパソコンのブラウザで動作を確かめていますが、
+スマートフォンで実際に歩いての確認はまだです。アプリの中で Claude を使う機能はこれから作ります。
+実装した要素と状態は [docs/google-maps-elements.md](docs/google-maps-elements.md) にあります。
+
+## 試し方
+
+Node.js 18 以降で次を実行し、表示された URL（既定は <http://localhost:5173/>）を開きます。
+
+```sh
+npm install
+npm run dev
+```
+
+検索欄に「三宮駅」「メリケンパーク」などを入れるか、地図をクリック（スマートフォンは長押し）して地点を選び、
+「経路」から徒歩の経路を出します。昼・夜を切り替えると、夜向けの経路と安全度になります。
 
 ## 使っているデータ
 
@@ -31,6 +49,19 @@ SafeWalk はこの壁を取り払います。
 | 背景地図 | [OpenFreeMap](https://openfreemap.org/) / OpenMapTiles / OpenStreetMap | 各提供元の条件 |
 | 住所検索・地点の住所 | [国土地理院 住所検索](https://msearch.gsi.go.jp/) | 国土地理院コンテンツ利用規約 |
 | 標高 | [国土地理院 標高タイル](https://maps.gsi.go.jp/development/demtile.html) | 国土地理院コンテンツ利用規約 |
+| 航空写真・陰影起伏 | [国土地理院 地理院タイル](https://maps.gsi.go.jp/development/ichiran.html) | 国土地理院コンテンツ利用規約 |
+
+`public/data/` の `graph.bin`・`names.json`・`places.json`・`kobe.geojson` は
+OpenStreetMap から作った派生データで、© OpenStreetMap contributors、
+[ODbL](https://opendatacommons.org/licenses/odbl/) の条件で提供します。
+`accidents.json` は警察庁のデータを加工したものです
+（出典: 警察庁「交通事故統計情報のオープンデータ」を加工して作成）。
+個人を特定できる情報は含みません。
+
+## Claude の使い方
+
+このリポジトリのコードとデータ加工は、Claude Code を開発の中心に据えて書いています
+（各コミットの `Co-Authored-By` を参照）。
 
 ## データの作り直し
 
@@ -40,11 +71,4 @@ python -m venv .venv && .venv/Scripts/pip install pandas osmium numpy shapely pi
 PYTHONPATH=pipeline .venv/Scripts/python pipeline/00_kobe.py
 PYTHONPATH=pipeline .venv/Scripts/python pipeline/01_accidents.py
 PYTHONPATH=pipeline .venv/Scripts/python pipeline/02_graph.py
-```
-
-## 開発
-
-```sh
-npm install
-npm run dev
 ```
