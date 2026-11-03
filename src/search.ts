@@ -48,6 +48,69 @@ const ALIASES = new Map(
   }).map(([short, full]) => [normalize(short), normalize(full)]),
 );
 
+/** ローマ字(ヘボン式・訓令式の基本)の音。 */
+const ROMAJI: Record<string, string> = {
+  a: "あ", i: "い", u: "う", e: "え", o: "お",
+  ka: "か", ki: "き", ku: "く", ke: "け", ko: "こ",
+  sa: "さ", si: "し", shi: "し", su: "す", se: "せ", so: "そ",
+  ta: "た", ti: "ち", chi: "ち", tu: "つ", tsu: "つ", te: "て", to: "と",
+  na: "な", ni: "に", nu: "ぬ", ne: "ね", no: "の",
+  ha: "は", hi: "ひ", hu: "ふ", fu: "ふ", he: "へ", ho: "ほ",
+  ma: "ま", mi: "み", mu: "む", me: "め", mo: "も",
+  ya: "や", yu: "ゆ", yo: "よ",
+  ra: "ら", ri: "り", ru: "る", re: "れ", ro: "ろ",
+  wa: "わ", wo: "を",
+  ga: "が", gi: "ぎ", gu: "ぐ", ge: "げ", go: "ご",
+  za: "ざ", zi: "じ", ji: "じ", zu: "ず", ze: "ぜ", zo: "ぞ",
+  da: "だ", di: "ぢ", du: "づ", de: "で", do: "ど",
+  ba: "ば", bi: "び", bu: "ぶ", be: "べ", bo: "ぼ",
+  pa: "ぱ", pi: "ぴ", pu: "ぷ", pe: "ぺ", po: "ぽ",
+  kya: "きゃ", kyu: "きゅ", kyo: "きょ",
+  sha: "しゃ", shu: "しゅ", sho: "しょ", sya: "しゃ", syu: "しゅ", syo: "しょ",
+  cha: "ちゃ", chu: "ちゅ", cho: "ちょ", tya: "ちゃ", tyu: "ちゅ", tyo: "ちょ",
+  nya: "にゃ", nyu: "にゅ", nyo: "にょ",
+  hya: "ひゃ", hyu: "ひゅ", hyo: "ひょ",
+  mya: "みゃ", myu: "みゅ", myo: "みょ",
+  rya: "りゃ", ryu: "りゅ", ryo: "りょ",
+  gya: "ぎゃ", gyu: "ぎゅ", gyo: "ぎょ",
+  ja: "じゃ", ju: "じゅ", jo: "じょ",
+  bya: "びゃ", byu: "びゅ", byo: "びょ",
+  pya: "ぴゃ", pyu: "ぴゅ", pyo: "ぴょ",
+};
+
+/** ローマ字だけの言葉をひらがなにする。全部は変換できない言葉(英語など)は null。 */
+export function romajiToKana(text: string): string | null {
+  const t = text.toLowerCase();
+  if (!/^[a-z']+$/.test(t)) return null;
+  let out = "";
+  let i = 0;
+  while (i < t.length) {
+    const c = t[i];
+    const next = t[i + 1];
+    if (c === "n") {
+      // 母音・y の前の n は「な行」。それ以外(語末・子音の前・nn・n')は「ん」。
+      if (!(next !== undefined && "aiueoy".includes(next))) {
+        out += "ん";
+        // 「sannomiya」の最初の n は「ん」だけ。次の n は「の」の頭。「nn」だけで終わる・子音が続く時は2文字で「ん」。
+        const after = t[i + 2];
+        i += next === "'" || (next === "n" && !(after !== undefined && "aiueoy".includes(after))) ? 2 : 1;
+        continue;
+      }
+    }
+    // 同じ子音が重なるのは「っ」(kk・tt・ss・pp など。n は除く)。
+    if (c === next && "kstphgzdbfjmryw".includes(c)) {
+      out += "っ";
+      i += 1;
+      continue;
+    }
+    const len = [3, 2, 1].find((l) => ROMAJI[t.slice(i, i + l)] !== undefined);
+    if (len === undefined) return null;
+    out += ROMAJI[t.slice(i, i + len)];
+    i += len;
+  }
+  return out;
+}
+
 /** 郵便番号なら「650-0001」の形にする。 */
 export function postcodeOf(text: string): string | null {
   const m = /^〒?(\d{3})[-‐‑–—−ー]?(\d{4})$/.exec(text.normalize("NFKC").replace(/\s+/g, ""));
@@ -65,13 +128,24 @@ export function searchPlaces(query: string): Place[] {
   if (postcodeOf(q)) return [];
   const brand = ALIASES.get(q);
   const kindNamed = (kind: string) => q.length >= 2 && (normalize(kind).includes(q) || q.includes(normalize(kind)));
+  // ローマ字(sannomiya)は、読みにだけ当てる。英語の店名などで全部は変換できない言葉は使わない。
+  const kana = /^[a-z']{3,}$/.test(q) ? romajiToKana(q) : null;
   const rank = (p: IndexedPlace) => {
     const name = withoutKobe(p.n);
-    const key = name.startsWith(q) || !p.y.startsWith(q) ? name : p.y;
+    let key = name.startsWith(q) || !p.y.startsWith(q) ? name : p.y;
+    // 駅の読みは「…えき」。「さんのみや」と打った時は、駅名そのものと同じ扱いにする。
+    if (p.kind === "駅" && key === p.y && key.replace(/えき$/, "") === q) key = q;
     const k = KIND_ORDER.indexOf(p.kind);
     let match = key === q ? 0 : key.startsWith(q) ? 100 : 200;
     // 略称で探した時は、略称と同じ名前の別の場所（セブンという名のカフェなど）より、正式な名前の店を上にする。
     if (brand) match = p.n.startsWith(brand) ? 0 : p.n.includes(brand) ? 100 : 300 + match;
+    // ローマ字から変えた読みだけで当たった物。駅・地区などは読みの一致で並べ、ほかの場所は名前で当たった物より下げる。
+    if (kana && !p.n.includes(q) && !p.y.includes(q) && p.y.includes(kana)) {
+      const reading = p.kind === "駅" ? p.y.replace(/えき$/, "") : p.y;
+      match = reading === kana ? 0 : p.y.startsWith(kana) ? 100 : 200;
+    }
+    // 読みだけで当たった駅・地区以外の場所(三呑み屋など)は、駅・地区より下げる。
+    if (k < 0 && key === p.y && !p.n.includes(q)) match += 100;
     const minor = MINOR_KINDS.includes(p.kind) && !kindNamed(p.kind) ? 150 : 0;
     const asked = kindNamed(p.kind) ? -150 : 0;
     const main = p.kind === "駅" && MAIN_OPERATORS.some((o) => p.operator?.includes(o)) ? -0.3 : 0;
@@ -79,7 +153,7 @@ export function searchPlaces(query: string): Place[] {
   };
   const seen = new Set<string>();
   return places
-    .filter((p) => (p.n.includes(q) || p.y.includes(q) || (brand && p.n.includes(brand))))
+    .filter((p) => p.n.includes(q) || p.y.includes(q) || (brand && p.n.includes(brand)) || (kana && KIND_ORDER.includes(p.kind) && p.y.includes(kana)))
     .map((p) => ({ p, score: rank(p) }))
     .sort((a, b) => a.score - b.score)
     .map(({ p }) => p)
@@ -102,9 +176,24 @@ export function matchGenres(query: string): Genre[] {
 export const RECENT_KEY = "safewalk.recent";
 export const RECENT_LIMIT = 6;
 
+/** 保存された値が、地点として使える形か。壊れた値や古い形は捨てる。 */
+function isPlace(value: unknown): value is Place {
+  if (typeof value !== "object" || value === null) return false;
+  const p = value as Record<string, unknown>;
+  return (
+    typeof p.name === "string" &&
+    p.name.length > 0 &&
+    typeof p.lat === "number" &&
+    Number.isFinite(p.lat) &&
+    typeof p.lon === "number" &&
+    Number.isFinite(p.lon)
+  );
+}
+
 export function recentPlaces(): Place[] {
   try {
-    return JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]") as Place[];
+    const saved: unknown = JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]");
+    return Array.isArray(saved) ? saved.filter(isPlace).slice(0, RECENT_LIMIT) : [];
   } catch {
     return [];
   }
@@ -375,8 +464,10 @@ export function bindSuggest(
   const choose = async (place: Place) => {
     close();
     if (place.name === CURRENT && place.lat === 0) {
+      // 現在地を待つ間に経路の画面を開いた・閉じた時は、出発地などに入れない。
+      const mode = state.mode;
       const me = await locateMe();
-      if (me) onPick(me);
+      if (me && state.mode === mode) onPick(me);
       return;
     }
     if (place.genre) return searchGenre(place.genre);

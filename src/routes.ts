@@ -77,7 +77,7 @@ export function findRoutes(
 ): Route[] {
   const risk = period === "night" ? g.riskNight : g.riskDay;
   const reference = period === "night" ? meta.riskPerKmNight : meta.riskPerKmDay;
-  const found: Route[] = [];
+  let found: Route[] = [];
   const nightRemote = period === "night" ? REMOTE_NIGHT : 1;
   if (from.edge === to.edge) return [alongOneEdge(g, from, to, names, acc, risk, reference)];
 
@@ -129,14 +129,44 @@ export function findRoutes(
     found.push(route);
   }
 
+  found = dropWorse(g, found, period, acc);
   const known = found.filter((r) => r.safety !== null);
   const safest = known.reduce<Route | null>((a, b) => (!a || b.safety! > a.safety! ? b : a), null);
+  const shortestCount = countNear(found[0], period, acc);
   found.forEach((r, i) => {
-    r.label = i === 0 ? "最短" : r === safest ? "事故の記録が少ない道" : "別の道";
+    // 「事故の記録が少ない道」は、最短より記録が少ない時だけ名乗る。
+    r.label = i === 0 ? "最短" : r === safest && countNear(r, period, acc) < shortestCount ? "事故の記録が少ない道" : "別の道";
   });
   if (found.length === 1) found[0].label = "おすすめ";
   distinctVias(found);
   return found;
+}
+
+/** 画面に出す事故の件数(歩行者・自転車が関わる記録。夜は夜間のみ)。src/safety.ts の assess と同じ数え方。 */
+function countNear(route: Route, period: Period, acc: AccidentIndex): number {
+  const d = acc.data;
+  return route.accidents.filter((i) => (d.ped[i] || d.bike[i]) && (period !== "night" || d.night[i])).length;
+}
+
+/**
+ * 一覧に出さない経路を除く。
+ * - 別の経路が、距離・時間・事故の件数のどれも同じか良く、どれか一つは良い経路(負けている経路)。
+ * - 距離・時間・件数が同じで、道の大半が重なる経路(ほぼ同じ経路)。
+ * 先頭(最短・既定の経路)は、何があっても残す。
+ */
+function dropWorse(g: Graph, routes: Route[], period: Period, acc: AccidentIndex): Route[] {
+  const count = routes.map((r) => countNear(r, period, acc));
+  return routes.filter((r, i) => {
+    if (i === 0) return true;
+    return !routes.some((o, j) => {
+      if (j === i) return false;
+      const noWorse = o.metres <= r.metres && o.minutes <= r.minutes && count[j] <= count[i];
+      if (!noWorse) return false;
+      const same = o.metres === r.metres && o.minutes === r.minutes && count[j] === count[i];
+      // 全部同じ値の時は、道が重なっていて、かつ先に出した方を残す。
+      return same ? j < i && overlap(g, o.edges, r.edges) > 0.6 : true;
+    });
+  });
 }
 
 export function minutesFor(metres: number, climb: number): number {

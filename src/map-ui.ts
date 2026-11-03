@@ -219,6 +219,7 @@ export function addLayers(): void {
     paint: { "text-color": COLORS.bad, "text-halo-color": "#ffffff", "text-halo-width": 1.5 },
   });
   map.on("click", "result-dots", (e) => {
+    if (guiding()) return void e.preventDefault();
     const index = e.features?.[0]?.properties?.index;
     if (typeof index === "number") {
       if (state.mode === "directions") addStop(lastResults[index]);
@@ -230,6 +231,7 @@ export function addLayers(): void {
     e.preventDefault();
   });
   map.on("click", "route-line", (e) => {
+    if (guiding()) return void e.preventDefault();
     const index = e.features?.[0]?.properties?.index;
     if (typeof index === "number") selectRoute(index);
     e.preventDefault();
@@ -241,6 +243,7 @@ export function addLayers(): void {
     pendingClick = 0;
   });
   map.on("click", (e) => {
+    if (guiding()) return;
     if (e.defaultPrevented || longPressed) {
       longPressed = false;
       return;
@@ -263,6 +266,11 @@ export function addLayers(): void {
   map.on("moveend", (e) => {
     if (state.genre && (e as { originalEvent?: Event }).originalEvent) $("research").hidden = false;
   });
+}
+
+/** 案内中は、地図の操作で出発地・目的地・経路を替えない。 */
+function guiding(): boolean {
+  return document.body.classList.contains("guiding");
 }
 
 /** この時間内に2回目のクリックが来たら、ダブルクリック（拡大）として扱う。 */
@@ -303,6 +311,7 @@ export function bindLongPress(): void {
     longPressed = false;
     if (e.originalEvent.touches.length !== 1) return;
     timer = window.setTimeout(() => {
+      if (guiding()) return;
       longPressed = true;
       onMapPick({ lat: e.lngLat.lat, lon: e.lngLat.lng, name: "地図で選んだ地点" }, false);
     }, LONG_PRESS_MS);

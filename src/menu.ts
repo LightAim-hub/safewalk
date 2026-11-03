@@ -1,5 +1,5 @@
 import { $, CURRENT, el, sheet as sheetEl, state } from "./app";
-import { openDirections, SAFETY_PAGE } from "./directions";
+import { openDirections, renderStops, SAFETY_PAGE } from "./directions";
 import { emergencyPanel, KOBAN_HEADING_HERE } from "./emergency";
 import { voiceOn } from "./guide";
 import { type KobanHit } from "./koban";
@@ -123,6 +123,9 @@ function showEmergency(origin: Place | null): void {
   const onRoute = (k: KobanHit) => {
     if (!origin) return;
     closeMenu();
+    // 交番へは経由地を回らず、まっすぐ向かう。
+    state.stops = [];
+    renderStops();
     openDirections({ from: origin, to: { name: k.name, lat: k.lat, lon: k.lon, kind: "警察" } });
   };
   const panel = emergencyPanel(origin, onRoute, undefined, origin?.name === CURRENT ? KOBAN_HEADING_HERE : undefined);
@@ -325,6 +328,8 @@ function trackSheetOverlap(): void {
 export function bindMenu(): void {
   buildMenu();
   $("menu-open").addEventListener("click", openMenu);
+  // ブラウザの「戻る」でも、開いているメニューを閉じる。
+  window.addEventListener("popstate", closeMenu);
   trackDirectionsBottom();
   trackSheetOverlap();
 }
