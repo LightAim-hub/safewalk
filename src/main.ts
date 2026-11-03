@@ -6,6 +6,7 @@ import { bindDirectionsUi } from "./directions";
 import { bindGuideUi } from "./guide";
 import { addLayers, bindMapUi } from "./map-ui";
 import { bindMenu } from "./menu";
+import { bindOffline } from "./offline";
 import { bindOnboarding } from "./onboarding";
 import { bindSearchUi } from "./search";
 import { applyUrl, renderPeriod, bindUrl, listenHistory } from "./url";
@@ -18,6 +19,7 @@ bindGuideUi();
 bindUrl();
 bindOnboarding();
 bindMenu();
+bindOffline();
 
 for (const form of [searchbar, directions]) form.addEventListener("submit", (e) => e.preventDefault());
 
