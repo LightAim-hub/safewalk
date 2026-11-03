@@ -636,7 +636,7 @@ body.guiding .ui {
 .locate {
   position: fixed;
   right: 12px;
-  bottom: 118px;
+  bottom: 180px;
   z-index: 2;
   display: grid;
   place-items: center;
@@ -655,13 +655,13 @@ body.guiding .ui {
 }
 
 .layers {
-  bottom: 170px;
+  bottom: 232px;
 }
 
 .layer-menu {
   position: fixed;
   right: 64px;
-  bottom: 170px;
+  bottom: 232px;
   z-index: 3;
   display: grid;
   gap: 2px;
@@ -734,6 +734,25 @@ body.guiding .ui {
   background: #303134;
   color: #fff;
   font-size: 14px;
+}
+
+.load-error {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 7;
+  display: grid;
+  gap: 12px;
+  width: min(360px, calc(100vw - 32px));
+  padding: 20px;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.load-error p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.6;
 }
 
 @media (min-width: 721px) {

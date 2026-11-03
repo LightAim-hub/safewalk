@@ -23,16 +23,33 @@ const locateButton = $<HTMLButtonElement>("locate");
 ui.inert = true;
 locateButton.disabled = true;
 renderPeriod();
-Promise.all([loadData(), new Promise<void>((resolve) => map.on("load", () => resolve()))])
-  .then(() => {
-    addLayers();
-    ui.inert = false;
-    locateButton.disabled = false;
-    $("loading").hidden = true;
-    applyUrl();
-  })
-  .catch((err) => {
-    console.error(err);
-    $("loading").hidden = true;
-    toast("データの読み込みに失敗しました。再読み込みしてください。");
-  });
+Promise.all([loadData(), new Promise<void>((resolve) => map.on("load", () => resolve()))]).then(
+  () => {
+    try {
+      addLayers();
+      ui.inert = false;
+      locateButton.disabled = false;
+      $("loading").hidden = true;
+    } catch (err) {
+      showLoadError(err);
+      return;
+    }
+    // 共有された URL が壊れていても、データの失敗とは別に扱い、通常の起動に戻す。
+    try {
+      applyUrl();
+    } catch (err) {
+      console.error(err);
+      history.replaceState(null, "", location.pathname);
+      toast("共有された地点を読めませんでした。");
+    }
+  },
+  showLoadError,
+);
+
+/** データが読めなかった時は、知らせが消えた後も案内とボタンを画面に残す。 */
+function showLoadError(err: unknown): void {
+  console.error(err);
+  $("loading").hidden = true;
+  $("load-error").hidden = false;
+  $("reload").addEventListener("click", () => location.reload());
+}
