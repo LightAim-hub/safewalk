@@ -3,7 +3,7 @@ import { metres, type LatLon } from "./graph";
 import { qInput, sheet, GENRES, state, map, markers, toast, el, mapPadding } from "./app";
 import { places, snap } from "./data";
 import { openDirections, setEnd } from "./directions";
-import { searchGenre, clearGenre } from "./search";
+import { searchGenre, clearGenre, timeoutSignal } from "./search";
 import { type Place, type End } from "./types";
 import { jstParts } from "./daylight";
 import { copyLink, pushUrl } from "./url";
@@ -32,7 +32,7 @@ export const WARD_BY_CODE: Record<string, string> = {
 export async function addressOf(p: LatLon): Promise<string | null> {
   const url = `https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress?lat=${p.lat}&lon=${p.lon}`;
   try {
-    const { results } = (await fetch(url, { signal: AbortSignal.timeout(2500) }).then((r) => r.json())) as { results?: { muniCd: string; lv01Nm: string } };
+    const { results } = (await fetch(url, { signal: timeoutSignal(2500) }).then((r) => r.json())) as { results?: { muniCd: string; lv01Nm: string } };
     const ward = results && WARD_BY_CODE[results.muniCd];
     if (!ward) return null;
     const town = results.lv01Nm && results.lv01Nm !== "－" ? results.lv01Nm : "";
