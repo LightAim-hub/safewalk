@@ -15,12 +15,22 @@ function showNote(): void {
     note.id = "offline-note";
     note.className = "toast";
     note.setAttribute("role", "status");
-    note.style.bottom = "72px";
+    // .toast は狭い画面で top を持つので、上下を両方決めないと縦に伸びて画面を覆う。
+    // 上は検索欄の下に置き、押す操作は下の物へ通す。
+    Object.assign(note.style, { top: "calc(env(safe-area-inset-top, 0px) + 64px)", bottom: "auto", height: "auto", pointerEvents: "none" });
     note.textContent = NOTE_TEXT;
     document.body.append(note);
   }
   note.hidden = false;
+  // 出しっぱなしにすると候補やジャンルの列に重なるので、少しして畳む（電波が切れるたびにまた出す）。
+  clearTimeout(noteTimer);
+  noteTimer = window.setTimeout(() => {
+    if (note) note.hidden = true;
+  }, NOTE_MS);
 }
+
+const NOTE_MS = 6000;
+let noteTimer = 0;
 
 function hideNote(): void {
   if (note) note.hidden = true;
