@@ -138,7 +138,7 @@ for (const [k, [situation, f, t, period, kind]] of CASES.entries()) {
       const a = r.routes.map((route) => M.assess(safety, route, period).accident);
       const c = a[r.chosenRouteIndex];
       const better = a.find((x, i) => i !== r.chosenRouteIndex && x.count < c.count && (x.perKm ?? 0) < (c.perKm ?? 0));
-      if (better && !/記録|件/.test(firstSentence(r.summary ?? ""))) fail.push(`記録の多い経路(${c.count}件・1kmあたり${c.perKm})を勧めたのに、要約の最初の文で引き換えを言っていない（少ない経路: ${better.count}件・${better.perKm}）`);
+      if (better && !/\d+件/.test(r.summary ?? "")) fail.push(`記録の多い経路(${c.count}件・1kmあたり${c.perKm})を勧めたのに、要約で件数の引き換えを言っていない（少ない経路: ${better.count}件・${better.perKm}）`);
       if (kind === "wish") {
         const said = /調べられ|分から|分かりません|記録にない|入っていない|含まれ/.test(`${r.caveats ?? ""}${r.summary ?? ""}`);
         if (!said) fail.push("確かめられない希望について、調べられないと言っていない");

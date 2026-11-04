@@ -312,6 +312,10 @@ const thinking = { type: "thinking", thinking: "", signature: "sig-abc" };
 
 check("要約: 経路の本数(3本)は使ってよい数字", M.validateOutput({ summary: "3本の中で経路Aがいちばん短いです。", chosenRouteIndex: 0, reasons: [], caveats: [] }, new Map([["r0.distance", "経路A: 距離 2.7km"]]), 3, []).summary.startsWith("3本"));
 
+check("禁止語: 「身の危険を感じたら110番」は通す", M.forbiddenIn("身の危険を感じたら110番に電話してください") === null);
+check("禁止語: 「危険な道」は落とす", M.forbiddenIn("この先は危険な道です") === "危険");
+check("禁止語: 「救急安心センター」は通す", M.forbiddenIn("迷ったら #7119（救急安心センター）へ") === null);
+
 fs.rmSync(path.dirname(out), { recursive: true, force: true });
 // Worker に固定した system と tools が、ブラウザ側(agent.ts・agent-tools.ts)と同じ
 console.log("  (messages の最大 " + maxMessagesChars + " 字 / Worker の上限 80000 字)");
