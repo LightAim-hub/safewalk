@@ -41,6 +41,9 @@ def load_year(year: int) -> pd.DataFrame:
 
 def main() -> None:
     df = pd.concat([load_year(y) for y in YEARS], ignore_index=True)
+    # 本票の年(統計の年)には、前の年の終わりに起きた事故も入る(2020年の本票に2019年9〜12月の50件)。
+    # 画面と説明は「2020〜2025年に起きた事故」と書くので、起きた年で絞る。
+    df = df[df["発生日時年"].astype(int).isin(list(YEARS))]
 
     a_col, b_col = "当事者種別（当事者A）", "当事者種別（当事者B）"
     records = {
