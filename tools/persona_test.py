@@ -600,9 +600,11 @@ def s_send(r, arg):
 def s_claude(r, arg):
     text, _, expect = arg.partition("~")
     pg = r.pg
-    r.tap(pg.locator("summary", has_text="Claude に相談"), "Claude に相談")
-    r.sleep(400)
     box = pg.locator("#sheet input[aria-label='歩く事情']")
+    # 初めての人には相談の欄が開いた状態で出る。閉じている時だけ見出しを押して開く。
+    if not box.is_visible():
+        r.tap(pg.locator("summary", has_text="Claude に相談"), "Claude に相談")
+        r.sleep(400)
     if not box.is_visible():
         raise StepFail("見えない", "相談の入力欄が見えない")
     box.fill(text)

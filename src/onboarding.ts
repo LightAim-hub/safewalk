@@ -276,6 +276,25 @@ function bannerForInApp(): void {
   const bar = el("div", "inapp-bar");
   bar.setAttribute("role", "status");
   bar.append(el("span", undefined, "このアプリの中では現在地がうまく使えないことがあります。Safari や Chrome で開くと確実です。"));
+  // 一押しで普段のブラウザへ移れるようにする。LINE は ?openExternalBrowser=1 を付けると外のブラウザで開く（LINE の仕様）。
+  // Android のアプリ内ブラウザは Chrome を名指しで開く。それ以外は、リンクをコピーしてもらう。
+  const ua = navigator.userAgent;
+  const open = el("a", "inapp-open", /iPhone|iPad|iPod/.test(ua) ? "Safari で開く" : "ブラウザで開く");
+  const here = new URL(location.href);
+  if (/Line\//i.test(ua)) {
+    here.searchParams.set("openExternalBrowser", "1");
+    open.href = here.href;
+  } else if (/Android/i.test(ua)) {
+    open.href = `intent://${here.host}${here.pathname}${here.search}${here.hash}#Intent;scheme=https;package=com.android.chrome;end`;
+  } else {
+    open.href = "#";
+    open.textContent = "リンクをコピー";
+    open.addEventListener("click", (e) => {
+      e.preventDefault();
+      void navigator.clipboard?.writeText(location.href).then(() => (open.textContent = "コピーしました"), () => {});
+    });
+  }
+  bar.append(open);
   const x = el("button", "icon plain note-close", "✕");
   x.type = "button";
   x.setAttribute("aria-label", "閉じる");
@@ -311,7 +330,13 @@ export function bindOnboarding(): void {
     closeNote();
   }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
   const q = new URLSearchParams(location.search);
+  // LINE から外のブラウザへ移った時に付く印は、共有の印として数えない（アドレスからも消す）。
+  if (q.has("openExternalBrowser")) {
+    q.delete("openExternalBrowser");
+    const rest = q.toString();
+    history.replaceState(history.state, "", location.pathname + (rest ? `?${rest}` : "") + location.hash);
+  }
   // 共有された地点や経路を開いた時、intro=0 の時は出さない。
-  const shared = location.search.length > 1;
+  const shared = [...q.keys()].length > 0;
   if (!readSeen() && !shared && q.get("intro") !== "0") openIntro(false);
 }

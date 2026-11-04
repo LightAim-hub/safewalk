@@ -170,6 +170,19 @@ body.guiding .inapp-bar {
   flex: 1;
 }
 
+.inapp-bar .inapp-open {
+  flex: none;
+  min-height: 44px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 8px;
+  background: var(--paper, #fff);
+  color: var(--link, #1a73e8);
+  font-weight: 700;
+  text-decoration: none;
+}
+
 .inapp-bar .note-close {
   position: static;
   flex: none;

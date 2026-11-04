@@ -351,3 +351,18 @@ export function resetVoiceState(): void {
   lastAt = 0;
   spoken.length = 0;
 }
+
+/**
+ * ブラウザの読み上げは、端末に入っている声を使う。iPhone の標準の軽い声（compact）は機械的に聞こえるので、
+ * 自然な声（拡張・プレミアム）の入れ方を一言で伝える。
+ */
+export const VOICE_TIP = /iPhone|iPad|iPod/.test(navigator.userAgent)
+  ? "iPhone で声が機械的な時は、設定 ＞ アクセシビリティ ＞ 読み上げコンテンツ ＞ 声 ＞ 日本語 で「Kyoko（拡張）」などをダウンロードすると、自然な声になります。"
+  : /Android/.test(navigator.userAgent)
+    ? "Android で声が機械的な時は、設定の「テキスト読み上げ」で Google の日本語の音声データを入れると、自然な声になります。"
+    : "iPhone で声が機械的な時は、設定 ＞ アクセシビリティ ＞ 読み上げコンテンツ ＞ 声 ＞ 日本語 で「Kyoko（拡張）」などをダウンロードすると、自然な声になります。";
+
+/** 選んだ声が、自然な声（拡張・プレミアム・Siri・ニューラル・Google）でないか。 */
+export function voiceSoundsRobotic(name: string | null): boolean {
+  return !name || !/拡張|enhanced|premium|プレミアム|siri|natural|online|google/i.test(name);
+}

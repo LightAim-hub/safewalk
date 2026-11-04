@@ -97,7 +97,7 @@ let fromMissing = false;
 
 /**
  * 現在地を、空の出発地（または目的地）に入れる。url.ts が「to=me」を開く時にも使う。
- * 位置情報を許可済みの時だけ自動で入れる。許可を黙って求めない（それ以外は空のまま。「現在地を使う」で入れる）。
+ * 位置情報を許可済みなら自動で入れる。まだ尋ねていない時は、経路を出そうとした時にだけ尋ねる（送られてきたリンクを開いただけでは尋ねない）。
  */
 export function fillCurrent(which: End): void {
   const mine = ++locating;
@@ -106,7 +106,10 @@ export function fillCurrent(which: End): void {
   if (!navigator.geolocation || !ask) return sharedWithoutPlace("出発地を入れるか、「現在地を使う」を選んでください。", true);
   void ask.then((permission) => {
     if (mine !== locating) return;
-    if (permission !== "granted") return sharedWithoutPlace("出発地を入れるか、「現在地を使う」を選んでください。", true);
+    // まだ尋ねていない（prompt）時は、利用者が経路を出そうとしている時だけ、その場で尋ねる（送られてきたリンクを開いただけの時は尋ねない）。
+    // 断られた・使えない時だけ、「出発地を入れるか、現在地を使う」を出す（先に出すと、一度つまずいたように見えるため）。
+    const askNow = permission === "prompt" && !pending;
+    if (permission !== "granted" && !askNow) return sharedWithoutPlace("出発地を入れるか、「現在地を使う」を選んでください。", true);
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
         // 待つ間に、経路の画面を閉じた・地点を選んだ・文字を打った時は、何もしない。
@@ -1023,8 +1026,9 @@ export function selectRoute(index: number, force = false): void {
     routeList(),
     el("p", "rec-meaning", `件数は、${countMeaning()}（歩行者・自転車）。少ないのは、通る人が少ないだけのこともあります`),
     ...(periodSwitched ? [el("p", "rec-meaning period-note", PERIOD_NOTE)] : []),
-    routePanel(route, index, cmp, shortest),
+    // 相談は一覧のすぐ下に置く（下の詳しい説明の後ろだと、実際の利用で誰も気づかなかったため）。
     agentSection(),
+    routePanel(route, index, cmp, shortest),
     startBar,
   );
   sheet.hidden = false;
@@ -1265,7 +1269,8 @@ function renderAgent(): void {
 export function agentSection(): HTMLElement {
   if (!agentNode) {
     agentNode = el("details", "agent fold");
-    agentNode.open = !!openMemo.agent;
+    // まだ開け閉めしたことが無い人には、開いた状態で見せる（入力欄と例のボタンが見えるように）。
+    agentNode.open = openMemo.agent === undefined ? true : !!openMemo.agent;
     agentNode.addEventListener("toggle", () => {
       openMemo.agent = agentNode!.open;
       try {

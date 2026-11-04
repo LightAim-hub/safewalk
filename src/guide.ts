@@ -12,7 +12,7 @@ import { showAccuracy } from "./map-ui";
 import { emergencyPanel, KOBAN_HEADING_HERE } from "./emergency";
 import type { KobanHit } from "./koban";
 import "./guide.css";
-import { chosenVoiceName, loadVoices, onVoiceChange, primeVoice, say, stopSpeaking, turnSpeech, type SayKind } from "./voice";
+import { chosenVoiceName, loadVoices, onVoiceChange, primeVoice, say, stopSpeaking, turnSpeech, voiceSoundsRobotic, VOICE_TIP, type SayKind } from "./voice";
 
 export const OFF_ROUTE_M = 60;
 /** GPS の誤差が大きい時は、その分だけ外れの判定をゆるめる。ゆるめ過ぎて外れに気づかない事を防ぐ上限。 */
@@ -21,6 +21,8 @@ export const offRouteLimit = (accuracy?: number): number => Math.min(OFF_ROUTE_M
 /** 経路の上にいるとみなす距離。進みが先へ飛んだ後、戻ったかを見るのに使う。 */
 export const ON_ROUTE_M = 30;
 export const STEP_REACHED_M = 20;
+/** 着いた判定の半径の上限。GPS の誤差が大きくても、これより遠くでは着いたとしない。 */
+export const ARRIVE_MAX_M = 50;
 export const ANNOUNCE_M = 40;
 /** 次に歩く座標を探す範囲。GPS の跳びで先へ進み過ぎないようにする。 */
 export const GUIDE_WINDOW = 400;
@@ -463,7 +465,9 @@ export function updateGuide(p: LatLon, accuracy?: number): void {
   // 終点の近くに来たら着いたとする。出発地と終点が近い周回だけは、経路の終わりまで進んだ時に限る(歩き始めに「着きました」と言わない)。
   const begin = route.coords[0];
   const loop = metres({ lat: begin[1], lon: begin[0] }, { lat: end[1], lon: end[0] }) <= STEP_REACHED_M * 2;
-  if (metres(p, { lat: end[1], lon: end[0] }) <= STEP_REACHED_M && (!loop || rest.metresLeft <= STEP_REACHED_M * 2)) {
+  // 着いた判定の半径は、GPS の誤差に合わせて 20〜50m に広げる（駅や建物の中の目的地は、道からその点まで近づけないことがあるため）。
+  const reach = Math.min(ARRIVE_MAX_M, Math.max(STEP_REACHED_M, accuracy ?? 0));
+  if (metres(p, { lat: end[1], lon: end[0] }) <= reach && (!loop || rest.metresLeft <= reach * 2)) {
     arrivedFlag = true;
     if ($("guide-next").textContent !== "目的地に着きました") {
       speak("目的地に到着しました。お疲れさまでした。");
@@ -539,6 +543,17 @@ export function startGuide(index: number): void {
   for (const kind of ["notice", "off", "gps", "info"] as AlertKind[]) hideAlert(kind);
   const lengthM = state.routes[index]?.metres ?? 0;
   if (lengthM >= LONG_ROUTE_M) showAlert("info", BATTERY_TEXT, 12000);
+  // 声が機械的な端末には、自然な声の入れ方を一度だけ伝える（電池の知らせと重ねない）。
+  else if (voiceOn && voiceSoundsRobotic(chosenVoiceName())) {
+    try {
+      if (!localStorage.getItem("safewalk-voice-tip")) {
+        localStorage.setItem("safewalk-voice-tip", "1");
+        showAlert("info", VOICE_TIP, 12000);
+      }
+    } catch {
+      /* 覚えられない時は出さない */
+    }
+  }
   watchId = navigator.geolocation.watchPosition(
     ({ coords }) => {
       updateGuide({ lat: coords.latitude, lon: coords.longitude }, coords.accuracy);
