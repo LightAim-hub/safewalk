@@ -47,7 +47,9 @@ function currentView(): string {
   return `${c.lat.toFixed(4)},${c.lng.toFixed(4)},${map.getZoom().toFixed(1)}`;
 }
 
-export function urlForState(opts: { share?: boolean } = {}): string {
+export function urlForState(opts: { share?: boolean; names?: boolean } = {}): string {
+  // 送る時に名前を入れないと選んだ場合だけ、地点の名前を外す（再読込・履歴では今までどおり入れる）。
+  const withNames = opts.names ?? true;
   const q = new URLSearchParams();
   if (state.mode === "directions") {
     // 出発地・目的地は、片方だけ決まった時も残す。再読込・共有で同じ画面へ戻れる。
@@ -57,11 +59,11 @@ export function urlForState(opts: { share?: boolean } = {}): string {
     if (!state.from || !state.to) q.set("mode", "directions");
     if (state.from) {
       q.set("from", coords(state.from));
-      if (state.from.name !== CURRENT) q.set("fromName", label(state.from));
+      if (withNames && state.from.name !== CURRENT) q.set("fromName", label(state.from));
     }
     if (state.to) {
       q.set("to", coords(state.to));
-      if (state.to.name !== CURRENT) q.set("toName", label(state.to));
+      if (withNames && state.to.name !== CURRENT) q.set("toName", label(state.to));
     }
     // 選んだ経路。番号と、他の経路から一番離れた地点（番号は計算し直しで変わりうるため、地点で見分ける）。
     if (state.routes.length > 1 && state.routes[state.selected]) {
@@ -70,7 +72,7 @@ export function urlForState(opts: { share?: boolean } = {}): string {
     }
     if (opts.share) q.set("sh", "1");
     const stops = state.stops.filter((stop): stop is Place => stop !== null);
-    if (stops.length) q.set("via", stops.map((stop) => `${coords(stop)},${label(stop)}`).join("|"));
+    if (stops.length) q.set("via", stops.map((stop) => (withNames ? `${coords(stop)},${label(stop)}` : coords(stop))).join("|"));
     q.set("period", state.period);
   } else {
     // ジャンル検索の一覧と、そこから開いた場所。戻ると一覧に戻れるよう、探した範囲も残す。
@@ -177,7 +179,8 @@ export function applyUrl(): void {
       const [lat, lon, ...name] = text.split(",");
       const point = parsePoint(`${lat},${lon}`);
       if (!point) unreadable = true;
-      return point && { ...point, name: cleanName(name.join(",")) };
+      // 名前を入れずに送られた経由地は、名前の代わりに「経由地」と出す。
+      return point && { ...point, name: cleanName(name.join(",")) || "経由地" };
     })
     .filter((stop): stop is Place => stop !== null);
   renderStops();
@@ -324,12 +327,15 @@ export function bindUrl(): void {
  * 選んだ経路を人に送る。端末の共有（LINE・メッセージなど）があればそれを開き、無ければリンクをコピーする。
  * 送るリンクには、選んだ経路を見分ける地点を入れる。出発地が現在地の時は座標を入れず、受け取った人の現在地からになる。
  */
-export async function shareRoute(button: HTMLButtonElement): Promise<void> {
+export async function shareRoute(button: HTMLButtonElement, withNames = false): Promise<void> {
   const route = state.routes[state.selected];
   if (!route || !state.from || !state.to) return;
-  const url = new URL(urlForState({ share: true }), location.href).href;
+  const url = new URL(urlForState({ share: true, names: withNames }), location.href).href;
   const name = (p: Place) => p.name;
-  const text = `${name(state.from)}から${name(state.to)}まで、徒歩${formatMinutes(route.minutes)}の経路です。`;
+  // 名前を入れない時は、送る文にも名前を書かない。
+  const text = withNames
+    ? `${name(state.from)}から${name(state.to)}まで、徒歩${formatMinutes(route.minutes)}の経路です。`
+    : `徒歩${formatMinutes(route.minutes)}の経路です。`;
   if (typeof navigator.share === "function") {
     try {
       await navigator.share({ title: "SafeWalk 徒歩の経路", text, url });

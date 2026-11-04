@@ -781,9 +781,9 @@ const countMeaning = () => (state.period === "night" ? "夜の事故の記録" :
 function cautionTexts(route: Route, a: Assessment): { text: string; kind: string }[] {
   // 事故の注意の件数は、1種類だけを経路から50m以内で数える。一覧の件数（歩行者と自転車・30m以内）と別の数だと書く。
   const range = (c: { kind: string }) =>
-    `（${c.kind === "bike" ? "自転車" : "歩行者"}の事故だけ・経路から${SAFETY_RULES.cautionNearM}m以内で数えた件数です。一覧の${
+    `（一覧と数え方が違います。ここは${c.kind === "bike" ? "自転車" : "歩行者"}の事故だけを経路から${SAFETY_RULES.cautionNearM}m以内で、一覧の${
       a.accident.tier === "unknown" ? "件数" : `${a.accident.count}件`
-    }は歩行者と自転車を30m以内で数えています）`;
+    }は歩行者と自転車の事故を合わせて30m以内で数えています）`;
   return [
     ...routeWarnings(route).map((p) => ({ text: p.textContent ?? "", kind: "warn" })),
     ...a.cautions.map((c) => ({ text: c.kind === "snatch" ? c.text : `${c.text}${range(c)}`, kind: `caution-${c.kind}` })),
@@ -882,7 +882,7 @@ function routePanel(route: Route, index: number, cmp: Comparison, shortest: Rout
 }
 
 /** 「経路を送る」で何がリンクに入るか。自宅などの名前つきの地点は位置と名前が入り、現在地は入らない。 */
-export function sendNoteText(from: Place | null, to: Place | null, stops: (Place | null)[] = []): string {
+export function sendNoteText(from: Place | null, to: Place | null, stops: (Place | null)[] = [], withNames = true): string {
   const short = (n: string) => (n.length > 16 ? `${n.slice(0, 16)}…` : n);
   // リンクに入る地点は、出発地・経由地・目的地（url.ts）。現在地は位置を入れない。
   const points: [string, Place | null][] = [
@@ -894,6 +894,10 @@ export function sendNoteText(from: Place | null, to: Place | null, stops: (Place
   const current = points.some(([, p]) => p?.name === CURRENT);
   if (!named.length) return "「経路を送る」のリンクには、現在地の位置は入りません。";
   const list = named.map(([role, p]) => `${role}「${short(p.name)}」`).join("・");
+  if (!withNames) {
+    const roles = [...new Set(named.map(([role]) => role))].join("・");
+    return `「経路を送る」のリンクには、${roles}の地図上の位置と、選んだ経路が入ります。地点の名前は入りません。${current ? "現在地は入りません。" : "自宅などの位置は、送る相手を確かめてください。"}`;
+  }
   return `「経路を送る」のリンクには、${list}の位置と名前が入ります。${current ? "現在地は入りません。" : "自宅などの場合は、送る相手を確かめてください。"}`;
 }
 
@@ -914,7 +918,14 @@ function confirmSend(button: HTMLButtonElement): void {
   cancel.type = "button";
   const actions = el("div", "confirm-actions");
   actions.append(cancel, ok);
-  box.append(title, el("p", "", sendNoteText(state.from, state.to, state.stops)), actions);
+  // 地点の名前（自宅・勤め先などの名前になりうる）は、既定では入れない。入れる時だけ選ぶ。
+  const note = el("p", "", sendNoteText(state.from, state.to, state.stops, false));
+  const namesLabel = el("label", "confirm-check");
+  const names = document.createElement("input");
+  names.type = "checkbox";
+  names.addEventListener("change", () => (note.textContent = sendNoteText(state.from, state.to, state.stops, names.checked)));
+  namesLabel.append(names, " 地点の名前も入れる");
+  box.append(title, note, namesLabel, actions);
   back.append(box);
   const close = () => {
     back.remove();
@@ -926,7 +937,7 @@ function confirmSend(button: HTMLButtonElement): void {
   });
   ok.addEventListener("click", () => {
     close();
-    void shareRoute(button);
+    void shareRoute(button, names.checked);
   });
   back.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
@@ -935,7 +946,9 @@ function confirmSend(button: HTMLButtonElement): void {
     } else if (e.key === "Tab") {
       // 後ろの画面へ出ないよう、2つのボタンの間で回す。
       e.preventDefault();
-      (document.activeElement === ok ? cancel : ok).focus();
+      const order = [names, cancel, ok];
+      const i = order.indexOf(document.activeElement as HTMLInputElement & HTMLButtonElement);
+      order[(i + (e.shiftKey ? order.length - 1 : 1)) % order.length].focus();
     }
   });
   document.body.append(back);
@@ -997,7 +1010,7 @@ export function selectRoute(index: number, force = false): void {
     heading,
     ...notes,
     routeList(),
-    el("p", "rec-meaning", `件数は、${countMeaning()}（歩行者・自転車）`),
+    el("p", "rec-meaning", `件数は、${countMeaning()}（歩行者・自転車）。少ないのは、通る人が少ないだけのこともあります`),
     ...(periodSwitched ? [el("p", "rec-meaning period-note", PERIOD_NOTE)] : []),
     routePanel(route, index, cmp, shortest),
     agentSection(),
@@ -1292,6 +1305,11 @@ export function agentSection(): HTMLElement {
     agentOut.setAttribute("aria-live", "polite");
     // 入力欄の直下に常に出す。災害の文は開いた中に置く。
     const privacy = el("p", "agent-privacy", "氏名・住所・持病は入れないでください（入力した文と、出発地・目的地の名前が Claude に送られます）。");
+    const more = el("a", "", "送る情報と残す情報");
+    more.href = `${SAFETY_PAGE}#privacy`;
+    more.target = "_blank";
+    more.rel = "noopener";
+    privacy.append(" ", more);
     const scope = el("p", "agent-privacy", DISASTER_NOTICE);
     scope.append(" ", bosaiLink());
     agentNode.append(form, privacy, presets, scope, agentOut);

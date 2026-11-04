@@ -704,6 +704,19 @@ body.routing .sheet details[open] > summary::after {
   line-height: 1.6;
 }
 
+.confirm-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  margin: 4px 0 8px;
+}
+
+.confirm-check input {
+  width: 22px;
+  height: 22px;
+}
+
 .confirm-actions {
   display: flex;
   gap: 8px;
