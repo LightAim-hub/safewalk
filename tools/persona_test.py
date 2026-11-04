@@ -33,6 +33,25 @@ DEFAULT_SHOTS = Path(r"C:\Users\paipa\AppData\Local\Temp\claude\C--Users-paipa\5
 ARGS = ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"]
 DISCLAIMER = "表示は目安で、安全を保証しません"
 WORDS = ["安全", "安心", "危険", "%", "％", "パーセント"]
+# 禁句を含むが、言い換えられない固有名詞と、緊急の決まった文。ここに挙げた語句だけを取り除いてから禁句を探す
+# （「安心」「危険」そのものは取り除かないので、ほかの言い方は今までどおり見つかる）。
+ALLOWED_PHRASES = ["救急安心センター", "身の危険を感じたら"]
+
+
+def forbidden_hits(text):
+    """画面の文から、免責の文・決まった語句を除いて、残った禁句を (語, 前後) で返す。"""
+    t = text.replace("SafeWalk", "").replace(DISCLAIMER, "")
+    for phrase in ALLOWED_PHRASES:
+        t = t.replace(phrase, "")
+    # 免責の文（「保証しません」「保証するものではありません」を含む一文）は除く
+    t = re.sub(r"[^。\n]*保証[^。\n]*[。]?", "", t)
+    out = []
+    for w in WORDS:
+        if w in t:
+            k = t.index(w)
+            out.append((w, t[max(0, k - 12):k + 12].strip().replace("\n", " ")))
+    return out
+
 
 PRESETS = {  # 名前: (出発, 到着)
     "kitano": ((34.6947, 135.1955), (34.7000, 135.1870)),
@@ -105,13 +124,8 @@ class Run:
         except Exception:
             return
         for src, text in (("画面", data["vis"]), ("属性", data["at"])):
-            t = text.replace("SafeWalk", "").replace(DISCLAIMER, "")
-            # 免責の文（「保証しません」「保証するものではありません」を含む一文）は除く
-            t = re.sub(r"[^。\n]*保証[^。\n]*[。]?", "", t)
-            for w in WORDS:
-                if w in t:
-                    i = t.index(w)
-                    self.add("禁句", f"{w}（{src}）…{t[max(0, i - 12):i + 12].strip()}".replace("\n", " "))
+            for w, ctx in forbidden_hits(text):
+                self.add("禁句", f"{w}（{src}）…{ctx}")
         try:
             ov = self.pg.evaluate("document.documentElement.scrollWidth - window.innerWidth")
             if ov and ov > 4:
