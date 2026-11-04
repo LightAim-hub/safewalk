@@ -47,7 +47,7 @@
 
 - モデル: Opus 5.5。道具は3つ（`find_routes`・`assess_route`・`places_along`、`src/agent-tools.ts`）、最大7往復。
 - 出力の照合（`src/agent.ts` の `validateOutput`）: 禁止語・道具の結果に無い数字・実在しない根拠を落とし、決まった文に差し替える。
-- 本物の答えの採点（`tools/agent_eval.mjs`）: 事情30通りを本番の中継に送り、機械の決まりで採点。1回目 24/30（[docs/agent_eval_round1.md](agent_eval_round1.md)）、失敗の原因2つを直して、失敗・差し替えのあった8通りを測り直し 8/8（[docs/agent_eval_round2.md](agent_eval_round2.md)）。その後 30通りを通しで測り直し **30/30**（[docs/agent_eval_round3.md](agent_eval_round3.md)・照合で注意書きの文の一部を落としたのが3通り）。1回目の後に、引き換えの判定を「要約の最初の文」から「要約のどこかで件数を挙げる」に緩めた（緊急の時は110番を先に言わせるため）。
+- 本物の答えの採点（`tools/agent_eval.mjs`）: 事情30通りを本番の中継に送り、機械の決まりで採点。1回目 24/30（[docs/agent_eval_round1.md](agent_eval_round1.md)）、失敗の原因2つを直して、失敗・差し替えのあった8通りを測り直し 8/8（[docs/agent_eval_round2.md](agent_eval_round2.md)）。その後 30通りを通しで測り直し **30/30**（[docs/agent_eval_round3.md](agent_eval_round3.md)・照合で「記録の限界」の文を落としたのが3通り（「安心」「保証」を含んでいたため））。1回目の後に、引き換えの判定を「要約の最初の文」から「要約のどこかで件数を挙げる」に緩めた（緊急の時は110番を先に言わせるため）。
 - 中継（`worker/`）: 鍵はブラウザに置かない。指示（system）と道具は中継側で固定。回数に上限。
 
 ## 使っていない物
