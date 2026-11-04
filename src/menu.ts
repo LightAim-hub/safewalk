@@ -289,6 +289,7 @@ function buildMenu(): void {
     section("地図の種類", seg),
     section("音声", voice, voiceName, el("p", "menu-note", "音が出ない時は、端末の音量とマナーモードを確かめてください。")),
     section("所要時間", el("p", "menu-note", `分速${WALK_M_PER_MIN}m（時速${(WALK_M_PER_MIN * 0.06).toFixed(1)}km）で歩く計算です。上りは1mごとに3秒足しています。`)),
+    section("このアプリについて", el("p", "menu-note", "SafeWalk は、誰もが守られて当たり前の世界をめざす SafeAll の、最初の一つです。")),
     section("説明", detail, sources, help, share),
   );
   back.append(sheet);

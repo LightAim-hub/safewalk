@@ -40,7 +40,19 @@ export const FIXED = {
   unavailable: "Claude への相談は、今は使えません。経路の一覧と記録は、そのままご利用いただけます。",
   /** 特定の他人の行動を調べる使い方などで Claude が断った時。経路は選ばない。 */
   declined: "この相談には、経路を選ぶ形ではお答えできません。経路の一覧と記録は、そのままご利用いただけます。",
+  /** その場を離れてはいけない緊急(倒れた人・意識がない・呼吸がおかしい・大けが)。経路は選ばない。 */
+  stay: "その場を離れず、今すぐ119番に電話してください。迷う時は #7119 に電話してください。この相談では経路を選びません。",
 };
+
+/**
+ * その場を離れてはいけない緊急の言い方。これに当たる相談は Claude に送らず、経路も選ばない（決まった文だけを出す）。
+ * 「つけられている」など、離れた方がよい緊急はここに入れない（交番の近い道を出すのは役に立つため）。
+ */
+export const STAY_WORDS = ["倒れ", "意識がな", "意識が無", "意識不明", "息をしてい", "息がな", "呼吸がおかし", "呼吸がな", "息ができ", "けいれん", "痙攣", "大けが", "大怪我", "大ケガ", "血が止まら", "出血がひど", "心臓が止", "動かな"];
+export function detectStay(text: string): boolean {
+  const t = text.normalize("NFKC");
+  return STAY_WORDS.some((w) => t.includes(w.normalize("NFKC")));
+}
 
 /** 固定の枠(emergency.ts)に出す番号。Claude の文にあっても照合で落とさない。 */
 const FIXED_NUMBERS = ["110", "119", "7119"];
@@ -56,6 +68,8 @@ export const SYSTEM_PROMPT = `あなたは神戸市の徒歩専用の地図ア�
 - reasons の各項目には、根拠にした事実の ID を evidenceIds に必ず入れる。ID は道具の結果の facts にあるものだけ。
 - 道具で確かめられない希望(明るさ・人通り・景色・街灯など)だけを理由に、経路を勧めない。その希望は「道具では調べられない」と caveats に書き、勧める理由には道具の結果にある事実(深夜も開いている店の数・人家から離れた区間・事故の記録・時間)を使う。
 - 勧める経路の事故の記録(件数)が、ほかの経路より多い時は、段階が同じでも、その引き換え(勧める経路と記録の少ない経路の件数、記録の少ない経路は何分長いか)を summary の中で必ず言う。「段階は同じ」とだけ言って件数の差を隠さない。
+- 夜の相談で、事故の記録が少ない経路と、夜の歩きやすさ(深夜も開いている店の数・人家から離れた区間)がよい経路が別の時は、勧める経路の弱い方の事実も summary で言う(例: 記録は少ないが、深夜の店は経路Aの半分)。
+- 倒れた人がいる・意識がない・呼吸がおかしい・大けがなど、その場を離れてはいけない相談では、経路を勧めない。declined を true にする(119番への電話は画面の決まった枠が出す)。
 - caveats には、記録の限界や、道具で分からなかったことを短く書く。分かったことの繰り返しはしない。
 - 特定の他人の行動を追う・待ち伏せる・居場所をつかむ目的(他人の帰り道や通る道を調べて先回りする、など)には協力しない。その時は declined を true、chosenRouteIndex を -1、summary と reasons と cautions と caveats は空にする。道具も呼ばなくてよい。
 - 地震・津波・洪水など災害時の避難の相談には、この道具は使えない。その時も declined を true にする。
@@ -352,6 +366,24 @@ function failure(error: string, routes: Route[], facts: Map<string, string>, tur
 
 export async function runAgent(input: AgentInput, deps: AgentDeps = {}): Promise<AgentResult> {
   const situation = input.situation.trim().slice(0, SITUATION_MAX);
+  // その場を離れてはいけない緊急は、Claude を呼ばずに決まった文で答える（経路は選ばない）。
+  if (detectStay(situation)) {
+    return {
+      ok: true,
+      declined: true,
+      summary: FIXED.stay,
+      chosenRouteIndex: null,
+      reasons: [],
+      cautions: [],
+      caveats: "",
+      replaced: [],
+      disclaimer: SAFETY_DISCLAIMER,
+      routes: [],
+      facts: {},
+      turns: 0,
+      usage: { input: 0, output: 0 },
+    };
+  }
   const session = newToolSession(input.ctx, input.from, input.to, input.period);
   const facts = new Map<string, string>();
   const usage = { input: 0, output: 0 };

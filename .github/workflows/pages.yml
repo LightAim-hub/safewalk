@@ -41,6 +41,8 @@ jobs:
       - name: 中継の試験(手元の wrangler dev と模擬の上流。鍵は不要)
         run: node worker/test/relay_test.mjs
         timeout-minutes: 5
+      - name: 回線の見分けの値が鍵なしで戻せないことを確かめる
+        run: node --experimental-strip-types worker/test/lineid_test.mjs
       - run: npm run build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

@@ -705,7 +705,18 @@ export function routeList(): HTMLOListElement {
       button.toggleAttribute("aria-current", i === state.selected);
       button.addEventListener("click", () => selectRoute(i));
       const mark = el("span", `rec tier-${a.accident.tier}`, recordText(a));
-      if (cmp.least === i) mark.append(el("small", "", "記録が最少"));
+      if (cmp.least === i) {
+        mark.append(el("small", "", "記録が最少"));
+        // 一番上の経路（最短）との差を一言で（札だけでは、何と引き換えなのかが分からないため）。
+        const top = assessed[0];
+        if (i !== 0 && top.accident.tier !== "unknown") {
+          const fewer = top.accident.count - a.accident.count;
+          const longer = route.minutes - state.routes[0].minutes;
+          const diff = el("small", "rec-diff");
+          diff.append(el("span", "nowrap", `Aより${fewer}件少ない`), el("span", "nowrap", `・${longer > 0 ? `${longer}分長い` : "時間はほぼ同じ"}`));
+          mark.append(diff);
+        }
+      }
       button.setAttribute(
         "aria-label",
         `経路${routeLetter(i)} ${formatMinutes(route.minutes)} ${shortLabel(route, a)} ${(route.metres / 1000).toFixed(1)}キロ ` +

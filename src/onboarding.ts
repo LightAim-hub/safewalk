@@ -238,6 +238,7 @@ export function openIntro(expanded = true): void {
   box.append(
     h,
     para("神戸市の、歩いて行くための地図です。経路ごとに、交通事故の記録（2020〜2025年）と夜の歩きやすさを見られます。"),
+    para("SafeWalk は、誰もが守られて当たり前の世界をめざす SafeAll の、最初の一つです。", "intro-vision"),
   );
   const how = el("details", "intro-how");
   how.open = expanded;

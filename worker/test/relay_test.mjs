@@ -85,6 +85,7 @@ const wrangler = spawn(
     "--var", "IP_10MIN_LIMIT:5",
     "--var", "DAILY_LIMIT:9",
     "--var", "IP_DAY_LIMIT:60",
+    "--var", "IP_HASH_KEY:local-test-key-0123456789abcdef0123456789",
   ],
   { cwd: root, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, WRANGLER_SEND_METRICS: "false", CI: "1" } },
 );

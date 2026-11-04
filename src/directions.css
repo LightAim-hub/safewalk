@@ -187,6 +187,15 @@
   font-weight: 600;
 }
 
+/* 最短との差の一言。行の右端を広げないよう、2行に折る。 */
+.routes .rec small.rec-diff {
+  max-width: 9em;
+  margin-left: auto;
+  color: var(--sub);
+  font-weight: 400;
+  white-space: normal;
+}
+
 /* 選んだ経路の中身 */
 .route-panel {
   margin: 10px 0 0;

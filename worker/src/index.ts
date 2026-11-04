@@ -9,6 +9,7 @@
  */
 import { DurableObject } from "cloudflare:workers";
 import { FIXED_SYSTEM, FIXED_TOOLS } from "./fixed";
+import { lineId, usableKey } from "./lineid";
 
 export interface Env {
   ANTHROPIC_API_KEY?: string;
@@ -21,6 +22,8 @@ export interface Env {
   ENABLE_FALLBACKS?: string;
   /** 回数の上限(1端末ごと)から外す回線。secret に入れる(リポジトリに書かない)。カンマ区切り。IPv6 は先頭 64 ビットで比べる。 */
   UNLIMITED_IPS?: string;
+  /** 回線を記録に残す値に変える時に混ぜる秘密の鍵。secret に入れる。無い時は相談を止める（記録を戻せる形で残さないため）。 */
+  IP_HASH_KEY?: string;
   /** 使われ方の記録を読み出す合言葉。secret に入れる(リポジトリに書かない)。無ければ読み出しは閉じる。 */
   LOG_READ_TOKEN?: string;
 }
@@ -171,10 +174,6 @@ function sanitize(input: unknown, fallbacks: boolean): { body: Record<string, un
   return { body };
 }
 
-async function sha(text: string): Promise<string> {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-  return [...new Uint8Array(buf)].slice(0, 8).map((b) => b.toString(16).padStart(2, "0")).join("");
-}
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -227,7 +226,8 @@ export default {
     }
     try {
       const stub = env.LIMITER.get(env.LIMITER.idFromName("global"));
-      const r = await stub.hit(await sha(ip), Date.now(), limits);
+      if (!usableKey(env.IP_HASH_KEY)) return json(503, MSG.limiterDown, origin);
+      const r = await stub.hit(await lineId(ip, env.IP_HASH_KEY), Date.now(), limits);
       if (!r.ok) {
         const retry = r.reason === "ip10" ? "600" : "3600";
         return json(429, r.reason === "daily" ? MSG.daily : r.reason === "ipDay" ? MSG.ipDay : MSG.ip10, origin, { "retry-after": retry });
@@ -332,7 +332,8 @@ async function handleLog(request: Request, env: Env, origin: string | null, allo
   });
   if (!sid || !rows.length) return new Response(null, { status: 204, headers: h });
   try {
-    const ip = await sha(request.headers.get("cf-connecting-ip") ?? "unknown");
+    if (!usableKey(env.IP_HASH_KEY)) return new Response(null, { status: 204, headers: h });
+    const ip = await lineId(request.headers.get("cf-connecting-ip") ?? "unknown", env.IP_HASH_KEY);
     const stub = env.LIMITER.get(env.LIMITER.idFromName("global"));
     await stub.log(ip, sid, dev, rows, now, LOG_PER_IP_DAY);
   } catch {
