@@ -125,7 +125,7 @@ class Reader(osmium.SimpleHandler):
         self.wards = []
         self.places = []
 
-    def add(self, tags, lat, lon):
+    def add(self, tags, lat, lon, ts=None):
         kind = kind_of(tags)
         name = tags.get("name:ja") or tags.get("name") or UNNAMED.get(kind)
         s, w, n, e = BBOX
@@ -133,11 +133,13 @@ class Reader(osmium.SimpleHandler):
             yomi = tags.get("name:ja-Hira") or tags.get("name:ja-Kana") or tags.get("name:ja_kana") or ""
             if kind == "バス停" and not NAME_KINDS[2][0].search(name):
                 name += "バス停"
-            self.places.append((name, round(lat, 6), round(lon, 6), kind, yomi, details(tags), aliases(tags, name)))
+            # 記録が最後に直された年（OpenStreetMap の更新日時）。画面で「記録の古さ」として出す。
+            year = ts.year if ts is not None else 0
+            self.places.append((name, round(lat, 6), round(lon, 6), kind, yomi, details(tags), aliases(tags, name), year))
 
     def node(self, n):
         if n.location.valid():
-            self.add(n.tags, n.location.lat, n.location.lon)
+            self.add(n.tags, n.location.lat, n.location.lon, n.timestamp)
 
     def area(self, a):
         tags = a.tags
@@ -156,7 +158,7 @@ class Reader(osmium.SimpleHandler):
             self.wards.append((tags.get("name"), geom))
         else:
             point = geom.representative_point()
-            self.add(tags, point.y, point.x)
+            self.add(tags, point.y, point.x, a.timestamp)
 
 
 PREFIX = re.compile(r"^(神戸市立|兵庫県立|県立|市立|国立|私立|神戸市営|神戸市)")
@@ -254,7 +256,7 @@ def main():
     seen = set()
     rows = []
     names = []  # rows と同じ順の、別の呼び名
-    for name, lat, lon, kind, yomi, extra, (alias, old) in r.places:
+    for name, lat, lon, kind, yomi, extra, (alias, old), year in r.places:
         # OpenStreetMap の駅名は「灘」のように「駅」が付かないことがある。
         if kind == "駅" and not name.endswith("駅"):
             name += "駅"
@@ -262,7 +264,7 @@ def main():
         if key not in seen and shapely.contains_xy(r.boundary, lon, lat):
             seen.add(key)
             reading = yomi or "".join(part["hira"] for part in kks.convert(name))
-            row = [name, lat, lon, kind, reading, "", *extra]
+            row = [name, lat, lon, kind, reading, "", *extra, year]
             if old and kind != "駅":
                 row[10] = row[10] or "旧 " + old[0]
             rows.append(row)

@@ -62,10 +62,10 @@ export async function loadData(): Promise<void> {
   safety = createSafety(cautions, acc);
   meta = m;
   names = roadNames;
-  places = rows.map(([raw, lat, lon, kind, reading, ward, hours, phone, web, address, operator]) => {
+  places = rows.map(([raw, lat, lon, kind, reading, ward, hours, phone, web, address, operator, updated]) => {
     // OpenStreetMap の駅名は「灘」のように「駅」が付かないことがある。
     const name = kind === "駅" && !raw.endsWith("駅") ? `${raw}駅` : raw;
-    return { name, lat, lon, kind, ward, hours, phone, web, address, operator, n: normalize(name), y: normalize(reading) };
+    return { name, lat, lon, kind, ward, hours, phone, web, address, operator, updated: updated || undefined, n: normalize(name), y: normalize(reading) };
   });
 }
 

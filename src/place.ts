@@ -1,4 +1,6 @@
 import { openReportDialog } from "./reports-ui";
+/** 記録の古さを出さない種類（地名・住所・駅などは、店のように入れ替わらないため）。 */
+const NO_AGE_KINDS = new Set(["地区", "住所", "郵便番号", "位置情報", "最近", "駅", "バス停", "史跡", "名所", "寺社", "公園", "展望地"]);
 /** 投稿できる、道からの距離の上限。 */
 const REPORT_ROAD_MAX_M = 40;
 import { track } from "./telemetry";
@@ -265,9 +267,16 @@ export function showPlace(place: Place): void {
   }
   const web = place.web ? externalLink(place.web) : null;
   if (web) info.append(infoRow("サイト", web));
+  // 店や施設の記録の古さ（地図の記録が最後に直された年）。古ければ、今は変わっているかもしれないと添える。
+  if (place.updated && !NO_AGE_KINDS.has(place.kind ?? "")) {
+    const age = new Date().getFullYear() - place.updated;
+    info.append(infoRow("記録の更新", `地図の記録が最後に直されたのは${place.updated}年${age >= 3 ? "。今は変わっているかもしれません" : ""}`));
+  }
   // この場所の道の状態（暗い・段差など）を、決まった選択肢から投稿する。
   // 号まで指定した住所・送られてきた地点では出さない（家1軒の位置に印を付けられないように）。
-  const pinpoint = (place.kind ?? "").startsWith("住所") || place.name === "共有された地点";
+  // 最近の一覧・名前つきの共有リンクから開いた住所も、名前に「何番」「何号」が入っていれば同じに扱う。
+  const pinpoint =
+    (place.kind ?? "").startsWith("住所") || place.name === "共有された地点" || /[0-9０-９]+番(地|[0-9０-９]+号)?$|[0-9０-９]+号$/.test(place.name);
   if (!pinpoint) {
     const report = el("button", "link report-open", "この場所の道の状態を投稿");
     report.type = "button";

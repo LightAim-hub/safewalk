@@ -239,6 +239,10 @@ try {
   check("投稿: 投稿の無い場所への「違う」も同じ返事（投稿の有無を探れない）", none.status === 200 && none.json?.ok === true, none.text);
   check("投稿: 削除の依頼は受け付ける（場所と種類だけ）", (await rep("/removal", { lat: 34.6946, lon: 135.1955, kind: "dark" }, { ip: "6.6.9.2" })).json?.ok === true);
   check("投稿: 運営の操作は合言葉なしで 404", (await rep("/admin", { action: "delete", lat: 34.70, lon: 135.20, kind: "bikes" })).status === 404);
+  // IPv6 の /64 を使い分けても、/48 ごとに1日40件まで
+  let last48 = 0;
+  for (let i = 0; i < 41; i++) last48 = (await rep("", { lat: 34.80 + i / 1000, lon: 135.10, kind: "dark" }, { ip: `2001:db8:5:${i.toString(16)}::1` })).status;
+  check("投稿: /64 を替えても /48 ごとに1日40件を超えると 429", last48 === 429, String(last48));
   for (let i = 0; i < 20; i++) await rep("", { lat: 34.60 + i / 1000, lon: 135.19, kind: "narrow" }, { ip: "7.7.7.7" });
   check("投稿: 1つの回線から1日20件を超えると 429", (await rep("", { lat: 34.80, lon: 135.19, kind: "narrow" }, { ip: "7.7.7.7" })).status === 429);
 } catch (e) {

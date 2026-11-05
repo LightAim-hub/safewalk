@@ -378,9 +378,13 @@ async function readLog(request: Request, env: Env, url: URL): Promise<Response> 
 // 相談の回数を数える所(global)とは別の所(reports)に置く（投稿の読み書きで相談が止まらないように）。
 const REPORT_KINDS = new Set(["dark", "nolight", "surface", "bikes", "narrow"]);
 const REPORT_PER_IP_DAY = 20;
+/** 家庭の大きな回線（/48）ごとの1日の上限。/64 を使い分けても、これを超えて投稿できない。 */
+const REPORT_PER_48_DAY = 40;
+/** 新しい場所（まだ投稿の無い場所・種類）の、全体の1日の上限。偽の場所の山で一覧が埋まらないように。 */
+const NEW_PLACES_PER_DAY = 1000;
 const DISPUTE_PER_IP_DAY = 10;
 const REPORT_DAYS = 90;
-const REPORT_LIST_CACHE_S = 60;
+const REPORT_LIST_CACHE_S = 30;
 let listMemo: { text: string; until: number } | null = null;
 
 /** 日本時間の今日の0時（ミリ秒）。投稿は、この時刻より前の物だけを1日1回まとめて地図に出す（投稿した時刻を読まれないように）。 */
@@ -464,7 +468,7 @@ async function handleReportsInner(request: Request, env: Env, url: URL, origin: 
       text = JSON.stringify(await stub.listReports(now - REPORT_DAYS * 86400_000, now, publishBefore(env, now)));
       listMemo = { text, until: now + REPORT_LIST_CACHE_S * 1000 };
     }
-    return new Response(text, { headers: { "content-type": "application/json; charset=utf-8", "cache-control": `public, max-age=${REPORT_LIST_CACHE_S}`, ...cors(origin) } });
+    return new Response(text, { headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...cors(origin) } });
   }
   if (request.method !== "POST") return reportJson(405, { error: "method" }, origin);
   if (!usableKey(env.IP_HASH_KEY)) return reportJson(503, { error: "unavailable" }, origin);
@@ -497,8 +501,9 @@ async function handleReportsInner(request: Request, env: Env, url: URL, origin: 
   }
   if (url.pathname !== "/api/reports") return reportJson(404, { error: "not found" }, origin);
   const line = await tag(lineKey(rawIp));
+  const line48 = await tag(`48|${disputeKey(rawIp)}`);
   const mark = await tag(`${lineKey(rawIp)}|${place}`);
-  const r = await stub.addReport(line, mark, at.lat, at.lon, at.kind, now, REPORT_PER_IP_DAY, REPORT_DAYS);
+  const r = await stub.addReport(line, line48, mark, at.lat, at.lon, at.kind, now, REPORT_PER_IP_DAY, REPORT_PER_48_DAY, NEW_PLACES_PER_DAY, REPORT_DAYS);
   return reportJson(r.ok ? 200 : 429, r, origin);
 }
 
@@ -525,19 +530,16 @@ export class Limiter extends DurableObject {
     ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS road_reports_place ON road_reports (lat, lon, kind)");
     // 上限は「回線ごと・1時間ごとの数」だけを持つ（1回ごとの時刻を残さず、ほかの記録と時刻で突き合わせられないように）。
     ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS road_quota (kind TEXT NOT NULL, ip TEXT NOT NULL, hour INTEGER NOT NULL, n INTEGER NOT NULL, PRIMARY KEY (kind, ip, hour)) WITHOUT ROWID");
+    ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS road_quota_hour ON road_quota (hour)");
     // 重複の見分けと「違う」は、鍵つきの値と日付（日に丸める）だけ。
     ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS road_dedup (mark TEXT PRIMARY KEY, day INTEGER NOT NULL) WITHOUT ROWID");
     ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS road_disputes (lat REAL NOT NULL, lon REAL NOT NULL, kind TEXT NOT NULL, mark TEXT NOT NULL, day INTEGER NOT NULL, PRIMARY KEY (lat, lon, kind, mark)) WITHOUT ROWID");
+    ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS road_disputes_day ON road_disputes (day)");
+    ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS road_dedup_day ON road_dedup (day)");
     ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS report_hidden (lat REAL NOT NULL, lon REAL NOT NULL, kind TEXT NOT NULL, PRIMARY KEY (lat, lon, kind))");
     // 削除の依頼は場所・種類ごとにまとめ、件数と最後の日だけ。
     ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS road_removals (lat REAL NOT NULL, lon REAL NOT NULL, kind TEXT NOT NULL, n INTEGER NOT NULL, day INTEGER NOT NULL, PRIMARY KEY (lat, lon, kind)) WITHOUT ROWID");
-    // 前の版の表（使っていない）は、作られていれば消す。
-    for (const t of ["report_quota2", "report_dedup", "report_disputes3", "dispute_quota", "removal_requests", "removal_quota"]) ctx.storage.sql.exec(`DROP TABLE IF EXISTS ${t}`);
-    // 試しの版の名前の表（使っていない）は、作られていれば消す。
-    ctx.storage.sql.exec("DROP TABLE IF EXISTS report_quota");
-    ctx.storage.sql.exec("DROP TABLE IF EXISTS report_disputes2");
-    ctx.storage.sql.exec("DROP TABLE IF EXISTS reports");
-    ctx.storage.sql.exec("DROP TABLE IF EXISTS report_disputes");
+    ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS road_removals_day ON road_removals (day)");
   }
 
   /** 期限切れを消す（1時間に1回まで）。 */
@@ -577,12 +579,16 @@ export class Limiter extends DurableObject {
   }
 
   /** 道の状態の投稿を足す。1つの回線あたり1日 perDay 件まで。同じ回線・同じ場所・同じ種類は投稿を残す間1回だけ数える。 */
-  addReport(line: string, mark: string, lat: number, lon: number, kind: string, now: number, perDay: number, keepDays: number): { ok: boolean; error?: string } {
+  addReport(line: string, line48: string, mark: string, lat: number, lon: number, kind: string, now: number, perDay: number, per48: number, newPlacesPerDay: number, keepDays: number): { ok: boolean; error?: string } {
     const sql = this.ctx.storage.sql;
     this.cleanup(now, keepDays);
     if (!this.take("post", line, now, perDay)) return { ok: false, error: "limit" };
+    if (!this.take("post48", line48, now, per48)) return { ok: false, error: "limit" };
     const dup = sql.exec("SELECT 1 AS x FROM road_dedup WHERE mark = ?", mark).toArray()[0];
     if (dup) return { ok: true };
+    // まだ投稿の無い場所・種類は、全体で1日の上限まで（偽の場所の山で一覧が埋まらないように）。
+    const known = sql.exec("SELECT 1 AS x FROM road_reports WHERE lat = ? AND lon = ? AND kind = ? LIMIT 1", lat, lon, kind).toArray()[0];
+    if (!known && !this.take("newplace", "all", now, newPlacesPerDay)) return { ok: false, error: "busy" };
     sql.exec("INSERT INTO road_dedup (mark, day) VALUES (?, ?)", mark, dayOf(now));
     // 投稿の時刻は1時間に丸めて残す（ほかの記録と細かい時刻で突き合わせられないように）。
     sql.exec("INSERT INTO road_reports (ts, lat, lon, kind) VALUES (?, ?, ?, ?)", hourOf(now) * 3600_000, lat, lon, kind);
@@ -601,11 +607,13 @@ export class Limiter extends DurableObject {
       .exec(
         "SELECT g.lat AS lat, g.lon AS lon, g.kind AS kind, g.count AS count, g.last AS last FROM (" +
           "SELECT r.lat AS lat, r.lon AS lon, r.kind AS kind, COUNT(*) AS count, MAX(r.ts) AS last, " +
-          "(SELECT COUNT(*) FROM road_disputes d WHERE d.lat = r.lat AND d.lon = r.lon AND d.kind = r.kind) AS disputes " +
+          "(SELECT COUNT(*) FROM road_disputes d WHERE d.lat = r.lat AND d.lon = r.lon AND d.kind = r.kind " +
+          "AND d.day >= (SELECT MAX(r2.ts) - (MAX(r2.ts) % 86400000) FROM road_reports r2 WHERE r2.lat = r.lat AND r2.lon = r.lon AND r2.kind = r.kind AND r2.ts < ?)) AS disputes " +
           "FROM road_reports r WHERE r.ts >= ? AND r.ts < ? GROUP BY r.lat, r.lon, r.kind) AS g " +
           "WHERE g.disputes < MAX(3, g.count) " +
           "AND NOT EXISTS (SELECT 1 FROM report_hidden h WHERE h.lat = g.lat AND h.lon = g.lon AND h.kind = g.kind) " +
           "ORDER BY (g.count >= 2) DESC, g.last DESC LIMIT 3000",
+        cutoff,
         since,
         cutoff,
       )
