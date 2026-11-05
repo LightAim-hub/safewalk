@@ -55,6 +55,8 @@ const ALIASES = new Map(
     神戸タワー: "神戸ポートタワー",
     空港: "神戸空港",
     ハーバー: "ハーバーランド",
+    神大: "神戸大学",
+    神戸大: "神戸大学",
   }).map(([short, full]) => [normalize(short), normalize(full)]),
 );
 
@@ -520,6 +522,20 @@ export interface Lookup {
 }
 
 /** 国土地理院の住所検索。神戸市内の住所だけを採る。時間切れや失敗は failed で知らせる。 */
+/**
+ * 神戸市のまわりの市町と、よく打たれる駅・場所の名前。神戸市内で見つからず、これを含む時は「神戸市の外」とはっきり言う。
+ * （「見つかりません」だけだと、打ち方が悪いのか、神戸市の外なのかが分からないため）
+ */
+const OUTSIDE_NAMES = [
+  "明石", "芦屋", "西宮", "尼崎", "宝塚", "伊丹", "川西", "三田", "三木", "小野", "加古川", "高砂", "姫路", "稲美", "播磨",
+  "淡路", "洲本", "南あわじ", "猪名川", "篠山", "丹波", "西脇", "加西", "加東", "相生", "赤穂", "たつの", "豊岡",
+  "大阪", "梅田", "難波", "なんば", "京都", "奈良", "和歌山", "岡山", "東京", "名古屋", "USJ", "ユニバ", "甲子園",
+];
+export function outsideName(query: string): string | null {
+  const q = query.normalize("NFKC");
+  return OUTSIDE_NAMES.find((n) => q.includes(n.normalize("NFKC"))) ?? null;
+}
+
 export async function lookupAddress(
   query: string,
   limit = 4,
@@ -753,9 +769,12 @@ export function bindSuggest(
     } else if (!items.length && value) {
       // 見つからない知らせは、この一か所だけに出す（下の知らせには出さない）。
       noteNone(unavailable);
-      note = unavailable
-        ? "神戸市内の場所が見つかりません（住所検索は今使えませんでした。SafeWalk の検索は神戸市内のみです）"
-        : "神戸市内で見つかりません（SafeWalk の検索は神戸市内のみです）";
+      const outside = outsideName(value);
+      note = outside
+        ? `「${outside}」は神戸市の外のようです。SafeWalk は神戸市の中だけで使えます`
+        : unavailable
+          ? "神戸市内の場所が見つかりません（住所検索は今使えませんでした。SafeWalk の検索は神戸市内のみです）"
+          : "神戸市内で見つかりません（SafeWalk の検索は神戸市内のみです）";
     } else if (unavailable && value) {
       note = "住所検索は今使えないため、手元の候補だけを出しています。";
     }
