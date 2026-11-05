@@ -371,6 +371,15 @@ function reportJson(status: number, body: unknown, origin: string | null): Respo
 }
 
 async function handleReports(request: Request, env: Env, url: URL, origin: string | null, allowed: boolean): Promise<Response> {
+  try {
+    return await handleReportsInner(request, env, url, origin, allowed);
+  } catch {
+    // 数えられない・保存できない時は、CORS つきで「今は使えない」を返す。
+    return reportJson(503, { error: "unavailable" }, allowed ? origin : null);
+  }
+}
+
+async function handleReportsInner(request: Request, env: Env, url: URL, origin: string | null, allowed: boolean): Promise<Response> {
   const stub = env.LIMITER.get(env.LIMITER.idFromName("global"));
   const now = Date.now();
   // 運営の削除（合言葉が要る）。
@@ -438,9 +447,13 @@ export class Limiter extends DurableObject {
     const sql = this.ctx.storage.sql;
     const n = sql.exec("SELECT COUNT(*) AS c FROM reports WHERE ip = ? AND ts > ?", ip, now - 86400_000).one().c as number;
     if (n >= perDay) return { ok: false, error: "limit" };
+    // 同じ回線から、同じ場所・同じ種類を30日のうちに何度も入れても、1件として数える（件数の水増しを防ぐ）。
+    const dup = sql.exec("SELECT id FROM reports WHERE ip = ? AND lat = ? AND lon = ? AND kind = ? AND ts > ?", ip, lat, lon, kind, now - 30 * 86400_000).toArray()[0];
+    if (dup) return { ok: true, id: String(dup.id) };
     const id = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
     sql.exec("INSERT INTO reports (id, ts, lat, lon, kind, ip) VALUES (?, ?, ?, ?, ?, ?)", id, now, lat, lon, kind, ip);
     sql.exec("DELETE FROM reports WHERE ts < ?", now - 365 * 86400_000);
+    sql.exec("DELETE FROM report_disputes WHERE id NOT IN (SELECT id FROM reports)");
     return { ok: true, id };
   }
 

@@ -215,8 +215,11 @@ try {
   for (const ip of ["6.6.6.1", "6.6.6.2", "6.6.6.2", "6.6.6.3"]) await rep("/dispute", { id: rid }, { ip });
   q = await rep("", null, { method: "GET" });
   check("投稿: 別の回線からの「違う」が3つで出さなくなる（同じ回線の2回目は数えない）", !(q.json ?? []).some((x) => x.id === rid), q.text.slice(0, 200));
-  for (let i = 0; i < 20; i++) await rep("", { lat: 34.69, lon: 135.19, kind: "narrow" }, { ip: "7.7.7.7" });
-  check("投稿: 1つの回線から1日20件を超えると 429", (await rep("", { lat: 34.69, lon: 135.19, kind: "narrow" }, { ip: "7.7.7.7" })).status === 429);
+  const d1 = await rep("", { lat: 34.70, lon: 135.20, kind: "bikes" }, { ip: "8.8.8.8" });
+  const d2 = await rep("", { lat: 34.70, lon: 135.20, kind: "bikes" }, { ip: "8.8.8.8" });
+  check("投稿: 同じ回線・同じ場所・同じ種類の2回目は数えない", d1.json?.id && d1.json.id === d2.json?.id, d1.text + d2.text);
+  for (let i = 0; i < 20; i++) await rep("", { lat: 34.69 + i / 1000, lon: 135.19, kind: "narrow" }, { ip: "7.7.7.7" });
+  check("投稿: 1つの回線から1日20件を超えると 429", (await rep("", { lat: 34.80, lon: 135.19, kind: "narrow" }, { ip: "7.7.7.7" })).status === 429);
 } catch (e) {
   console.error(e);
   console.error(log.slice(-3000));

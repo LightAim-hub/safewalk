@@ -14,7 +14,9 @@ const REPORTS_URL = "https://safewalk-claude.matomaru-yotei.workers.dev/api/repo
 export const REPORT_COLOR = "#6a3fb5";
 
 let reports: Report[] = [];
-export const getReports = (): readonly Report[] => reports;
+let loaded = false;
+/** 読み込めていない時は null（Claude に「投稿は無い」と言わせないため）。 */
+export const getReports = (): readonly Report[] | null => (loaded ? reports : null);
 
 /** 投稿を読み直して、地図の印を描き直す。読めなくても、アプリの動きには関わらない。 */
 export async function loadReports(): Promise<void> {
@@ -24,6 +26,7 @@ export async function loadReports(): Promise<void> {
     const rows = (await res.json()) as Report[];
     const since = Date.now() - REPORT_MAX_AGE_DAYS * 86400_000;
     reports = rows.filter((r) => REPORT_KINDS.includes(r.kind) && r.ts >= since);
+    loaded = true;
     draw();
   } catch {
     /* 投稿を出せないだけ */
@@ -89,9 +92,11 @@ export function showReportPopup(f: maplibregl.MapGeoJSONFeature): void {
   no.addEventListener("click", async () => {
     no.disabled = true;
     try {
-      await Promise.all(ids.map((id) => fetch(`${REPORTS_URL}/dispute`, { method: "POST", body: JSON.stringify({ id }), headers: { "content-type": "text/plain" } })));
+      const rs = await Promise.all(ids.map((id) => fetch(`${REPORTS_URL}/dispute`, { method: "POST", body: JSON.stringify({ id }), headers: { "content-type": "text/plain" } })));
+      if (rs.some((r) => !r.ok)) throw new Error("dispute");
       toast("知らせました。「違う」が重なった投稿は出さなくなります");
       track("report_dispute");
+      void loadReports();
     } catch {
       toast("今は送れませんでした");
     }
@@ -101,6 +106,7 @@ export function showReportPopup(f: maplibregl.MapGeoJSONFeature): void {
   const [lon, lat] = (f.geometry as GeoJSON.Point).coordinates;
   popup?.remove();
   popup = new maplibregl.Popup({ closeButton: true, maxWidth: "260px" }).setLngLat([lon, lat]).setDOMContent(box).addTo(map);
+  no.focus({ preventScroll: true });
 }
 
 /** この場所の道の状態を投稿する窓。決まった5つから選ぶだけ（自由に書く欄は無い）。 */
@@ -132,9 +138,10 @@ export function openReportDialog(at: { lat: number; lon: number }, opener?: HTML
       try {
         const res = await fetch(REPORTS_URL, { method: "POST", body: JSON.stringify({ lat: at.lat, lon: at.lon, kind }), headers: { "content-type": "text/plain" } });
         if (res.status === 429) toast("今日の投稿の上限に達しました。明日またお願いします");
-        else if (!res.ok) toast("この場所には投稿できませんでした（神戸市の中だけです）");
+        else if (res.status === 400) toast("この場所には投稿できませんでした（神戸市の中だけです）");
+        else if (!res.ok) toast("今は投稿できませんでした。少し置いてからお試しください");
         else {
-          toast("投稿しました。確かめていない情報として地図に出ます");
+          toast(map.getZoom() < 13 ? "投稿しました。地図を拡大すると紫の印で出ます（確かめていない情報として）" : "投稿しました。確かめていない情報として地図に出ます");
           track("report_add", kind);
           void loadReports();
         }
@@ -153,6 +160,13 @@ export function openReportDialog(at: { lat: number; lon: number }, opener?: HTML
   });
   back.addEventListener("keydown", (e) => {
     if (e.key === "Escape") close();
+    else if (e.key === "Tab") {
+      // 窓の中だけで焦点を回す（後ろの画面へ抜けない）。
+      const items = [...box.querySelectorAll<HTMLButtonElement>("button:not([disabled])")];
+      const i = items.indexOf(document.activeElement as HTMLButtonElement);
+      e.preventDefault();
+      items[(i + (e.shiftKey ? items.length - 1 : 1)) % items.length]?.focus();
+    }
   });
   box.append(title, note, list, cancel);
   back.append(box);

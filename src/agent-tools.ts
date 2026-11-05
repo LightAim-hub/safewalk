@@ -22,8 +22,8 @@ export type AgentContext = {
   safety: Safety;
   places: Place[];
   snap: (p: LatLon) => Anchor | null;
-  /** 利用者による道の状態の投稿（確かめていない）。無ければ数えない。 */
-  reports?: readonly Report[];
+  /** 利用者による道の状態の投稿（確かめていない）。読み込めていない時は null（「無い」と言わせない）。 */
+  reports?: readonly Report[] | null;
   /** 経路を作った直後に呼ぶ。画面の経路と数字を揃えるため、画面側が出発地・目的地までの区間を足す(directions.ts の connectEnds)。 */
   afterFind?: (routes: Route[]) => void;
 };
@@ -305,7 +305,8 @@ function reportsTool(s: ToolSession, idx: unknown): ToolOutput {
   const r = routeOf(s, idx);
   if (typeof r === "string") return fail(r);
   const i = idx as number;
-  const counts = countReportsAlong(s.ctx.reports ?? [], r.coords);
+  if (!s.ctx.reports) return fail("利用者の投稿を読み込めていないため、数えられません。投稿については触れないでください。");
+  const counts = countReportsAlong(s.ctx.reports, r.coords);
   const facts: Fact[] = [];
   const parts = REPORT_KINDS.filter((k) => counts.get(k)).map((k) => `${REPORT_LABEL[k]} ${counts.get(k)}件`);
   facts.push({

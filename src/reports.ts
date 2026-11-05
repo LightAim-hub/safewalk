@@ -25,7 +25,14 @@ export const REPORT_SOURCE = "利用者の投稿（確かめていません）";
 /** 経路の線から REPORT_NEAR_M 以内の投稿を、種類ごとに数える。 */
 export function countReportsAlong(reports: readonly Report[], coords: readonly [number, number][]): Map<ReportKind, number> {
   const out = new Map<ReportKind, number>();
+  // 経路の範囲を少し広げた枠で先に絞る（全部の投稿と経路の全部の点を比べない）。
+  let s = 90, n = -90, w = 180, e = -180;
+  for (const [lon, lat] of coords) {
+    s = Math.min(s, lat); n = Math.max(n, lat); w = Math.min(w, lon); e = Math.max(e, lon);
+  }
+  const pad = 0.001; // 約100m
   for (const r of reports) {
+    if (r.lat < s - pad || r.lat > n + pad || r.lon < w - pad || r.lon > e + pad) continue;
     if (nearLine({ lat: r.lat, lon: r.lon }, coords)) out.set(r.kind, (out.get(r.kind) ?? 0) + 1);
   }
   return out;

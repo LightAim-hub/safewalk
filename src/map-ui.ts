@@ -159,7 +159,6 @@ export function addLayers(): void {
   map.addSource("accuracy", { type: "geojson", data: emptyCollection() });
   map.addSource("accidents", { type: "geojson", data: emptyCollection() });
   map.addSource("routes", { type: "geojson", data: emptyCollection() });
-  addReportLayers();
   map.addLayer({
     id: "kobe-line",
     type: "line",
@@ -220,6 +219,8 @@ export function addLayers(): void {
     },
     paint: { "text-color": COLORS.bad, "text-halo-color": "#ffffff", "text-halo-width": 1.5 },
   });
+  // 利用者の投稿の印は、経路の線より上に描く（経路沿いの投稿が線に隠れて押せなくならないように）。
+  addReportLayers();
   map.on("click", "result-dots", (e) => {
     if (guiding()) return void e.preventDefault();
     const index = e.features?.[0]?.properties?.index;
@@ -234,6 +235,14 @@ export function addLayers(): void {
   });
   map.on("click", "route-line", (e) => {
     if (guiding()) return void e.preventDefault();
+    // 経路の上の投稿の印を押した時は、経路を選ぶより先に、その中身を出す。
+    const rep = map.getLayer("report-dots")
+      ? map.queryRenderedFeatures([[e.point.x - 8, e.point.y - 8], [e.point.x + 8, e.point.y + 8]], { layers: ["report-dots"] })
+      : [];
+    if (rep.length) {
+      showReportPopup(rep[0]);
+      return void e.preventDefault();
+    }
     const index = e.features?.[0]?.properties?.index;
     if (typeof index === "number") selectRoute(index);
     e.preventDefault();
@@ -261,7 +270,7 @@ export function addLayers(): void {
     }, DOUBLE_CLICK_MS);
   });
   bindLongPress();
-  for (const layer of ["route-line", "result-dots"]) {
+  for (const layer of ["route-line", "result-dots", "report-dots"]) {
     map.on("mouseenter", layer, () => (map.getCanvas().style.cursor = "pointer"));
     map.on("mouseleave", layer, () => (map.getCanvas().style.cursor = ""));
   }
