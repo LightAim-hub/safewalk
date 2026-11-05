@@ -6,8 +6,6 @@ import * as maplibregl from "maplibre-gl";
 import type { GeoJSONSource } from "maplibre-gl";
 import { map, toast, el } from "./app";
 import { REPORT_KINDS, REPORT_LABEL, REPORT_MAX_AGE_DAYS, REPORT_SOURCE, type Report, type ReportKind } from "./reports";
-/** 削除の依頼の窓口（GitHub の Issue）。 */
-export const REPORT_REMOVAL_URL = "https://github.com/LightAim-hub/safewalk/issues/new?title=%E6%8A%95%E7%A8%BF%E3%81%AE%E5%89%8A%E9%99%A4%E3%81%AE%E4%BE%9D%E9%A0%BC";
 
 // 相談の中継と同じ Worker の受け口(agent.ts の AGENT_ENDPOINT と同じ場所)。
 const REPORTS_URL = "https://safewalk-claude.matomaru-yotei.workers.dev/api/reports";
@@ -93,17 +91,26 @@ export function showReportPopup(f: maplibregl.MapGeoJSONFeature): void {
         return void popup?.remove();
       }
       if (!r.ok) throw new Error("dispute");
-      toast("知らせました。「違う」が投稿の数より多くなると、出さなくなります（1分ほどで反映）");
+      toast("知らせました。「違う」が投稿の数に届くと、出さなくなります（1分ほどで反映）");
       void loadReports();
     } catch {
       toast("今は送れませんでした");
     }
     popup?.remove();
   });
-  const removal = el("a", "report-removal", "削除の依頼");
-  removal.href = REPORT_REMOVAL_URL;
-  removal.target = "_blank";
-  removal.rel = "noopener";
+  // 削除の依頼は、場所と種類だけをアプリから送る（公開の場に場所を書かずに済むように）。運営が確かめて消す。
+  const removal = el("button", "plain report-removal", "削除を依頼する（自宅の前など）");
+  removal.type = "button";
+  removal.addEventListener("click", async () => {
+    removal.disabled = true;
+    try {
+      const r = await fetch(`${REPORTS_URL}/removal`, { method: "POST", body: JSON.stringify({ lat: Number(p.lat), lon: Number(p.lon), kind: p.kind }), headers: { "content-type": "text/plain" } });
+      toast(r.ok ? "削除の依頼を受け付けました。運営が確かめて対応します" : r.status === 429 ? "今日の依頼の上限に達しました" : "今は送れませんでした");
+    } catch {
+      toast("今は送れませんでした");
+    }
+    popup?.remove();
+  });
   box.append(no, removal);
   const [lon, lat] = (f.geometry as GeoJSON.Point).coordinates;
   popup?.remove();
@@ -125,7 +132,7 @@ export function openReportDialog(at: { lat: number; lon: number }, opener?: HTML
   const note = el(
     "p",
     "menu-note",
-    "この投稿は地図の上に公開されます。自宅など、個人の場所が分かる所からは書き込まないでください。決まった選択肢だけを選べます。事件・事故・人については書けません。場所はいちばん近い道の上に寄せ、地図には日付までを出します。",
+    "この投稿は地図の上に公開されます。自宅など、個人の場所が分かる所からは書き込まないでください。決まった選択肢だけを選べます。事件・事故・人については書けません。場所はいちばん近い道の上に寄せ、地図には日付までを出します。その場所への最初の1件は、24時間たってから地図に出ます。",
   );
   const list = el("div", "report-kinds");
   const close = () => {
@@ -143,7 +150,7 @@ export function openReportDialog(at: { lat: number; lon: number }, opener?: HTML
         else if (res.status === 400) toast("この場所には投稿できませんでした（神戸市の中だけです）");
         else if (!res.ok) toast("今は投稿できませんでした。少し置いてからお試しください");
         else {
-          toast(map.getZoom() < 13 ? "投稿しました。1分ほどで、地図を拡大すると紫の印で出ます" : "投稿しました。1分ほどで、確かめていない情報として地図に出ます");
+          toast("投稿しました。確かめていない情報として地図に出ます（その場所への最初の1件は24時間後から）");
           window.setTimeout(() => void loadReports(), 65000);
         }
       } catch {
