@@ -6,7 +6,8 @@ import * as maplibregl from "maplibre-gl";
 import type { GeoJSONSource } from "maplibre-gl";
 import { map, toast, el } from "./app";
 import { REPORT_KINDS, REPORT_LABEL, REPORT_MAX_AGE_DAYS, REPORT_SOURCE, type Report, type ReportKind } from "./reports";
-import { track } from "./telemetry";
+/** 削除の依頼の窓口（GitHub の Issue）。 */
+export const REPORT_REMOVAL_URL = "https://github.com/LightAim-hub/safewalk/issues/new?title=%E6%8A%95%E7%A8%BF%E3%81%AE%E5%89%8A%E9%99%A4%E3%81%AE%E4%BE%9D%E9%A0%BC";
 
 // 相談の中継と同じ Worker の受け口(agent.ts の AGENT_ENDPOINT と同じ場所)。
 const REPORTS_URL = "https://safewalk-claude.matomaru-yotei.workers.dev/api/reports";
@@ -25,7 +26,7 @@ export async function loadReports(): Promise<void> {
     if (!res.ok) return;
     const rows = (await res.json()) as Report[];
     const since = Date.now() - REPORT_MAX_AGE_DAYS * 86400_000;
-    reports = rows.filter((r) => REPORT_KINDS.includes(r.kind) && r.ts >= since);
+    reports = rows.filter((r) => REPORT_KINDS.includes(r.kind) && r.last >= since - 86400_000);
     loaded = true;
     draw();
   } catch {
@@ -36,18 +37,13 @@ export async function loadReports(): Promise<void> {
 function draw(): void {
   const src = map.getSource("reports") as GeoJSONSource | undefined;
   if (!src) return;
-  // 同じ場所(丸めた座標)・同じ種類は1つの印にまとめ、件数を持たせる。
-  const groups = new Map<string, Report[]>();
-  for (const r of reports) {
-    const k = `${r.lat.toFixed(4)},${r.lon.toFixed(4)},${r.kind}`;
-    groups.set(k, [...(groups.get(k) ?? []), r]);
-  }
+  // 中継が場所・種類ごとにまとめて返すので、1件を1つの印にする。
   src.setData({
     type: "FeatureCollection",
-    features: [...groups.values()].map((g) => ({
+    features: reports.map((r) => ({
       type: "Feature",
-      properties: { ids: g.map((r) => r.id).join(","), kind: g[0].kind, count: g.length, latest: Math.max(...g.map((r) => r.ts)) },
-      geometry: { type: "Point", coordinates: [g[0].lon, g[0].lat] },
+      properties: { kind: r.kind, count: r.count, latest: r.last, lat: r.lat, lon: r.lon },
+      geometry: { type: "Point", coordinates: [r.lon, r.lat] },
     })),
   });
 }
@@ -79,8 +75,7 @@ let popup: maplibregl.Popup | null = null;
 
 /** 地図の印を押した時。種類・件数・日付と、「違う」を出す。 */
 export function showReportPopup(f: maplibregl.MapGeoJSONFeature): void {
-  const p = f.properties as { ids: string; kind: ReportKind; count: number; latest: number };
-  const ids = String(p.ids).split(",");
+  const p = f.properties as { kind: ReportKind; count: number; latest: number; lat: number; lon: number };
   const box = el("div", "report-pop");
   box.append(
     el("p", "report-src", REPORT_SOURCE),
@@ -92,17 +87,24 @@ export function showReportPopup(f: maplibregl.MapGeoJSONFeature): void {
   no.addEventListener("click", async () => {
     no.disabled = true;
     try {
-      const rs = await Promise.all(ids.map((id) => fetch(`${REPORTS_URL}/dispute`, { method: "POST", body: JSON.stringify({ id }), headers: { "content-type": "text/plain" } })));
-      if (rs.some((r) => !r.ok)) throw new Error("dispute");
-      toast("知らせました。「違う」が重なった投稿は出さなくなります");
-      track("report_dispute");
+      const r = await fetch(`${REPORTS_URL}/dispute`, { method: "POST", body: JSON.stringify({ lat: Number(p.lat), lon: Number(p.lon), kind: p.kind }), headers: { "content-type": "text/plain" } });
+      if (r.status === 429) {
+        toast("今日の「違う」の上限に達しました");
+        return void popup?.remove();
+      }
+      if (!r.ok) throw new Error("dispute");
+      toast("知らせました。「違う」が投稿の数より多くなると、出さなくなります（1分ほどで反映）");
       void loadReports();
     } catch {
       toast("今は送れませんでした");
     }
     popup?.remove();
   });
-  box.append(no);
+  const removal = el("a", "report-removal", "削除の依頼");
+  removal.href = REPORT_REMOVAL_URL;
+  removal.target = "_blank";
+  removal.rel = "noopener";
+  box.append(no, removal);
   const [lon, lat] = (f.geometry as GeoJSON.Point).coordinates;
   popup?.remove();
   popup = new maplibregl.Popup({ closeButton: true, maxWidth: "260px" }).setLngLat([lon, lat]).setDOMContent(box).addTo(map);
@@ -123,7 +125,7 @@ export function openReportDialog(at: { lat: number; lon: number }, opener?: HTML
   const note = el(
     "p",
     "menu-note",
-    "決まった選択肢だけを選べます。事件・事故・人については書けません。残すのは、場所（約10m単位）・種類・日時だけで、投稿した人は残しません。ほかの人には「利用者の投稿（確かめていません）」として見えます。",
+    "この投稿は地図の上に公開されます。自宅など、個人の場所が分かる所からは書き込まないでください。決まった選択肢だけを選べます。事件・事故・人については書けません。場所はいちばん近い道の上に寄せ、地図には日付までを出します。",
   );
   const list = el("div", "report-kinds");
   const close = () => {
@@ -141,9 +143,8 @@ export function openReportDialog(at: { lat: number; lon: number }, opener?: HTML
         else if (res.status === 400) toast("この場所には投稿できませんでした（神戸市の中だけです）");
         else if (!res.ok) toast("今は投稿できませんでした。少し置いてからお試しください");
         else {
-          toast(map.getZoom() < 13 ? "投稿しました。地図を拡大すると紫の印で出ます（確かめていない情報として）" : "投稿しました。確かめていない情報として地図に出ます");
-          track("report_add", kind);
-          void loadReports();
+          toast(map.getZoom() < 13 ? "投稿しました。1分ほどで、地図を拡大すると紫の印で出ます" : "投稿しました。1分ほどで、確かめていない情報として地図に出ます");
+          window.setTimeout(() => void loadReports(), 65000);
         }
       } catch {
         toast("今は投稿できませんでした。電波を確かめてください");

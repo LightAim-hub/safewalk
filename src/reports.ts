@@ -14,7 +14,8 @@ export const REPORT_LABEL: Record<ReportKind, string> = {
   bikes: "自転車がよく通る",
   narrow: "歩道が狭い・無い",
 };
-export type Report = { id: string; lat: number; lon: number; kind: ReportKind; ts: number; disputes: number };
+/** 中継が返す1件 = 場所(道の上の点・小数4桁)と種類ごとのまとまり。件数と最後の日だけを持つ（投稿した人は入らない）。 */
+export type Report = { lat: number; lon: number; kind: ReportKind; count: number; last: number };
 
 /** 見せる期間。これより古い投稿は出さない。 */
 export const REPORT_MAX_AGE_DAYS = 90;
@@ -22,7 +23,10 @@ export const REPORT_MAX_AGE_DAYS = 90;
 export const REPORT_NEAR_M = 50;
 export const REPORT_SOURCE = "利用者の投稿（確かめていません）";
 
-/** 経路の線から REPORT_NEAR_M 以内の投稿を、種類ごとに数える。 */
+/**
+ * 経路の線から REPORT_NEAR_M 以内の投稿を、種類ごとに「何か所」で数える。
+ * 1か所に何件あっても1と数える（1つの場所への投稿の重ねで、件数を水増しできないように）。
+ */
 export function countReportsAlong(reports: readonly Report[], coords: readonly [number, number][]): Map<ReportKind, number> {
   const out = new Map<ReportKind, number>();
   // 経路の範囲を少し広げた枠で先に絞る（全部の投稿と経路の全部の点を比べない）。

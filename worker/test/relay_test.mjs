@@ -193,8 +193,8 @@ try {
 
   // --- 道の状態の投稿
   const RB = `http://127.0.0.1:${WORKER_PORT}/api/reports`;
-  const rep = async (path, body, { origin = OK_ORIGIN, ip = "5.5.5.5", method = "POST" } = {}) => {
-    const headers = { "content-type": "text/plain", "cf-connecting-ip": ip };
+  const rep = async (path, body, { origin = OK_ORIGIN, ip = "5.5.5.5", method = "POST", headers: extra = {} } = {}) => {
+    const headers = { "content-type": "text/plain", "cf-connecting-ip": ip, ...extra };
     if (origin) headers.origin = origin;
     const res = await fetch(RB + path, { method, headers, body: method === "GET" ? undefined : JSON.stringify(body) });
     const text = await res.text();
@@ -202,23 +202,40 @@ try {
     try { json = JSON.parse(text); } catch {}
     return { status: res.status, json, text };
   };
+  // 一覧は1分だけ使い回すので、試験では毎回ちがう場所を使い、最後にまとめて一覧を見る。
   let q = await rep("", { lat: 34.69461234, lon: 135.19551234, kind: "dark" });
   check("投稿: 正しい種類と神戸の中の点は受け付ける", q.status === 200 && q.json?.ok === true, q.text);
-  const rid = q.json?.id;
   check("投稿: 決まっていない種類は 400", (await rep("", { lat: 34.69, lon: 135.19, kind: "crime" })).status === 400);
   check("投稿: 神戸の外の点は 400", (await rep("", { lat: 35.0, lon: 135.5, kind: "dark" })).status === 400);
   check("投稿: Origin なしは 403", (await rep("", { lat: 34.69, lon: 135.19, kind: "dark" }, { origin: null })).status === 403);
+  // 同じ回線の重ねは1件
+  await rep("", { lat: 34.70, lon: 135.20, kind: "bikes" }, { ip: "8.8.8.8" });
+  await rep("", { lat: 34.70, lon: 135.20, kind: "bikes" }, { ip: "8.8.8.8" });
+  // 「違う」: 1件の場所は別の回線3つで出さない。同じ回線の2回目は数えない
+  await rep("", { lat: 34.71, lon: 135.21, kind: "narrow" }, { ip: "9.9.9.1" });
+  for (const ip of ["6.6.6.1", "6.6.6.2", "6.6.6.2"]) await rep("/dispute", { lat: 34.71, lon: 135.21, kind: "narrow" }, { ip });
+  // 4つの回線が入れた場所は、「違う」3つでは消えない（投稿の数より多くないと消えない）
+  for (const ip of ["9.9.8.1", "9.9.8.2", "9.9.8.3", "9.9.8.4"]) await rep("", { lat: 34.72, lon: 135.22, kind: "surface" }, { ip });
+  for (const ip of ["6.6.7.1", "6.6.7.2", "6.6.7.3"]) await rep("/dispute", { lat: 34.72, lon: 135.22, kind: "surface" }, { ip });
+  await rep("", { lat: 34.74, lon: 135.24, kind: "nolight" }, { ip: "9.9.7.1" });
+  for (const ip of ["6.6.8.1", "6.6.8.2", "6.6.8.3"]) await rep("/dispute", { lat: 34.74, lon: 135.24, kind: "nolight" }, { ip });
+  // IPv6 は先頭64ビットでまとめて数える（番号を替えても同じ回線）
+  await rep("", { lat: 34.73, lon: 135.23, kind: "dark" }, { ip: "2001:db8:1:2::a" });
+  await rep("", { lat: 34.73, lon: 135.23, kind: "dark" }, { ip: "2001:db8:1:2::b" });
   q = await rep("", null, { method: "GET" });
-  const got = (q.json ?? []).find((x) => x.id === rid);
-  check("投稿: 一覧に出る・座標は小数4桁に丸める", got && got.lat === 34.6946 && got.lon === 135.1955, q.text.slice(0, 200));
-  check("投稿: 一覧に投稿者の値は入らない", got && !("ip" in got), JSON.stringify(got));
-  for (const ip of ["6.6.6.1", "6.6.6.2", "6.6.6.2", "6.6.6.3"]) await rep("/dispute", { id: rid }, { ip });
-  q = await rep("", null, { method: "GET" });
-  check("投稿: 別の回線からの「違う」が3つで出さなくなる（同じ回線の2回目は数えない）", !(q.json ?? []).some((x) => x.id === rid), q.text.slice(0, 200));
-  const d1 = await rep("", { lat: 34.70, lon: 135.20, kind: "bikes" }, { ip: "8.8.8.8" });
-  const d2 = await rep("", { lat: 34.70, lon: 135.20, kind: "bikes" }, { ip: "8.8.8.8" });
-  check("投稿: 同じ回線・同じ場所・同じ種類の2回目は数えない", d1.json?.id && d1.json.id === d2.json?.id, d1.text + d2.text);
-  for (let i = 0; i < 20; i++) await rep("", { lat: 34.69 + i / 1000, lon: 135.19, kind: "narrow" }, { ip: "7.7.7.7" });
+  const list = q.json ?? [];
+  const find = (lat, lon, kind) => list.find((x) => x.lat === lat && x.lon === lon && x.kind === kind);
+  const got = find(34.6946, 135.1955, "dark");
+  check("投稿: 一覧に出る・座標は小数4桁に丸める", !!got, q.text.slice(0, 200));
+  check("投稿: 一覧に投稿者の値・id は入らない", got && !("ip" in got) && !("id" in got), JSON.stringify(got));
+  check("投稿: 日時は日に丸める", got && got.last % 86400000 === 0, JSON.stringify(got));
+  check("投稿: 同じ回線・同じ場所・同じ種類の2回目は数えない", find(34.70, 135.20, "bikes")?.count === 1, JSON.stringify(find(34.70, 135.20, "bikes")));
+  check("投稿: 同じ回線の2回目の「違う」は数えない（2つでは消えない）", find(34.71, 135.21, "narrow") !== undefined, JSON.stringify(find(34.71, 135.21, "narrow")));
+  check("投稿: 1件の場所は別の回線の「違う」3つで出さない", find(34.74, 135.24, "nolight") === undefined, JSON.stringify(find(34.74, 135.24, "nolight")));
+  check("投稿: 4つの回線が入れた場所は「違う」3つでは消えない", find(34.72, 135.22, "surface")?.count === 4, JSON.stringify(find(34.72, 135.22, "surface")));
+  check("投稿: IPv6 は先頭64ビットで1つの回線", find(34.73, 135.23, "dark")?.count === 1, JSON.stringify(find(34.73, 135.23, "dark")));
+  check("投稿: 運営の操作は合言葉なしで 404", (await rep("/admin", { action: "delete", lat: 34.70, lon: 135.20, kind: "bikes" })).status === 404);
+  for (let i = 0; i < 20; i++) await rep("", { lat: 34.60 + i / 1000, lon: 135.19, kind: "narrow" }, { ip: "7.7.7.7" });
   check("投稿: 1つの回線から1日20件を超えると 429", (await rep("", { lat: 34.80, lon: 135.19, kind: "narrow" }, { ip: "7.7.7.7" })).status === 429);
 } catch (e) {
   console.error(e);

@@ -1,4 +1,6 @@
 import { openReportDialog } from "./reports-ui";
+/** 投稿できる、道からの距離の上限。 */
+const REPORT_ROAD_MAX_M = 40;
 import { track } from "./telemetry";
 import * as maplibregl from "maplibre-gl";
 import { metres, type LatLon } from "./graph";
@@ -264,10 +266,19 @@ export function showPlace(place: Place): void {
   const web = place.web ? externalLink(place.web) : null;
   if (web) info.append(infoRow("サイト", web));
   // この場所の道の状態（暗い・段差など）を、決まった選択肢から投稿する。
-  const report = el("button", "link report-open", "この場所の道の状態を投稿");
-  report.type = "button";
-  report.addEventListener("click", () => openReportDialog(place, report));
-  info.append(report);
+  // 号まで指定した住所・送られてきた地点では出さない（家1軒の位置に印を付けられないように）。
+  const pinpoint = (place.kind ?? "").startsWith("住所") || place.name === "共有された地点";
+  if (!pinpoint) {
+    const report = el("button", "link report-open", "この場所の道の状態を投稿");
+    report.type = "button";
+    report.addEventListener("click", () => {
+      // 点はいちばん近い道の上に寄せる。道から離れた所（建物の中など）からは投稿できない。
+      const road = snap(place) as (ReturnType<typeof snap> & { metres?: number }) | null;
+      if (!road || (road.metres ?? 0) > REPORT_ROAD_MAX_M) return toast("道から離れているため、この場所には投稿できません。道の上を選んでください");
+      openReportDialog({ lat: road.point[1], lon: road.point[0] }, report);
+    });
+    info.append(report);
+  }
   const nearby = el("div", "chips inline");
   nearby.append(
     ...GENRES.slice(0, 6).map((genre) => {

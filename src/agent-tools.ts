@@ -308,7 +308,7 @@ function reportsTool(s: ToolSession, idx: unknown): ToolOutput {
   if (!s.ctx.reports) return fail("利用者の投稿を読み込めていないため、数えられません。投稿については触れないでください。");
   const counts = countReportsAlong(s.ctx.reports, r.coords);
   const facts: Fact[] = [];
-  const parts = REPORT_KINDS.filter((k) => counts.get(k)).map((k) => `${REPORT_LABEL[k]} ${counts.get(k)}件`);
+  const parts = REPORT_KINDS.filter((k) => counts.get(k)).map((k) => `${REPORT_LABEL[k]} ${counts.get(k)}か所`);
   facts.push({
     id: `r${i}.reports`,
     text: parts.length
