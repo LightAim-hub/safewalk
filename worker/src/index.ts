@@ -28,8 +28,8 @@ export interface Env {
   LOG_READ_TOKEN?: string;
   /** 投稿を運営が隠す・戻す・消す時の合言葉（読み出し用とは別）。secret に入れる。無ければ運営の操作は閉じる。 */
   REPORT_ADMIN_TOKEN?: string;
-  /** 手元の試験だけで使う: 1件だけの場所を出すまでの待ち(ms)。本番は設定しない(24時間)。 */
-  REPORT_SINGLE_DELAY_MS?: string;
+  /** 手元の試験だけで使う: "1" の時、投稿をすぐ一覧に出す。本番は設定しない（翌日の0時にまとめて出す）。 */
+  REPORT_PUBLISH_NOW?: string;
 }
 
 const ALLOWED_ORIGINS = [
@@ -381,9 +381,15 @@ const REPORT_PER_IP_DAY = 20;
 const DISPUTE_PER_IP_DAY = 10;
 const REPORT_DAYS = 90;
 const REPORT_LIST_CACHE_S = 60;
-/** 1件だけの場所は、投稿から24時間たつまで地図に出さない（投稿した時刻から人の動きを読まれないように）。 */
-const SINGLE_DELAY_MS = 24 * 3600_000;
 let listMemo: { text: string; until: number } | null = null;
+
+/** 日本時間の今日の0時（ミリ秒）。投稿は、この時刻より前の物だけを1日1回まとめて地図に出す（投稿した時刻を読まれないように）。 */
+export function jstMidnight(now: number): number {
+  const JST = 9 * 3600_000;
+  return Math.floor((now + JST) / 86400_000) * 86400_000 - JST;
+}
+const hourOf = (now: number) => Math.floor(now / 3600_000);
+const dayOf = (now: number) => Math.floor(now / 86400_000) * 86400_000;
 // 神戸市のまわりの範囲（graph.meta.json の bbox と同じ）。点は画面側で道の上に寄せてから送る。
 const KOBE_BBOX = { s: 34.55, w: 134.9, n: 34.95, e: 135.38 };
 
@@ -399,6 +405,11 @@ function sameSecret(a: string, b: string): boolean {
   let d = 0;
   for (let i = 0; i < x.length; i++) d |= x[i] ^ y[i];
   return d === 0;
+}
+
+/** 一覧に出す投稿の区切り（この時刻より前の投稿だけ）。 */
+function publishBefore(env: Env, now: number): number {
+  return env.REPORT_PUBLISH_NOW === "1" ? now + 1 : jstMidnight(now);
 }
 
 function placeOf(body: Record<string, unknown>): { lat: number; lon: number; kind: string } | null {
@@ -440,6 +451,7 @@ async function handleReportsInner(request: Request, env: Env, url: URL, origin: 
     const action = isObj(body) ? String(body.action) : "";
     if (isObj(body) && body.action === "requests") return reportJson(200, await stub.removalRequests(), null);
     if (!at || !["hide", "unhide", "delete"].includes(action)) return reportJson(400, { error: "body" }, null);
+    listMemo = null;
     return reportJson(200, await stub.adminReport(action, at.lat, at.lon, at.kind), null);
   }
   if (!allowed) return new Response(null, { status: 403, headers: { vary: "Origin" } });
@@ -449,8 +461,7 @@ async function handleReportsInner(request: Request, env: Env, url: URL, origin: 
     let text: string;
     if (listMemo && listMemo.until > now) text = listMemo.text;
     else {
-      const delay = Number(env.REPORT_SINGLE_DELAY_MS ?? SINGLE_DELAY_MS);
-      text = JSON.stringify(await stub.listReports(now - REPORT_DAYS * 86400_000, now, Number.isFinite(delay) ? delay : SINGLE_DELAY_MS));
+      text = JSON.stringify(await stub.listReports(now - REPORT_DAYS * 86400_000, now, publishBefore(env, now)));
       listMemo = { text, until: now + REPORT_LIST_CACHE_S * 1000 };
     }
     return new Response(text, { headers: { "content-type": "application/json; charset=utf-8", "cache-control": `public, max-age=${REPORT_LIST_CACHE_S}`, ...cors(origin) } });
@@ -471,21 +482,22 @@ async function handleReportsInner(request: Request, env: Env, url: URL, origin: 
   if (!at) return reportJson(400, { error: "place" }, origin);
   const rawIp = request.headers.get("cf-connecting-ip") ?? "unknown";
   const place = `${at.lat},${at.lon},${at.kind}`;
+  // 投稿まわりの回線の値は、相談の回数・使われ方の記録とは別の値にする（記録どうしをつなげないように）。
+  const tag = (k: string) => lineId(`road|${k}`, env.IP_HASH_KEY!);
+  const cutoff = publishBefore(env, now);
   if (url.pathname === "/api/reports/dispute") {
-    const line = await lineId(disputeKey(rawIp), env.IP_HASH_KEY);
-    const mark = await lineId(`${disputeKey(rawIp)}|${place}`, env.IP_HASH_KEY);
-    const r = await stub.disputeReport(at.lat, at.lon, at.kind, line, mark, now, DISPUTE_PER_IP_DAY);
-    return reportJson(r.ok ? 200 : r.error === "none" ? 404 : 429, r, origin);
+    // 返事は、投稿があってもなくても同じ（まだ出ていない投稿・隠した投稿があるかを探れないように）。
+    const r = await stub.disputeReport(at.lat, at.lon, at.kind, await tag(disputeKey(rawIp)), await tag(`${disputeKey(rawIp)}|${place}`), now, cutoff, DISPUTE_PER_IP_DAY);
+    return reportJson(r.ok ? 200 : 429, r, origin);
   }
   if (url.pathname === "/api/reports/removal") {
-    // 削除の依頼（場所と種類だけ。自由記述なし）。運営が確かめる列に入れる。依頼だけでは隠さない（荒らしに使われないように）。
-    const line = await lineId(lineKey(rawIp), env.IP_HASH_KEY);
-    const r = await stub.requestRemoval(at.lat, at.lon, at.kind, line, now);
+    // 削除の依頼（場所と種類だけ。自由記述なし）。地図に出ている場所だけを、場所ごとにまとめて運営の列に入れる。依頼だけでは隠さない。
+    const r = await stub.requestRemoval(at.lat, at.lon, at.kind, await tag(disputeKey(rawIp)), now, cutoff);
     return reportJson(r.ok ? 200 : 429, r, origin);
   }
   if (url.pathname !== "/api/reports") return reportJson(404, { error: "not found" }, origin);
-  const line = await lineId(lineKey(rawIp), env.IP_HASH_KEY);
-  const mark = await lineId(`${lineKey(rawIp)}|${place}`, env.IP_HASH_KEY);
+  const line = await tag(lineKey(rawIp));
+  const mark = await tag(`${lineKey(rawIp)}|${place}`);
   const r = await stub.addReport(line, mark, at.lat, at.lon, at.kind, now, REPORT_PER_IP_DAY, REPORT_DAYS);
   return reportJson(r.ok ? 200 : 429, r, origin);
 }
@@ -511,21 +523,16 @@ export class Limiter extends DurableObject {
     ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS road_reports (ts INTEGER NOT NULL, lat REAL NOT NULL, lon REAL NOT NULL, kind TEXT NOT NULL)");
     ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS road_reports_ts ON road_reports (ts)");
     ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS road_reports_place ON road_reports (lat, lon, kind)");
-    // 1日の上限: (回線, 時刻) だけ。重複: HMAC(回線|場所|種類) と時刻だけ。回線と場所を同じ行に並べない。30日で消す。
-    ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS report_quota2 (ip TEXT NOT NULL, ts INTEGER NOT NULL)");
-    ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS report_quota2_ip ON report_quota2 (ip, ts)");
-    ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS report_quota2_ts ON report_quota2 (ts)");
-    ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS report_dedup (mark TEXT PRIMARY KEY, ts INTEGER NOT NULL)");
-    ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS report_dedup_ts ON report_dedup (ts)");
-    // 「違う」: 場所・種類ごとの数は (場所, HMAC(回線|場所|種類))。1日の上限は (回線, 時刻) だけ。30日で消す。
-    ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS report_disputes3 (lat REAL NOT NULL, lon REAL NOT NULL, kind TEXT NOT NULL, mark TEXT NOT NULL, ts INTEGER NOT NULL, PRIMARY KEY (lat, lon, kind, mark))");
-    ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS report_disputes3_ts ON report_disputes3 (ts)");
-    ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS dispute_quota (ip TEXT NOT NULL, ts INTEGER NOT NULL)");
-    ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS dispute_quota_ip ON dispute_quota (ip, ts)");
+    // 上限は「回線ごと・1時間ごとの数」だけを持つ（1回ごとの時刻を残さず、ほかの記録と時刻で突き合わせられないように）。
+    ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS road_quota (kind TEXT NOT NULL, ip TEXT NOT NULL, hour INTEGER NOT NULL, n INTEGER NOT NULL, PRIMARY KEY (kind, ip, hour)) WITHOUT ROWID");
+    // 重複の見分けと「違う」は、鍵つきの値と日付（日に丸める）だけ。
+    ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS road_dedup (mark TEXT PRIMARY KEY, day INTEGER NOT NULL) WITHOUT ROWID");
+    ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS road_disputes (lat REAL NOT NULL, lon REAL NOT NULL, kind TEXT NOT NULL, mark TEXT NOT NULL, day INTEGER NOT NULL, PRIMARY KEY (lat, lon, kind, mark)) WITHOUT ROWID");
     ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS report_hidden (lat REAL NOT NULL, lon REAL NOT NULL, kind TEXT NOT NULL, PRIMARY KEY (lat, lon, kind))");
-    // 削除の依頼（場所と種類だけ）。運営が確かめる。依頼の上限は (回線, 時刻)。
-    ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS removal_requests (lat REAL NOT NULL, lon REAL NOT NULL, kind TEXT NOT NULL, ts INTEGER NOT NULL)");
-    ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS removal_quota (ip TEXT NOT NULL, ts INTEGER NOT NULL)");
+    // 削除の依頼は場所・種類ごとにまとめ、件数と最後の日だけ。
+    ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS road_removals (lat REAL NOT NULL, lon REAL NOT NULL, kind TEXT NOT NULL, n INTEGER NOT NULL, day INTEGER NOT NULL, PRIMARY KEY (lat, lon, kind)) WITHOUT ROWID");
+    // 前の版の表（使っていない）は、作られていれば消す。
+    for (const t of ["report_quota2", "report_dedup", "report_disputes3", "dispute_quota", "removal_requests", "removal_quota"]) ctx.storage.sql.exec(`DROP TABLE IF EXISTS ${t}`);
     // 試しの版の名前の表（使っていない）は、作られていれば消す。
     ctx.storage.sql.exec("DROP TABLE IF EXISTS report_quota");
     ctx.storage.sql.exec("DROP TABLE IF EXISTS report_disputes2");
@@ -539,77 +546,99 @@ export class Limiter extends DurableObject {
     if (now - this.cleanedAt < 3600_000) return;
     this.cleanedAt = now;
     const sql = this.ctx.storage.sql;
-    const d30 = now - 30 * 86400_000;
-    sql.exec("DELETE FROM report_quota2 WHERE ts < ?", d30);
-    sql.exec("DELETE FROM report_dedup WHERE ts < ?", now - keepDays * 86400_000);
-    sql.exec("DELETE FROM report_disputes3 WHERE ts < ?", d30);
-    sql.exec("DELETE FROM dispute_quota WHERE ts < ?", d30);
-    sql.exec("DELETE FROM removal_quota WHERE ts < ?", d30);
+    sql.exec("DELETE FROM road_quota WHERE hour < ?", hourOf(now) - 48);
+    sql.exec("DELETE FROM road_dedup WHERE day < ?", dayOf(now - keepDays * 86400_000));
+    sql.exec("DELETE FROM road_disputes WHERE day < ?", dayOf(now - 30 * 86400_000));
+    sql.exec("DELETE FROM road_removals WHERE day < ?", dayOf(now - 30 * 86400_000));
     sql.exec("DELETE FROM road_reports WHERE ts < ?", now - keepDays * 86400_000);
+  }
+
+  /** 回線ごとの直近24時間の数を見て、上限の内なら1つ数える。 */
+  private take(kind: string, ip: string, now: number, perDay: number): boolean {
+    const sql = this.ctx.storage.sql;
+    const h = hourOf(now);
+    const used = (sql.exec("SELECT COALESCE(SUM(n), 0) AS c FROM road_quota WHERE kind = ? AND ip = ? AND hour > ?", kind, ip, h - 24).one().c as number) ?? 0;
+    if (used >= perDay) return false;
+    sql.exec("INSERT INTO road_quota (kind, ip, hour, n) VALUES (?, ?, ?, 1) ON CONFLICT (kind, ip, hour) DO UPDATE SET n = n + 1", kind, ip, h);
+    return true;
+  }
+
+  /** 地図に出している場所か（区切りより前の投稿があり、運営が隠していない）。 */
+  private published(lat: number, lon: number, kind: string, cutoff: number): boolean {
+    const sql = this.ctx.storage.sql;
+    const row = sql
+      .exec(
+        "SELECT 1 AS x FROM road_reports r WHERE r.lat = ? AND r.lon = ? AND r.kind = ? AND r.ts < ? " +
+          "AND NOT EXISTS (SELECT 1 FROM report_hidden h WHERE h.lat = r.lat AND h.lon = r.lon AND h.kind = r.kind) LIMIT 1",
+        lat, lon, kind, cutoff,
+      )
+      .toArray()[0];
+    return !!row;
   }
 
   /** 道の状態の投稿を足す。1つの回線あたり1日 perDay 件まで。同じ回線・同じ場所・同じ種類は投稿を残す間1回だけ数える。 */
   addReport(line: string, mark: string, lat: number, lon: number, kind: string, now: number, perDay: number, keepDays: number): { ok: boolean; error?: string } {
     const sql = this.ctx.storage.sql;
     this.cleanup(now, keepDays);
-    const n = sql.exec("SELECT COUNT(*) AS c FROM report_quota2 WHERE ip = ? AND ts > ?", line, now - 86400_000).one().c as number;
-    if (n >= perDay) return { ok: false, error: "limit" };
-    sql.exec("INSERT INTO report_quota2 (ip, ts) VALUES (?, ?)", line, now);
-    const dup = sql.exec("SELECT 1 AS x FROM report_dedup WHERE mark = ?", mark).toArray()[0];
+    if (!this.take("post", line, now, perDay)) return { ok: false, error: "limit" };
+    const dup = sql.exec("SELECT 1 AS x FROM road_dedup WHERE mark = ?", mark).toArray()[0];
     if (dup) return { ok: true };
-    sql.exec("INSERT INTO report_dedup (mark, ts) VALUES (?, ?)", mark, now);
-    sql.exec("INSERT INTO road_reports (ts, lat, lon, kind) VALUES (?, ?, ?, ?)", now, lat, lon, kind);
+    sql.exec("INSERT INTO road_dedup (mark, day) VALUES (?, ?)", mark, dayOf(now));
+    // 投稿の時刻は1時間に丸めて残す（ほかの記録と細かい時刻で突き合わせられないように）。
+    sql.exec("INSERT INTO road_reports (ts, lat, lon, kind) VALUES (?, ?, ?, ?)", hourOf(now) * 3600_000, lat, lon, kind);
     return { ok: true };
   }
 
   /**
-   * 地図に出す一覧。場所・種類ごとに、件数と最後の日（日に丸める）だけ。
-   * 出さない物: 「違う」の数が max(3, その場所の件数) に届いた物・運営が隠した物・1件だけで投稿から delayMs たっていない物。
-   * 出さない物を先に除いてから上限の件数で切る（偽の投稿の山で本物が押し出されないよう、2件以上の場所を先に並べる）。
+   * 地図に出す一覧。区切り（日本時間の今日の0時）より前の投稿だけを、場所・種類ごとの件数と最後の日（日に丸める）にまとめる。
+   * 出さない物: 「違う」の数が max(3, その場所の件数) に届いた物・運営が隠した物。
+   * 出さない物を先に除いてから上限の件数で切る（偽の投稿の山で本物が押し出されにくいよう、件数の多い場所を先に並べる）。
    */
-  listReports(since: number, now: number, delayMs: number): Record<string, unknown>[] {
+  listReports(since: number, now: number, cutoff: number): Record<string, unknown>[] {
     const sql = this.ctx.storage.sql;
-    this.cleanup(now, 90);
+    this.cleanup(now, Math.round((now - since) / 86400_000));
     const rows = sql
       .exec(
         "SELECT g.lat AS lat, g.lon AS lon, g.kind AS kind, g.count AS count, g.last AS last FROM (" +
-          "SELECT r.lat AS lat, r.lon AS lon, r.kind AS kind, COUNT(*) AS count, MAX(r.ts) AS last, MIN(r.ts) AS first, " +
-          "(SELECT COUNT(*) FROM report_disputes3 d WHERE d.lat = r.lat AND d.lon = r.lon AND d.kind = r.kind) AS disputes " +
-          "FROM road_reports r WHERE r.ts >= ? GROUP BY r.lat, r.lon, r.kind) AS g " +
-          "WHERE g.disputes < MAX(3, g.count) AND (g.count >= 2 OR g.first < ?) " +
+          "SELECT r.lat AS lat, r.lon AS lon, r.kind AS kind, COUNT(*) AS count, MAX(r.ts) AS last, " +
+          "(SELECT COUNT(*) FROM road_disputes d WHERE d.lat = r.lat AND d.lon = r.lon AND d.kind = r.kind) AS disputes " +
+          "FROM road_reports r WHERE r.ts >= ? AND r.ts < ? GROUP BY r.lat, r.lon, r.kind) AS g " +
+          "WHERE g.disputes < MAX(3, g.count) " +
           "AND NOT EXISTS (SELECT 1 FROM report_hidden h WHERE h.lat = g.lat AND h.lon = g.lon AND h.kind = g.kind) " +
           "ORDER BY (g.count >= 2) DESC, g.last DESC LIMIT 3000",
         since,
-        now - delayMs,
+        cutoff,
       )
       .toArray() as { lat: number; lon: number; kind: string; count: number; last: number }[];
-    return rows.map((r) => ({ lat: r.lat, lon: r.lon, kind: r.kind, count: r.count, last: Math.floor(r.last / 86400_000) * 86400_000 }));
+    return rows.map((r) => ({ lat: r.lat, lon: r.lon, kind: r.kind, count: r.count, last: dayOf(r.last) }));
   }
 
-  /** 「違う」を1つ数える（投稿のある場所だけ。同じ回線・同じ場所・同じ種類は1回。1つの回線から1日 perDay 回まで）。 */
-  disputeReport(lat: number, lon: number, kind: string, line: string, mark: string, now: number, perDay: number): { ok: boolean; error?: string } {
-    const sql = this.ctx.storage.sql;
-    const exists = sql.exec("SELECT 1 AS x FROM road_reports WHERE lat = ? AND lon = ? AND kind = ? LIMIT 1", lat, lon, kind).toArray()[0];
-    if (!exists) return { ok: false, error: "none" };
-    const n = sql.exec("SELECT COUNT(*) AS c FROM dispute_quota WHERE ip = ? AND ts > ?", line, now - 86400_000).one().c as number;
-    if (n >= perDay) return { ok: false, error: "limit" };
-    sql.exec("INSERT INTO dispute_quota (ip, ts) VALUES (?, ?)", line, now);
-    sql.exec("INSERT OR IGNORE INTO report_disputes3 (lat, lon, kind, mark, ts) VALUES (?, ?, ?, ?, ?)", lat, lon, kind, mark, now);
+  /**
+   * 「違う」を1つ数える。回数は先に数え、地図に出している場所の時だけ記録する。
+   * 返事は、投稿があってもなくても同じ（まだ出ていない投稿・隠した投稿があるかを探れないように）。
+   */
+  disputeReport(lat: number, lon: number, kind: string, line: string, mark: string, now: number, cutoff: number, perDay: number): { ok: boolean; error?: string } {
+    if (!this.take("dispute", line, now, perDay)) return { ok: false, error: "limit" };
+    if (this.published(lat, lon, kind, cutoff)) {
+      this.ctx.storage.sql.exec("INSERT OR IGNORE INTO road_disputes (lat, lon, kind, mark, day) VALUES (?, ?, ?, ?, ?)", lat, lon, kind, mark, dayOf(now));
+    }
     return { ok: true };
   }
 
-  /** 削除の依頼を受ける（1つの回線から1日5回まで）。運営が removalRequests で見て、隠す・消すを決める。 */
-  requestRemoval(lat: number, lon: number, kind: string, line: string, now: number): { ok: boolean; error?: string } {
-    const sql = this.ctx.storage.sql;
-    const n = sql.exec("SELECT COUNT(*) AS c FROM removal_quota WHERE ip = ? AND ts > ?", line, now - 86400_000).one().c as number;
-    if (n >= 5) return { ok: false, error: "limit" };
-    sql.exec("INSERT INTO removal_quota (ip, ts) VALUES (?, ?)", line, now);
-    sql.exec("INSERT INTO removal_requests (lat, lon, kind, ts) VALUES (?, ?, ?, ?)", lat, lon, kind, now);
+  /** 削除の依頼を受ける（1つの回線から1日5回まで）。地図に出している場所だけを、場所ごとにまとめて数える。返事は同じ。 */
+  requestRemoval(lat: number, lon: number, kind: string, line: string, now: number, cutoff: number): { ok: boolean; error?: string } {
+    if (!this.take("removal", line, now, 5)) return { ok: false, error: "limit" };
+    if (this.published(lat, lon, kind, cutoff)) {
+      this.ctx.storage.sql.exec(
+        "INSERT INTO road_removals (lat, lon, kind, n, day) VALUES (?, ?, ?, 1, ?) ON CONFLICT (lat, lon, kind) DO UPDATE SET n = n + 1, day = excluded.day",
+        lat, lon, kind, dayOf(now),
+      );
+    }
     return { ok: true };
   }
 
   removalRequests(): Record<string, unknown>[] {
-    return this.ctx.storage.sql.exec("SELECT lat, lon, kind, ts FROM removal_requests ORDER BY ts DESC LIMIT 200").toArray() as Record<string, unknown>[];
+    return this.ctx.storage.sql.exec("SELECT lat, lon, kind, n, day FROM road_removals ORDER BY n DESC, day DESC LIMIT 200").toArray() as Record<string, unknown>[];
   }
 
   /** 運営の操作: hide（隠す）・unhide（戻す。「違う」も消す）・delete（その場所・種類の投稿を消す）。依頼の列からも外す。 */
@@ -618,14 +647,13 @@ export class Limiter extends DurableObject {
     if (action === "hide") sql.exec("INSERT OR REPLACE INTO report_hidden (lat, lon, kind) VALUES (?, ?, ?)", lat, lon, kind);
     if (action === "unhide") {
       sql.exec("DELETE FROM report_hidden WHERE lat = ? AND lon = ? AND kind = ?", lat, lon, kind);
-      sql.exec("DELETE FROM report_disputes3 WHERE lat = ? AND lon = ? AND kind = ?", lat, lon, kind);
+      sql.exec("DELETE FROM road_disputes WHERE lat = ? AND lon = ? AND kind = ?", lat, lon, kind);
     }
     if (action === "delete") {
       sql.exec("DELETE FROM road_reports WHERE lat = ? AND lon = ? AND kind = ?", lat, lon, kind);
-      sql.exec("DELETE FROM report_disputes3 WHERE lat = ? AND lon = ? AND kind = ?", lat, lon, kind);
+      sql.exec("DELETE FROM road_disputes WHERE lat = ? AND lon = ? AND kind = ?", lat, lon, kind);
     }
-    sql.exec("DELETE FROM removal_requests WHERE lat = ? AND lon = ? AND kind = ?", lat, lon, kind);
-    listMemo = null;
+    sql.exec("DELETE FROM road_removals WHERE lat = ? AND lon = ? AND kind = ?", lat, lon, kind);
     return { ok: true, action };
   }
 

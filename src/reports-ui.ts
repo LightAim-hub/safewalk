@@ -91,7 +91,7 @@ export function showReportPopup(f: maplibregl.MapGeoJSONFeature): void {
         return void popup?.remove();
       }
       if (!r.ok) throw new Error("dispute");
-      toast("知らせました。「違う」が投稿の数に届くと、出さなくなります（1分ほどで反映）");
+      toast("知らせました。「違う」が投稿の数に届くと、出さなくなります");
       void loadReports();
     } catch {
       toast("今は送れませんでした");
@@ -105,7 +105,7 @@ export function showReportPopup(f: maplibregl.MapGeoJSONFeature): void {
     removal.disabled = true;
     try {
       const r = await fetch(`${REPORTS_URL}/removal`, { method: "POST", body: JSON.stringify({ lat: Number(p.lat), lon: Number(p.lon), kind: p.kind }), headers: { "content-type": "text/plain" } });
-      toast(r.ok ? "削除の依頼を受け付けました。運営が確かめて対応します" : r.status === 429 ? "今日の依頼の上限に達しました" : "今は送れませんでした");
+      toast(r.ok ? "削除の依頼を受け付けました。運営が確かめて対応します（反映まで数分かかります）" : r.status === 429 ? "今日の依頼の上限に達しました" : "今は送れませんでした");
     } catch {
       toast("今は送れませんでした");
     }
@@ -132,7 +132,7 @@ export function openReportDialog(at: { lat: number; lon: number }, opener?: HTML
   const note = el(
     "p",
     "menu-note",
-    "この投稿は地図の上に公開されます。自宅など、個人の場所が分かる所からは書き込まないでください。決まった選択肢だけを選べます。事件・事故・人については書けません。場所はいちばん近い道の上に寄せ、地図には日付までを出します。その場所への最初の1件は、24時間たってから地図に出ます。",
+    "この投稿は地図の上に公開されます。自宅など、個人の場所が分かる所からは書き込まないでください。決まった選択肢だけを選べます。事件・事故・人については書けません。場所はいちばん近い道の上に寄せ、地図には日付までを出します。投稿は、翌日の0時にまとめて地図に出ます。",
   );
   const list = el("div", "report-kinds");
   const close = () => {
@@ -150,7 +150,7 @@ export function openReportDialog(at: { lat: number; lon: number }, opener?: HTML
         else if (res.status === 400) toast("この場所には投稿できませんでした（神戸市の中だけです）");
         else if (!res.ok) toast("今は投稿できませんでした。少し置いてからお試しください");
         else {
-          toast("投稿しました。確かめていない情報として地図に出ます（その場所への最初の1件は24時間後から）");
+          toast("投稿しました。翌日の0時に、確かめていない情報として地図に出ます");
           window.setTimeout(() => void loadReports(), 65000);
         }
       } catch {

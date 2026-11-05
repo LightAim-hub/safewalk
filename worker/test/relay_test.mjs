@@ -86,7 +86,7 @@ const wrangler = spawn(
     "--var", "DAILY_LIMIT:9",
     "--var", "IP_DAY_LIMIT:60",
     "--var", "IP_HASH_KEY:local-test-key-0123456789abcdef0123456789",
-    "--var", "REPORT_SINGLE_DELAY_MS:0",
+    "--var", "REPORT_PUBLISH_NOW:1",
   ],
   { cwd: root, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, WRANGLER_SEND_METRICS: "false", CI: "1" } },
 );
@@ -235,7 +235,8 @@ try {
   check("投稿: 1件の場所は別の回線の「違う」3つで出さない", find(34.74, 135.24, "nolight") === undefined, JSON.stringify(find(34.74, 135.24, "nolight")));
   check("投稿: 4つの回線が入れた場所は「違う」3つでは消えない", find(34.72, 135.22, "surface")?.count === 4, JSON.stringify(find(34.72, 135.22, "surface")));
   check("投稿: IPv6 は先頭64ビットで1つの回線", find(34.73, 135.23, "dark")?.count === 1, JSON.stringify(find(34.73, 135.23, "dark")));
-  check("投稿: 投稿の無い場所への「違う」は 404（先回りで隠せない）", (await rep("/dispute", { lat: 34.75, lon: 135.25, kind: "dark" }, { ip: "6.6.9.1" })).status === 404);
+  const none = await rep("/dispute", { lat: 34.75, lon: 135.25, kind: "dark" }, { ip: "6.6.9.1" });
+  check("投稿: 投稿の無い場所への「違う」も同じ返事（投稿の有無を探れない）", none.status === 200 && none.json?.ok === true, none.text);
   check("投稿: 削除の依頼は受け付ける（場所と種類だけ）", (await rep("/removal", { lat: 34.6946, lon: 135.1955, kind: "dark" }, { ip: "6.6.9.2" })).json?.ok === true);
   check("投稿: 運営の操作は合言葉なしで 404", (await rep("/admin", { action: "delete", lat: 34.70, lon: 135.20, kind: "bikes" })).status === 404);
   for (let i = 0; i < 20; i++) await rep("", { lat: 34.60 + i / 1000, lon: 135.19, kind: "narrow" }, { ip: "7.7.7.7" });
