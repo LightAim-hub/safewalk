@@ -99,7 +99,7 @@ export function showReportPopup(f: maplibregl.MapGeoJSONFeature): void {
     popup?.remove();
   });
   // 削除の依頼は、場所と種類だけをアプリから送る（公開の場に場所を書かずに済むように）。運営が確かめて消す。
-  const removal = el("button", "plain report-removal", "削除を依頼する（自宅の前など）");
+  const removal = el("button", "secondary report-removal", "削除を依頼する（自宅の前など）");
   removal.type = "button";
   removal.addEventListener("click", async () => {
     removal.disabled = true;
@@ -160,7 +160,7 @@ export function openReportDialog(at: { lat: number; lon: number }, opener?: HTML
     });
     list.append(b);
   }
-  const cancel = el("button", "plain", "やめる");
+  const cancel = el("button", "secondary", "やめる");
   cancel.type = "button";
   cancel.addEventListener("click", close);
   back.addEventListener("click", (e) => {
