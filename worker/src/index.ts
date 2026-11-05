@@ -228,7 +228,7 @@ export default {
     try {
       const stub = env.LIMITER.get(env.LIMITER.idFromName("global"));
       if (!usableKey(env.IP_HASH_KEY)) return json(503, MSG.limiterDown, origin);
-      const r = await stub.hit(await lineId(ip, env.IP_HASH_KEY), Date.now(), limits);
+      const r = await stub.hit(await lineId(lineKey(ip), env.IP_HASH_KEY), Date.now(), limits);
       if (!r.ok) {
         const retry = r.reason === "ip10" ? "600" : "3600";
         return json(429, r.reason === "daily" ? MSG.daily : r.reason === "ipDay" ? MSG.ipDay : MSG.ip10, origin, { "retry-after": retry });
@@ -273,6 +273,12 @@ function expandIp(ip: string): string {
 }
 
 /** 上限から外す回線か。IPv4 は完全一致、IPv6 は同じ家の端末どうしで変わらない先頭 64 ビット(4組)で比べる。 */
+/** 回線を数える単位。IPv6 は家や1台の機械が先頭64ビットの中で番号を自由に変えられるので、先頭64ビットでまとめる。 */
+export function lineKey(ip: string): string {
+  const e = expandIp(ip);
+  return e.includes(":") ? e.split(":").slice(0, 4).join(":") + "::/64" : e;
+}
+
 export function isUnlimited(ip: string, list: string | undefined): boolean {
   if (!list || !ip || ip === "unknown") return false;
   const key = (x: string) => {
@@ -334,7 +340,7 @@ async function handleLog(request: Request, env: Env, origin: string | null, allo
   if (!sid || !rows.length) return new Response(null, { status: 204, headers: h });
   try {
     if (!usableKey(env.IP_HASH_KEY)) return new Response(null, { status: 204, headers: h });
-    const ip = await lineId(request.headers.get("cf-connecting-ip") ?? "unknown", env.IP_HASH_KEY);
+    const ip = await lineId(lineKey(request.headers.get("cf-connecting-ip") ?? "unknown"), env.IP_HASH_KEY);
     const stub = env.LIMITER.get(env.LIMITER.idFromName("global"));
     await stub.log(ip, sid, dev, rows, now, LOG_PER_IP_DAY);
   } catch {
@@ -405,7 +411,7 @@ async function handleReportsInner(request: Request, env: Env, url: URL, origin: 
     return reportJson(400, { error: "json" }, origin);
   }
   if (!isObj(body)) return reportJson(400, { error: "body" }, origin);
-  const ip = await lineId(request.headers.get("cf-connecting-ip") ?? "unknown", env.IP_HASH_KEY);
+  const ip = await lineId(lineKey(request.headers.get("cf-connecting-ip") ?? "unknown"), env.IP_HASH_KEY);
   if (url.pathname === "/api/reports/dispute") {
     const id = typeof body.id === "string" ? body.id.replace(/[^a-z0-9]/gi, "").slice(0, 24) : "";
     if (!id) return reportJson(400, { error: "id" }, origin);
