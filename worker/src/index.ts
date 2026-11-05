@@ -504,7 +504,7 @@ async function handleReportsInner(request: Request, env: Env, url: URL, origin: 
   const line48 = await tag(`48|${disputeKey(rawIp)}`);
   const mark = await tag(`${lineKey(rawIp)}|${place}`);
   const r = await stub.addReport(line, line48, mark, at.lat, at.lon, at.kind, now, REPORT_PER_IP_DAY, REPORT_PER_48_DAY, NEW_PLACES_PER_DAY, REPORT_DAYS);
-  return reportJson(r.ok ? 200 : 429, r, origin);
+  return reportJson(r.ok ? 200 : r.error === "busy" ? 503 : 429, r, origin);
 }
 
 // ---------------------------------------------------------------- 回数の数え方
@@ -555,6 +555,11 @@ export class Limiter extends DurableObject {
     sql.exec("DELETE FROM road_reports WHERE ts < ?", now - keepDays * 86400_000);
   }
 
+  /** 回線ごとの直近24時間の数。 */
+  private used(kind: string, ip: string, now: number): number {
+    return (this.ctx.storage.sql.exec("SELECT COALESCE(SUM(n), 0) AS c FROM road_quota WHERE kind = ? AND ip = ? AND hour > ?", kind, ip, hourOf(now) - 24).one().c as number) ?? 0;
+  }
+
   /** 回線ごとの直近24時間の数を見て、上限の内なら1つ数える。 */
   private take(kind: string, ip: string, now: number, perDay: number): boolean {
     const sql = this.ctx.storage.sql;
@@ -582,13 +587,19 @@ export class Limiter extends DurableObject {
   addReport(line: string, line48: string, mark: string, lat: number, lon: number, kind: string, now: number, perDay: number, per48: number, newPlacesPerDay: number, keepDays: number): { ok: boolean; error?: string } {
     const sql = this.ctx.storage.sql;
     this.cleanup(now, keepDays);
-    if (!this.take("post", line, now, perDay)) return { ok: false, error: "limit" };
-    if (!this.take("post48", line48, now, per48)) return { ok: false, error: "limit" };
     const dup = sql.exec("SELECT 1 AS x FROM road_dedup WHERE mark = ?", mark).toArray()[0];
     if (dup) return { ok: true };
-    // まだ投稿の無い場所・種類は、全体で1日の上限まで（偽の場所の山で一覧が埋まらないように）。
+    // まだ投稿の無い場所・種類は、全体で1日の上限まで、1つの大きな回線(/48)からは1日5か所まで（偽の場所の山で一覧が埋まらないように）。
+    // 全体の上限は、回線ごとの数を減らす前に見る（断られた人が自分の上限まで失わないように）。
     const known = sql.exec("SELECT 1 AS x FROM road_reports WHERE lat = ? AND lon = ? AND kind = ? LIMIT 1", lat, lon, kind).toArray()[0];
-    if (!known && !this.take("newplace", "all", now, newPlacesPerDay)) return { ok: false, error: "busy" };
+    if (!known && this.used("newplace", "all", now) >= newPlacesPerDay) return { ok: false, error: "busy" };
+    if (!known && this.used("newplace48", line48, now) >= 5) return { ok: false, error: "limit" };
+    if (!this.take("post", line, now, perDay)) return { ok: false, error: "limit" };
+    if (!this.take("post48", line48, now, per48)) return { ok: false, error: "limit" };
+    if (!known) {
+      this.take("newplace", "all", now, newPlacesPerDay);
+      this.take("newplace48", line48, now, 5);
+    }
     sql.exec("INSERT INTO road_dedup (mark, day) VALUES (?, ?)", mark, dayOf(now));
     // 投稿の時刻は1時間に丸めて残す（ほかの記録と細かい時刻で突き合わせられないように）。
     sql.exec("INSERT INTO road_reports (ts, lat, lon, kind) VALUES (?, ?, ?, ?)", hourOf(now) * 3600_000, lat, lon, kind);
@@ -608,12 +619,11 @@ export class Limiter extends DurableObject {
         "SELECT g.lat AS lat, g.lon AS lon, g.kind AS kind, g.count AS count, g.last AS last FROM (" +
           "SELECT r.lat AS lat, r.lon AS lon, r.kind AS kind, COUNT(*) AS count, MAX(r.ts) AS last, " +
           "(SELECT COUNT(*) FROM road_disputes d WHERE d.lat = r.lat AND d.lon = r.lon AND d.kind = r.kind " +
-          "AND d.day >= (SELECT MAX(r2.ts) - (MAX(r2.ts) % 86400000) FROM road_reports r2 WHERE r2.lat = r.lat AND r2.lon = r.lon AND r2.kind = r.kind AND r2.ts < ?)) AS disputes " +
+          "AND d.day >= MAX(r.ts) - (MAX(r.ts) % 86400000)) AS disputes " +
           "FROM road_reports r WHERE r.ts >= ? AND r.ts < ? GROUP BY r.lat, r.lon, r.kind) AS g " +
           "WHERE g.disputes < MAX(3, g.count) " +
           "AND NOT EXISTS (SELECT 1 FROM report_hidden h WHERE h.lat = g.lat AND h.lon = g.lon AND h.kind = g.kind) " +
           "ORDER BY (g.count >= 2) DESC, g.last DESC LIMIT 3000",
-        cutoff,
         since,
         cutoff,
       )
@@ -628,7 +638,11 @@ export class Limiter extends DurableObject {
   disputeReport(lat: number, lon: number, kind: string, line: string, mark: string, now: number, cutoff: number, perDay: number): { ok: boolean; error?: string } {
     if (!this.take("dispute", line, now, perDay)) return { ok: false, error: "limit" };
     if (this.published(lat, lon, kind, cutoff)) {
-      this.ctx.storage.sql.exec("INSERT OR IGNORE INTO road_disputes (lat, lon, kind, mark, day) VALUES (?, ?, ?, ?, ?)", lat, lon, kind, mark, dayOf(now));
+      // 押し直したら日付を新しくする（新しい投稿で古い「違う」が数えられなくなっても、押し直せば数えられるように）。
+      this.ctx.storage.sql.exec(
+        "INSERT INTO road_disputes (lat, lon, kind, mark, day) VALUES (?, ?, ?, ?, ?) ON CONFLICT (lat, lon, kind, mark) DO UPDATE SET day = excluded.day",
+        lat, lon, kind, mark, dayOf(now),
+      );
     }
     return { ok: true };
   }

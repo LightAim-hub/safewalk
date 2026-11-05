@@ -276,7 +276,7 @@ export function showPlace(place: Place): void {
   // 号まで指定した住所・送られてきた地点では出さない（家1軒の位置に印を付けられないように）。
   // 最近の一覧・名前つきの共有リンクから開いた住所も、名前に「何番」「何号」が入っていれば同じに扱う。
   const pinpoint =
-    (place.kind ?? "").startsWith("住所") || place.name === "共有された地点" || /[0-9０-９]+番(地|[0-9０-９]+号)?$|[0-9０-９]+号$/.test(place.name);
+    (place.kind ?? "").startsWith("住所") || place.name === "共有された地点" || place.shared === true || /[0-9０-９]+番(地|[0-9０-９]+号)?$|[0-9０-９]+号$/.test(place.name);
   if (!pinpoint) {
     const report = el("button", "link report-open", "この場所の道の状態を投稿");
     report.type = "button";

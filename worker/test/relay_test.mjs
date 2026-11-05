@@ -239,6 +239,15 @@ try {
   check("投稿: 投稿の無い場所への「違う」も同じ返事（投稿の有無を探れない）", none.status === 200 && none.json?.ok === true, none.text);
   check("投稿: 削除の依頼は受け付ける（場所と種類だけ）", (await rep("/removal", { lat: 34.6946, lon: 135.1955, kind: "dark" }, { ip: "6.6.9.2" })).json?.ok === true);
   check("投稿: 運営の操作は合言葉なしで 404", (await rep("/admin", { action: "delete", lat: 34.70, lon: 135.20, kind: "bikes" })).status === 404);
+  // 新しい場所は、1つの回線から1日5か所まで
+  let np = [];
+  for (let i = 0; i < 6; i++) np.push((await rep("", { lat: 34.62 + i / 1000, lon: 135.12, kind: "bikes" }, { ip: "4.4.4.4" })).status);
+  check("投稿: 新しい場所は1つの回線から1日5か所まで（6か所目は 429）", np.slice(0, 5).every((x) => x === 200) && np[5] === 429, np.join(","));
+  // 既にある場所への投稿は、新しい場所の上限に数えない（別の回線が先に入れた場所）
+  for (let i = 0; i < 3; i++) await rep("", { lat: 34.63 + i / 1000, lon: 135.13, kind: "dark" }, { ip: "4.4.5.5" });
+  np = [];
+  for (let i = 0; i < 3; i++) np.push((await rep("", { lat: 34.63 + i / 1000, lon: 135.13, kind: "dark" }, { ip: "4.4.4.4" })).status);
+  check("投稿: 既にある場所への投稿は、新しい場所の上限とは別", np.every((x) => x === 200), np.join(","));
   // IPv6 の /64 を使い分けても、/48 ごとに1日40件まで
   let last48 = 0;
   for (let i = 0; i < 41; i++) last48 = (await rep("", { lat: 34.80 + i / 1000, lon: 135.10, kind: "dark" }, { ip: `2001:db8:5:${i.toString(16)}::1` })).status;

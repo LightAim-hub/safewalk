@@ -148,6 +148,7 @@ export function openReportDialog(at: { lat: number; lon: number }, opener?: HTML
         const res = await fetch(REPORTS_URL, { method: "POST", body: JSON.stringify({ lat: at.lat, lon: at.lon, kind }), headers: { "content-type": "text/plain" } });
         if (res.status === 429) toast("今日の投稿の上限に達しました。明日またお願いします");
         else if (res.status === 400) toast("この場所には投稿できませんでした（神戸市の中だけです）");
+        else if (res.status === 503) toast("今日は新しい場所への投稿が混み合っています。明日またお願いします");
         else if (!res.ok) toast("今は投稿できませんでした。少し置いてからお試しください");
         else {
           toast("投稿しました。翌日の0時に、確かめていない情報として地図に出ます");

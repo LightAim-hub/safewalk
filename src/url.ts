@@ -219,7 +219,7 @@ export function applyUrl(): void {
     }
     if (place) {
       const name = q.get("name") || "共有された地点";
-      showPlace(matchPlace(name, place) ?? { ...place, name });
+      showPlace(matchPlace(name, place) ?? { ...place, name, shared: true });
     }
   }
   renderPeriod();
