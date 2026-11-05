@@ -1,3 +1,4 @@
+import { openReportDialog } from "./reports-ui";
 import { track } from "./telemetry";
 import * as maplibregl from "maplibre-gl";
 import { metres, type LatLon } from "./graph";
@@ -262,6 +263,11 @@ export function showPlace(place: Place): void {
   }
   const web = place.web ? externalLink(place.web) : null;
   if (web) info.append(infoRow("サイト", web));
+  // この場所の道の状態（暗い・段差など）を、決まった選択肢から投稿する。
+  const report = el("button", "link report-open", "この場所の道の状態を投稿");
+  report.type = "button";
+  report.addEventListener("click", () => openReportDialog(place, report));
+  info.append(report);
   const nearby = el("div", "chips inline");
   nearby.append(
     ...GENRES.slice(0, 6).map((genre) => {

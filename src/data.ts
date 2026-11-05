@@ -1,3 +1,4 @@
+import { getReports } from "./reports-ui";
 import { Graph, type Anchor, type LatLon } from "./graph";
 import { AccidentIndex, type Accidents, type Meta } from "./routes";
 import { MAX_SNAP_M } from "./app";
@@ -93,5 +94,5 @@ export function snap(p: LatLon): Anchor | null {
 
 /** Claude の道具(src/agent-tools.ts)に渡す文脈。loadData の後に呼ぶ。 */
 export function agentContext(): AgentContext {
-  return { graph, accidents, meta, names, safety, places, snap };
+  return { graph, accidents, meta, names, safety, places, snap, reports: getReports() };
 }

@@ -21,6 +21,7 @@ await esbuild.build({
       export { Graph } from ${JSON.stringify(path.join(root, "src/graph.ts").replace(/\\/g, "/"))};
       export { AccidentIndex } from ${JSON.stringify(path.join(root, "src/routes.ts").replace(/\\/g, "/"))};
       export { FIXED_SYSTEM, FIXED_TOOLS } from ${JSON.stringify(path.join(root, "worker/src/fixed.ts").replace(/\\/g, "/"))};
+      export { countReportsAlong } from ${JSON.stringify(path.join(root, "src/reports.ts").replace(/\\/g, "/"))};
       export { createSafety } from ${JSON.stringify(path.join(root, "src/safety.ts").replace(/\\/g, "/"))};
     `,
     resolveDir: root,
@@ -132,7 +133,7 @@ const thinking = { type: "thinking", thinking: "", signature: "sig-abc" };
   check("正常: 使用量を足し上げる", r.usage.input === 3000 && r.usage.output === 600);
   // 要求の形
   const q = calls[0];
-  check("要求: model・tools・output_config", q.model === M.AGENT_MODEL && q.tools.length === 3 && q.output_config.format.type === "json_schema" && q.output_config.effort === M.AGENT_EFFORT);
+  check("要求: model・tools・output_config", q.model === M.AGENT_MODEL && q.tools.length === 4 && q.output_config.format.type === "json_schema" && q.output_config.effort === M.AGENT_EFFORT);
   check("要求: 道具は strict で additionalProperties:false", q.tools.every((t) => t.strict === true && t.input_schema.additionalProperties === false));
   check("要求: tool_choice・thinking を送らない", !("tool_choice" in q) && !("thinking" in q));
   check("要求: 座標を Claude に渡していない(1回目の入力)", !/135\.\d{3}|34\.\d{3}/.test(JSON.stringify(q.messages)));
@@ -315,6 +316,19 @@ check("要約: 経路の本数(3本)は使ってよい数字", M.validateOutput(
 check("禁止語: 「身の危険を感じたら110番」は通す", M.forbiddenIn("身の危険を感じたら110番に電話してください") === null);
 check("禁止語: 「危険な道」は落とす", M.forbiddenIn("この先は危険な道です") === "危険");
 check("禁止語: 「救急安心センター」は通す", M.forbiddenIn("迷ったら #7119（救急安心センター）へ") === null);
+
+{
+  // 道の状態の投稿: 経路の近くの投稿を種類ごとに数え、出所を書く
+  const route = { coords: [[135.19, 34.69], [135.195, 34.69]] };
+  const near = [
+    { id: "a", lat: 34.6901, lon: 135.192, kind: "dark", ts: 0, disputes: 0 },
+    { id: "b", lat: 34.6902, lon: 135.193, kind: "dark", ts: 0, disputes: 0 },
+    { id: "c", lat: 34.6899, lon: 135.194, kind: "narrow", ts: 0, disputes: 0 },
+    { id: "d", lat: 34.70, lon: 135.192, kind: "dark", ts: 0, disputes: 0 },
+  ];
+  const counts = M.countReportsAlong(near, route.coords);
+  check("投稿: 経路の近くだけを種類ごとに数える", counts.get("dark") === 2 && counts.get("narrow") === 1, JSON.stringify([...counts]));
+}
 
 fs.rmSync(path.dirname(out), { recursive: true, force: true });
 // Worker に固定した system と tools が、ブラウザ側(agent.ts・agent-tools.ts)と同じ

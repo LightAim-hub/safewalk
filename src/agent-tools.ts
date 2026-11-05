@@ -1,3 +1,4 @@
+import { countReportsAlong, REPORT_KINDS, REPORT_LABEL, REPORT_NEAR_M, REPORT_SOURCE, type Report } from "./reports";
 /**
  * Claude に渡す道具の定義と実行。全てブラウザの中で動き、Claude には「要約した文」だけを返す。
  *
@@ -21,6 +22,8 @@ export type AgentContext = {
   safety: Safety;
   places: Place[];
   snap: (p: LatLon) => Anchor | null;
+  /** 利用者による道の状態の投稿（確かめていない）。無ければ数えない。 */
+  reports?: readonly Report[];
   /** 経路を作った直後に呼ぶ。画面の経路と数字を揃えるため、画面側が出発地・目的地までの区間を足す(directions.ts の connectEnds)。 */
   afterFind?: (routes: Route[]) => void;
 };
@@ -94,6 +97,17 @@ export const TOOLS = [
         genre: { type: "string", enum: [...PLACE_GENRES.map((g) => g.label), LATE_GENRE] },
       },
       required: ["route_index", "genre"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "reports_along",
+    description: `経路から${REPORT_NEAR_M}m以内にある、利用者による道の状態の投稿(確かめていない情報)を種類ごとに数えて返す。種類は「夜は暗い」「街灯が無い・切れている」「路面の割れ・段差・隆起」「自転車がよく通る」「歩道が狭い・無い」だけ。事故の記録とは別の物で、段階や件数に混ぜない。使う時は「利用者の投稿（確かめていません）では」と出所を言う。`,
+    strict: true,
+    input_schema: {
+      type: "object",
+      properties: { route_index: { type: "integer", description: "find_routes が返した経路の番号(0 から)" } },
+      required: ["route_index"],
       additionalProperties: false,
     },
   },
@@ -287,6 +301,22 @@ function placesTool(s: ToolSession, idx: unknown, genre: unknown): ToolOutput {
   return ok({ route: routeName(i), genre }, facts);
 }
 
+function reportsTool(s: ToolSession, idx: unknown): ToolOutput {
+  const r = routeOf(s, idx);
+  if (typeof r === "string") return fail(r);
+  const i = idx as number;
+  const counts = countReportsAlong(s.ctx.reports ?? [], r.coords);
+  const facts: Fact[] = [];
+  const parts = REPORT_KINDS.filter((k) => counts.get(k)).map((k) => `${REPORT_LABEL[k]} ${counts.get(k)}件`);
+  facts.push({
+    id: `r${i}.reports`,
+    text: parts.length
+      ? `${routeName(i)}から${REPORT_NEAR_M}m以内の${REPORT_SOURCE}: ${parts.join("、")}`
+      : `${routeName(i)}から${REPORT_NEAR_M}m以内に、${REPORT_SOURCE}は無い`,
+  });
+  return ok({ route: routeName(i), note: "利用者の投稿は確かめていない情報。事故の記録とは別に扱う。" }, facts);
+}
+
 // ---------------------------------------------------------------- 実行
 
 export function executeTool(s: ToolSession, name: string, input: unknown): ToolOutput {
@@ -295,6 +325,7 @@ export function executeTool(s: ToolSession, name: string, input: unknown): ToolO
     if (name === "find_routes") return findRoutesTool(s);
     if (name === "assess_route") return assessTool(s, args.route_index);
     if (name === "places_along") return placesTool(s, args.route_index, args.genre);
+    if (name === "reports_along") return reportsTool(s, args.route_index);
   } catch (e) {
     return fail(`道具の実行に失敗しました: ${(e as Error).message}`);
   }

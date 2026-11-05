@@ -33,6 +33,18 @@ SafeWalk はこの壁を取り払います。
 犯罪の側は町丁目単位の件数しか無く、道ごとの精度を検証できていません。
 計算の方法・期間と単位・段階の境目の数字は、アプリの[説明ページ](public/safety.html)（`/safety.html`）にあります。
 
+## 利用者の投稿（道の状態）
+
+場所の画面の「この場所の道の状態を投稿」から、決まった5つだけを投稿できます。
+
+- 選べるのは、夜は暗い／街灯が無い・切れている／路面の割れ・段差・隆起／自転車がよく通る／歩道が狭い・無い。
+- 自由記述・事件・事故・人については書けません。
+- 地図には紫の印で「利用者の投稿（確かめていません）」として出し、事故の記録の段階や経路の重みには混ぜません。
+- 保存するのは、丸めた座標（約10m）・種類・日時だけです。投稿者は残しません
+  （1日の上限のため、回線を秘密の鍵で変えた値だけを数えます）。
+- 90日を過ぎた投稿と、別々の回線から「違う」が3つ付いた投稿は出しません。運営は不適切な投稿を消せます。
+- Claude の相談では `reports_along` の道具で経路沿いの投稿を数え、出所を言わせます。
+
 ## 緊急の時・災害の時
 
 「つけられている」「助けて」「倒れた」など緊急の言葉を事情に入れると、Claude の答えより上に、110・119・#7119（救急安心センター）と、
@@ -182,7 +194,7 @@ export PYTHONPATH=pipeline
 .venv/Scripts/python pipeline/03_cautions.py   # 注意書きと段階の境目: cautions.json（01・02・00 の出力を読む）
 .venv/Scripts/python pipeline/04_koban.py      # 近くの交番: koban.json
 .venv/Scripts/python pipeline/05_crime.py      # 夜の経路の費用に足す値: graph.bin の末尾に付ける（02 を作り直したら必ず実行し直す）
-.venv/Scripts/python pipeline/06_jusho.py      # 何番何号の位置: public/data/jusho/<区>.json（data/raw/jusho/<市区町村コード>.zip を国土地理院からダウンロードして置く）
+.venv/Scripts/python pipeline/06_jusho.py      # 何番何号の位置: jusho/<区>.json
 ```
 
 作り直した後は `npx tsc --noEmit`、`npm run build`、`python tools/check.py` で動きを確かめてください。

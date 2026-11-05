@@ -1,3 +1,4 @@
+import { addReportLayers, showReportPopup } from "./reports-ui";
 import type * as maplibregl from "maplibre-gl";
 import { type DataDrivenPropertyValueSpecification, type ExpressionSpecification, type GeoJSONSource } from "maplibre-gl";
 import { type LatLon } from "./graph";
@@ -158,6 +159,7 @@ export function addLayers(): void {
   map.addSource("accuracy", { type: "geojson", data: emptyCollection() });
   map.addSource("accidents", { type: "geojson", data: emptyCollection() });
   map.addSource("routes", { type: "geojson", data: emptyCollection() });
+  addReportLayers();
   map.addLayer({
     id: "kobe-line",
     type: "line",
@@ -279,6 +281,11 @@ export const DOUBLE_CLICK_MS = 260;
 /** 地図を1回押した時の処理。文字（駅・店など）の上なら、その種別とアイコンの位置で地点を開く。 */
 function pickAt(e: maplibregl.MapMouseEvent): void {
   const { x, y } = e.point;
+  // 利用者の投稿の印を押した時は、その中身を出す。
+  const rep = map.getLayer("report-dots")
+    ? map.queryRenderedFeatures([[x - 8, y - 8], [x + 8, y + 8]], { layers: ["report-dots"] })
+    : [];
+  if (rep.length) return showReportPopup(rep[0]);
   const labelled = map
     .queryRenderedFeatures([
       [x - 6, y - 6],

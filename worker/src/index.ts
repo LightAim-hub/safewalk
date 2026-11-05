@@ -65,7 +65,7 @@ function cors(origin: string | null): Record<string, string> {
   return origin && ALLOWED_ORIGINS.includes(origin)
     ? {
         "access-control-allow-origin": origin,
-        "access-control-allow-methods": "POST, OPTIONS",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
         "access-control-allow-headers": "content-type",
         "access-control-max-age": "600",
         vary: "Origin",
@@ -182,6 +182,7 @@ export default {
     const allowed = origin !== null && ALLOWED_ORIGINS.includes(origin);
 
     if (url.pathname === "/api/log") return handleLog(request, env, origin, allowed);
+    if (url.pathname.startsWith("/api/reports")) return handleReports(request, env, url, origin, allowed);
     if (url.pathname === "/api/log/read") return readLog(request, env, url);
     if (url.pathname !== "/api/claude") {
       return new Response("safewalk-claude relay", { status: url.pathname === "/" ? 200 : 404 });
@@ -289,7 +290,7 @@ const LOG_TYPES = new Set([
   "open", "ready", "load_error", "slow", "js_error", "offline", "sw_ready",
   "search", "search_none", "place", "route", "route_none", "period", "share",
   "guide_start", "guide_stop", "guide_arrive", "guide_reroute", "guide_lost", "guide_unsure",
-  "emergency", "consult", "consult_error", "consult_replaced", "locate", "locate_fail", "menu", "intro_start",
+  "emergency", "consult", "consult_error", "consult_replaced", "locate", "locate_fail", "menu", "intro_start", "report_add", "report_dispute",
 ]);
 const LOG_MAX_BODY = 16_000;
 const LOG_MAX_EVENTS = 60;
@@ -354,6 +355,63 @@ async function readLog(request: Request, env: Env, url: URL): Promise<Response> 
   return new Response(JSON.stringify(rows), { headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
 }
 
+
+// ---------------------------------------------------------------- 道の状態の投稿（利用者の投稿・確かめていない）
+// 書けるのは決まった5種類だけ。保存するのは丸めた座標（小数4桁≒10m）・種類・日時。投稿者は残さない
+// （1日の上限のため、回線を鍵つきで変えた値だけを数える）。
+const REPORT_KINDS = new Set(["dark", "nolight", "surface", "bikes", "narrow"]);
+const REPORT_PER_IP_DAY = 20;
+const REPORT_HIDE_DISPUTES = 3;
+const REPORT_DAYS = 90;
+// 神戸市の範囲（graph.meta.json の bbox と同じ）。外の点は受け付けない。
+const KOBE_BBOX = { s: 34.55, w: 134.9, n: 34.95, e: 135.38 };
+
+function reportJson(status: number, body: unknown, origin: string | null): Response {
+  return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...cors(origin) } });
+}
+
+async function handleReports(request: Request, env: Env, url: URL, origin: string | null, allowed: boolean): Promise<Response> {
+  const stub = env.LIMITER.get(env.LIMITER.idFromName("global"));
+  const now = Date.now();
+  // 運営の削除（合言葉が要る）。
+  if (url.pathname === "/api/reports/delete") {
+    const token = request.headers.get("x-log-token") ?? "";
+    if (!env.LOG_READ_TOKEN || token !== env.LOG_READ_TOKEN) return new Response("not found", { status: 404 });
+    const id = url.searchParams.get("id") ?? "";
+    return reportJson(200, { deleted: await stub.deleteReport(id) }, null);
+  }
+  if (!allowed) return new Response(null, { status: 403, headers: { vary: "Origin" } });
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(origin) });
+  if (request.method === "GET" && url.pathname === "/api/reports") {
+    return reportJson(200, await stub.listReports(now - REPORT_DAYS * 86400_000, REPORT_HIDE_DISPUTES), origin);
+  }
+  if (request.method !== "POST") return reportJson(405, { error: "method" }, origin);
+  if (!usableKey(env.IP_HASH_KEY)) return reportJson(503, { error: "unavailable" }, origin);
+  const text = await request.text();
+  if (text.length > 400) return reportJson(413, { error: "too big" }, origin);
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    return reportJson(400, { error: "json" }, origin);
+  }
+  if (!isObj(body)) return reportJson(400, { error: "body" }, origin);
+  const ip = await lineId(request.headers.get("cf-connecting-ip") ?? "unknown", env.IP_HASH_KEY);
+  if (url.pathname === "/api/reports/dispute") {
+    const id = typeof body.id === "string" ? body.id.replace(/[^a-z0-9]/gi, "").slice(0, 24) : "";
+    if (!id) return reportJson(400, { error: "id" }, origin);
+    return reportJson(200, await stub.disputeReport(id, ip), origin);
+  }
+  if (url.pathname !== "/api/reports") return reportJson(404, { error: "not found" }, origin);
+  const lat = Number(body.lat), lon = Number(body.lon), kind = String(body.kind ?? "");
+  if (!REPORT_KINDS.has(kind)) return reportJson(400, { error: "kind" }, origin);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < KOBE_BBOX.s || lat > KOBE_BBOX.n || lon < KOBE_BBOX.w || lon > KOBE_BBOX.e) {
+    return reportJson(400, { error: "place" }, origin);
+  }
+  const r = await stub.addReport(ip, Math.round(lat * 1e4) / 1e4, Math.round(lon * 1e4) / 1e4, kind, now, REPORT_PER_IP_DAY);
+  return reportJson(r.ok ? 200 : 429, r, origin);
+}
+
 // ---------------------------------------------------------------- 回数の数え方
 
 type Limits = { daily: number; ip10: number; ipDay: number };
@@ -371,6 +429,46 @@ export class Limiter extends DurableObject {
     ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS daily (day TEXT PRIMARY KEY, n INTEGER NOT NULL)");
     ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS events (ts INTEGER NOT NULL, ip TEXT NOT NULL, sid TEXT NOT NULL, type TEXT NOT NULL, detail TEXT NOT NULL, dev TEXT NOT NULL)");
     ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS events_ts ON events (ts)");
+    ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS reports (id TEXT PRIMARY KEY, ts INTEGER NOT NULL, lat REAL NOT NULL, lon REAL NOT NULL, kind TEXT NOT NULL, ip TEXT NOT NULL, disputes INTEGER NOT NULL DEFAULT 0)");
+    ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS report_disputes (id TEXT NOT NULL, ip TEXT NOT NULL, PRIMARY KEY (id, ip))");
+  }
+
+  /** 道の状態の投稿を足す。1つの回線(鍵つきで変えた値)あたり1日 perDay 件まで。 */
+  addReport(ip: string, lat: number, lon: number, kind: string, now: number, perDay: number): { ok: true; id: string } | { ok: false; error: string } {
+    const sql = this.ctx.storage.sql;
+    const n = sql.exec("SELECT COUNT(*) AS c FROM reports WHERE ip = ? AND ts > ?", ip, now - 86400_000).one().c as number;
+    if (n >= perDay) return { ok: false, error: "limit" };
+    const id = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+    sql.exec("INSERT INTO reports (id, ts, lat, lon, kind, ip) VALUES (?, ?, ?, ?, ?, ?)", id, now, lat, lon, kind, ip);
+    sql.exec("DELETE FROM reports WHERE ts < ?", now - 365 * 86400_000);
+    return { ok: true, id };
+  }
+
+  /** 見せる投稿（期間内・「違う」が少ない物）。投稿者の値は返さない。 */
+  listReports(since: number, hideAt: number): Record<string, unknown>[] {
+    return this.ctx.storage.sql.exec("SELECT id, ts, lat, lon, kind, disputes FROM reports WHERE ts >= ? AND disputes < ? ORDER BY ts DESC LIMIT 5000", since, hideAt).toArray() as Record<string, unknown>[];
+  }
+
+  /** 「違う」を1回数える（同じ回線から同じ投稿へは1回だけ）。 */
+  disputeReport(id: string, ip: string): { ok: boolean; disputes: number } {
+    const sql = this.ctx.storage.sql;
+    const exists = sql.exec("SELECT disputes FROM reports WHERE id = ?", id).toArray()[0];
+    if (!exists) return { ok: false, disputes: 0 };
+    const before = sql.exec("SELECT COUNT(*) AS c FROM report_disputes WHERE id = ? AND ip = ?", id, ip).one().c as number;
+    if (!before) {
+      sql.exec("INSERT INTO report_disputes (id, ip) VALUES (?, ?)", id, ip);
+      sql.exec("UPDATE reports SET disputes = disputes + 1 WHERE id = ?", id);
+    }
+    const d = sql.exec("SELECT disputes FROM reports WHERE id = ?", id).one().disputes as number;
+    return { ok: true, disputes: d };
+  }
+
+  deleteReport(id: string): boolean {
+    const sql = this.ctx.storage.sql;
+    const had = sql.exec("SELECT COUNT(*) AS c FROM reports WHERE id = ?", id).one().c as number;
+    sql.exec("DELETE FROM reports WHERE id = ?", id);
+    sql.exec("DELETE FROM report_disputes WHERE id = ?", id);
+    return had > 0;
   }
 
   /** 使われ方の記録を足す。1つの回線(元に戻せない短い値)あたり1日の件数に上限。30日より古い物は消す。 */

@@ -153,7 +153,7 @@ try {
   check("クライアントの Origin を上流へ渡さない", !up?.headers["origin"]);
   check("stream・fallbacks・metadata を落とす", up && !("stream" in up.body) && !("fallbacks" in up.body) && !("metadata" in up.body));
   check("ブラウザの system を使わず Worker の固定の文を送る", typeof up?.body.system === "string" && up.body.system !== "s" && up.body.system.includes("SafeWalk"), String(up?.body.system).slice(0, 40));
-  check("ブラウザの tools を使わず Worker の固定の道具を送る", up?.body.tools?.length === 3 && up.body.tools.every((t) => t.strict === true), JSON.stringify(up?.body.tools).slice(0, 80));
+  check("ブラウザの tools を使わず Worker の固定の道具を送る", up?.body.tools?.length === 4 && up.body.tools.every((t) => t.strict === true), JSON.stringify(up?.body.tools).slice(0, 80));
   check("応答に CORS が付く", r.headers.get("access-control-allow-origin") === OK_ORIGIN);
 
   // agent.ts が実際に送る形(output_config・strict の道具・tool_use の履歴)を通す
@@ -190,6 +190,33 @@ try {
   r = await call(goodBody(), { ip: "3.3.3.3" });
   check("全体の上限 -> 429(1日)", r.status === 429 && /今日の Claude/.test(r.json?.error?.message ?? ""), r.text);
   check("  上流への実際の呼び出しは 8 回", seen.length === 8, String(seen.length));
+
+  // --- 道の状態の投稿
+  const RB = `http://127.0.0.1:${WORKER_PORT}/api/reports`;
+  const rep = async (path, body, { origin = OK_ORIGIN, ip = "5.5.5.5", method = "POST" } = {}) => {
+    const headers = { "content-type": "text/plain", "cf-connecting-ip": ip };
+    if (origin) headers.origin = origin;
+    const res = await fetch(RB + path, { method, headers, body: method === "GET" ? undefined : JSON.stringify(body) });
+    const text = await res.text();
+    let json = null;
+    try { json = JSON.parse(text); } catch {}
+    return { status: res.status, json, text };
+  };
+  let q = await rep("", { lat: 34.69461234, lon: 135.19551234, kind: "dark" });
+  check("投稿: 正しい種類と神戸の中の点は受け付ける", q.status === 200 && q.json?.ok === true, q.text);
+  const rid = q.json?.id;
+  check("投稿: 決まっていない種類は 400", (await rep("", { lat: 34.69, lon: 135.19, kind: "crime" })).status === 400);
+  check("投稿: 神戸の外の点は 400", (await rep("", { lat: 35.0, lon: 135.5, kind: "dark" })).status === 400);
+  check("投稿: Origin なしは 403", (await rep("", { lat: 34.69, lon: 135.19, kind: "dark" }, { origin: null })).status === 403);
+  q = await rep("", null, { method: "GET" });
+  const got = (q.json ?? []).find((x) => x.id === rid);
+  check("投稿: 一覧に出る・座標は小数4桁に丸める", got && got.lat === 34.6946 && got.lon === 135.1955, q.text.slice(0, 200));
+  check("投稿: 一覧に投稿者の値は入らない", got && !("ip" in got), JSON.stringify(got));
+  for (const ip of ["6.6.6.1", "6.6.6.2", "6.6.6.2", "6.6.6.3"]) await rep("/dispute", { id: rid }, { ip });
+  q = await rep("", null, { method: "GET" });
+  check("投稿: 別の回線からの「違う」が3つで出さなくなる（同じ回線の2回目は数えない）", !(q.json ?? []).some((x) => x.id === rid), q.text.slice(0, 200));
+  for (let i = 0; i < 20; i++) await rep("", { lat: 34.69, lon: 135.19, kind: "narrow" }, { ip: "7.7.7.7" });
+  check("投稿: 1つの回線から1日20件を超えると 429", (await rep("", { lat: 34.69, lon: 135.19, kind: "narrow" }, { ip: "7.7.7.7" })).status === 429);
 } catch (e) {
   console.error(e);
   console.error(log.slice(-3000));

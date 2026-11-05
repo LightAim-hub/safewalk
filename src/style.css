@@ -1098,3 +1098,12 @@ body.rotated .maplibregl-ctrl-compass {
 body:has(.suggest:not([hidden]) li) .menu-btn {
   visibility: hidden;
 }
+
+/* 利用者による道の状態の投稿 */
+.report-kinds { display: grid; gap: 8px; margin: 8px 0; }
+.report-kinds button { min-height: 44px; text-align: left; }
+.report-pop { display: grid; gap: 4px; font-size: 0.875rem; }
+.report-pop .report-src { margin: 0; color: #6a3fb5; font-size: 0.75rem; font-weight: 700; }
+.report-pop p { margin: 0; }
+.report-pop button { min-height: 40px; margin-top: 4px; }
+.report-open { margin-top: 6px; padding: 8px 0; min-height: 44px; border: 0; background: none; color: var(--link, #1a73e8); text-decoration: underline; font-size: 0.875rem; }
