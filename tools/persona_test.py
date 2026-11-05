@@ -904,9 +904,14 @@ def run_persona(pw, browsers, p, base, shots):
             return
         if claude_expected and "/api/claude" in req.url:
             return
+        # 本物の中継（投稿・使われ方の記録）は、試験では止めている（上の ctx.route）。止めたことによる失敗は数えない。
+        if "workers.dev/api/reports" in req.url or "workers.dev/api/log" in req.url:
+            return
         run.add("失敗した通信", f"{req.method} {norm(req.url)} ({norm(err, 40)})")
 
     def on_response(resp):
+        if "workers.dev/api/log" in resp.url or "workers.dev/api/reports" in resp.url:
+            return
         if resp.status >= 400 and run.expect <= 0 and not (claude_expected and "/api/claude" in resp.url):
             run.add("失敗した通信", f"{resp.status} {norm(resp.url)}")
 
