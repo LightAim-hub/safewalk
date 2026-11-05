@@ -29,7 +29,8 @@ function serviceWorker(): Plugin {
       handler() {
         const files = walk(outDir).filter((f) => f !== "sw.js");
         // graph.ids.bin はアプリが読まない(pipeline の検証用)ので残さない。
-        const data = files.filter((f) => f.startsWith("data/") && f !== "data/graph.ids.bin").sort();
+        // 住居表示（何番何号）の位置は区ごとに約1MBあり、号まで入れて探した時に、その区の分だけを読む。端末に先に残さない。
+        const data = files.filter((f) => f.startsWith("data/") && f !== "data/graph.ids.bin" && !f.startsWith("data/jusho/")).sort();
         const app = files.filter((f) => !f.startsWith("data/")).sort();
         const hash = (list: string[]) => {
           const h = createHash("sha256");

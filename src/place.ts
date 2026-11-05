@@ -142,7 +142,7 @@ export function dayInRange(part: string, day: number): boolean {
 const NO_HOURS_KINDS = new Set(["地区", "住所", "郵便番号", "位置情報", "最近", "ジャンル", "駅", "バス停", "公園", "駐車場", "駐輪場", "史跡", "展望地", "観光", "名所", "寺社", "トイレ", "ATM"]);
 
 export function openState(place: Place): string {
-  if (!place.hours) return place.kind && !NO_HOURS_KINDS.has(place.kind) ? "営業時間の記録なし" : "";
+  if (!place.hours) return place.kind && !NO_HOURS_KINDS.has(place.kind) && !place.kind.startsWith("住所") ? "営業時間の記録なし" : "";
   const open = isOpen(place.hours);
   return open === null ? "" : open ? "営業中（記録上）" : "営業時間外（記録上）";
 }

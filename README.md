@@ -88,6 +88,7 @@ npm run dev
 | 夜間光（2023〜2025年） | 衛星 VIIRS 夜間光 年平均 V2.2（Earth Observation Group）を加工して作成 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/deed.ja) |
 | 道路網 | [OpenStreetMap](https://www.openstreetmap.org/copyright)（Geofabrik 抽出） | ODbL |
 | 地名・神戸市の行政界 | [OpenStreetMap](https://www.openstreetmap.org/copyright) | ODbL |
+| 何番何号の位置（住居表示） | [国土地理院「電子国土基本図（地名情報）住居表示住所」](https://saigai.gsi.go.jp/jusho/download/index.html)（2025-07-31 版）を区ごとに加工して作成（`public/data/jusho/`・`pipeline/06_jusho.py`）。住居表示が行われていない地域は入っていない | 国土地理院コンテンツ利用規約 |
 | 背景地図 | [OpenFreeMap](https://openfreemap.org/) / OpenMapTiles / OpenStreetMap | 各提供元の条件 |
 | 書体 | BIZ UDPゴシック（Morisawa / SIL OFL 1.1）。[Google Fonts の配布物](https://github.com/google/fonts/tree/main/ofl/bizudpgothic)から、使う文字だけに絞った woff2 を同梱（`public/fonts/`、全文 `public/fonts/OFL.txt`） | [SIL Open Font License 1.1](https://openfontlicense.org/) |
 | 住所検索 | [国土地理院 住所検索](https://msearch.gsi.go.jp/) | 国土地理院コンテンツ利用規約 |
@@ -181,6 +182,7 @@ export PYTHONPATH=pipeline
 .venv/Scripts/python pipeline/03_cautions.py   # 注意書きと段階の境目: cautions.json（01・02・00 の出力を読む）
 .venv/Scripts/python pipeline/04_koban.py      # 近くの交番: koban.json
 .venv/Scripts/python pipeline/05_crime.py      # 夜の経路の費用に足す値: graph.bin の末尾に付ける（02 を作り直したら必ず実行し直す）
+.venv/Scripts/python pipeline/06_jusho.py      # 何番何号の位置: public/data/jusho/<区>.json（data/raw/jusho/<市区町村コード>.zip を国土地理院からダウンロードして置く）
 ```
 
 作り直した後は `npx tsc --noEmit`、`npm run build`、`python tools/check.py` で動きを確かめてください。

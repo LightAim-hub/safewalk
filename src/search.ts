@@ -536,6 +536,57 @@ export function outsideName(query: string): string | null {
   return OUTSIDE_NAMES.find((n) => q.includes(n.normalize("NFKC"))) ?? null;
 }
 
+// ---------------------------------------------------------------- 住居表示（何丁目何番何号）
+
+type Jusho = Record<string, Record<string, Record<string, [number, number]>>>;
+const JUSHO_URL = new URL("data/jusho/", document.baseURI).href;
+const jushoCache = new Map<string, Promise<Jusho | null>>();
+function loadJusho(ward: string): Promise<Jusho | null> {
+  let p = jushoCache.get(ward);
+  if (!p) {
+    p = fetch(JUSHO_URL + encodeURIComponent(ward) + ".json")
+      .then((r) => (r.ok ? (r.json() as Promise<Jusho>) : null))
+      .catch(() => null);
+    jushoCache.set(ward, p);
+  }
+  return p;
+}
+
+const KANJI_DIGIT: Record<string, number> = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
+/** 「十二」→12 など（丁目は大きくても数十）。 */
+function kanjiNumber(t: string): number {
+  if (t.length === 1) return KANJI_DIGIT[t] ?? NaN;
+  if (t[0] === "十") return 10 + (KANJI_DIGIT[t[1]] ?? 0);
+  if (t[1] === "十") return KANJI_DIGIT[t[0]] * 10 + (KANJI_DIGIT[t[2]] ?? 0);
+  return NaN;
+}
+
+/**
+ * 国土地理院の住所検索は「何番」までしか返さない。入れた住所に「号」まであれば、住居表示住所（国土地理院）で号の位置に絞る。
+ * 例: 「中央区加納町4-5-12」→ 住所検索「加納町四丁目５番」＋ 号 12 → 加納町四丁目5番12号の位置。
+ * 住居表示が無い地域・号が見つからない時は null（「何番」のままにする）。
+ */
+export async function refineToGo(query: string, place: Place): Promise<Place | "noGo" | null> {
+  const m = place.name.normalize("NFKC").match(/神戸市(.+?区)(.+?)(?:([一二三四五六七八九十]+)丁目)?(\d+)番$/);
+  if (!m) return null;
+  const [, ward, townBase, chomeKanji, banText] = m;
+  const town = chomeKanji ? `${townBase}${chomeKanji}丁目` : townBase;
+  const nums = (query.normalize("NFKC").match(/\d+/g) ?? []).map(Number);
+  const chome = chomeKanji ? kanjiNumber(chomeKanji) : null;
+  const ban = Number(banText);
+  // 入れた数字の並びから、番の次の数（号）を探す（丁目がある町は 丁目・番・号、無い町は 番・号）。
+  // 丁目を漢数字で書いた時（「四丁目5-12」）は、数字の並びに丁目が無いので、番の位置から探す。
+  let at = chome === null ? -1 : nums.findIndex((n, i) => n === chome && nums[i + 1] === ban) + 1;
+  if (at <= 0) at = nums.indexOf(ban);
+  const go = at >= 0 && nums[at] === ban && at < nums.length - 1 ? nums[at + 1] : null;
+  if (go === null) return null;
+  const data = await loadJusho(ward);
+  const hit = data?.[town]?.[String(ban)]?.[String(go)];
+  // 号まで入れたのに位置の記録が無い時は、「何番のあたり」と分かるように知らせる。
+  if (!hit) return "noGo";
+  return { ...place, name: `${place.name.replace(/[0-9０-９]+番$/, "")}${ban}番${go}号`, lon: hit[0], lat: hit[1] };
+}
+
 export async function lookupAddress(
   query: string,
   limit = 4,
@@ -555,6 +606,12 @@ export async function lookupAddress(
         lon: r.geometry.coordinates[0],
         kind: "住所",
       }));
+    // 号まで入れてあれば、先頭の候補を号の位置に絞る（見つからなければ「何番」のまま）。
+    if (places[0]) {
+      const refined = await refineToGo(query, places[0]).catch(() => null);
+      if (refined === "noGo") places[0] = { ...places[0], kind: "住所（号の位置は記録が無く、この番のあたり）" };
+      else if (refined) places[0] = { ...places[0], name: refined.name, lat: refined.lat, lon: refined.lon };
+    }
     return { places, failed: false };
   } catch {
     return { places: [], failed: true };
