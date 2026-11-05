@@ -628,7 +628,7 @@ export class Limiter extends DurableObject {
         cutoff,
       )
       .toArray() as { lat: number; lon: number; kind: string; count: number; last: number }[];
-    return rows.map((r) => ({ lat: r.lat, lon: r.lon, kind: r.kind, count: r.count, last: dayOf(r.last) }));
+    return rows.map((r) => ({ lat: r.lat, lon: r.lon, kind: r.kind, count: r.count, last: dayOf(r.last + 9 * 3600_000) }));
   }
 
   /**

@@ -467,7 +467,8 @@ export function updateGuide(p: LatLon, accuracy?: number): void {
   const loop = metres({ lat: begin[1], lon: begin[0] }, { lat: end[1], lon: end[0] }) <= STEP_REACHED_M * 2;
   // 着いた判定の半径は、GPS の誤差に合わせて 20〜50m に広げる（駅や建物の中の目的地は、道からその点まで近づけないことがあるため）。
   const reach = Math.min(ARRIVE_MAX_M, Math.max(STEP_REACHED_M, accuracy ?? 0));
-  if (metres(p, { lat: end[1], lon: end[0] }) <= reach && (!loop || rest.metresLeft <= reach * 2)) {
+  // 周回でなくても、経路の残りが短い時に限る（線路や川の向こう側で、直線で近いだけの時に「着きました」と言わない）。
+  if (metres(p, { lat: end[1], lon: end[0] }) <= reach && rest.metresLeft <= (loop ? reach * 2 : reach + 30)) {
     arrivedFlag = true;
     if ($("guide-next").textContent !== "目的地に着きました") {
       speak("目的地に到着しました。お疲れさまでした。");

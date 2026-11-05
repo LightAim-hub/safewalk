@@ -544,9 +544,14 @@ const jushoCache = new Map<string, Promise<Jusho | null>>();
 function loadJusho(ward: string): Promise<Jusho | null> {
   let p = jushoCache.get(ward);
   if (!p) {
-    p = fetch(JUSHO_URL + encodeURIComponent(ward) + ".json")
+    p = fetch(JUSHO_URL + encodeURIComponent(ward) + ".json", { signal: timeoutSignal(4000) })
       .then((r) => (r.ok ? (r.json() as Promise<Jusho>) : null))
-      .catch(() => null);
+      .catch(() => null)
+      .then((d) => {
+        // 読めなかった時は覚えない（次の検索でもう一度読む）。
+        if (!d) jushoCache.delete(ward);
+        return d;
+      });
     jushoCache.set(ward, p);
   }
   return p;
@@ -581,6 +586,8 @@ export async function refineToGo(query: string, place: Place): Promise<Place | "
   const go = at >= 0 && nums[at] === ban && at < nums.length - 1 ? nums[at + 1] : null;
   if (go === null) return null;
   const data = await loadJusho(ward);
+  // 記録を読めなかった時は「記録が無い」と言わず、「何番」のままにする。
+  if (!data) return null;
   const hit = data?.[town]?.[String(ban)]?.[String(go)];
   // 号まで入れたのに位置の記録が無い時は、「何番のあたり」と分かるように知らせる。
   if (!hit) return "noGo";

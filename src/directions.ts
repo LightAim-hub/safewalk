@@ -6,7 +6,7 @@ import { findRoutes, joinRoutes, minutesFor, type Period, type Route } from "./r
 import { showAccidents, accidentDetail } from "./accidents-ui";
 import { $, qInput, fromInput, toInput, searchbar, directions, sheet, COLORS, CURRENT, GENRES, state, map, markers, stopMarkers, toast, announce, modality, el } from "./app";
 import { graph, accidents, meta, places, names, emptyCollection, snap, safety, agentContext } from "./data";
-import { runAgent, SITUATION_MAX, FIXED, type AgentResult } from "./agent";
+import { runAgent, detectStay, SITUATION_MAX, FIXED, type AgentResult } from "./agent";
 import { assess, SAFETY_DISCLAIMER, SAFETY_RULES, type Assessment, type Tier } from "./safety";
 import { startGuide, stopGuide } from "./guide";
 import { popup } from "./place";
@@ -16,6 +16,7 @@ import { type Place, type Genre, type End } from "./types";
 import { detectDisaster, detectEmergency, disasterPanel, bosaiLink, DISASTER_NOTICE, emergencyPanel } from "./emergency";
 import type { KobanHit } from "./koban";
 import "./directions.css";
+import { inAppBrowser, externalOpenLink } from "./onboarding";
 import { replaceUrl, pushUrl, renderPeriod, shareRoute, inServiceArea } from "./url";
 
 export function openDirections(ends: Partial<Record<End, Place>>): void {
@@ -185,6 +186,8 @@ export function clearRoutes(message = "", offerCurrent = false): void {
     ...(emergencyNode ? [emergencyNode] : []),
     ...(message ? [el("p", "empty-note", message)] : []),
     ...(message && offerCurrent && !state.from ? [useCurrentButton()] : []),
+    // アプリ内ブラウザ（LINE など）で現在地が使えない時は、普段のブラウザへ移るリンクも出す（地図の画面の帯は経路の画面では見えないため）。
+    ...(message && offerCurrent && !state.from && inAppBrowser() ? [externalOpenLink()] : []),
     ...(shown ? [disclaimerBar()] : []),
   );
   sheet.hidden = !shown;
@@ -1152,7 +1155,8 @@ async function askClaude(text: string): Promise<void> {
   agentUi = { ...idleAgent(), busy: true, progress: "事情を Claude に伝えています…", disaster: detectDisaster(text) };
   disasterNode = agentUi.disaster ? disasterPanel() : null;
   if (agentNode) agentNode.open = true;
-  if (detectEmergency(text)) showEmergency();
+  // その場を離れてはいけない緊急（倒れた人など）も、押して電話をかける枠を出す。
+  if (detectEmergency(text) || detectStay(text)) showEmergency();
   else renderAgent();
   let result: AgentResult | null = null;
   try {

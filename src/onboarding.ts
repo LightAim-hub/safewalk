@@ -132,7 +132,10 @@ export function showLocateFail(kind: LocateFail): void {
       box.append(para("この端末のブラウザでは、現在地を取得できません。", "note-title"));
     }
     box.append(para(NO_NAME, "note-strong"));
-    if (inAppBrowser()) box.append(para("いまのアプリ内ブラウザが原因かもしれません。Safari や Chrome で開くと使えることがあります。"));
+    if (inAppBrowser()) {
+      box.append(para("いまのアプリ内ブラウザが原因かもしれません。Safari や Chrome で開くと使えることがあります。"));
+      box.append(externalOpenLink());
+    }
   });
 }
 
@@ -278,14 +281,31 @@ function bannerForInApp(): void {
   bar.append(el("span", undefined, "このアプリの中では現在地がうまく使えないことがあります。Safari や Chrome で開くと確実です。"));
   // 一押しで普段のブラウザへ移れるようにする。LINE は ?openExternalBrowser=1 を付けると外のブラウザで開く（LINE の仕様）。
   // Android のアプリ内ブラウザは Chrome を名指しで開く。それ以外は、リンクをコピーしてもらう。
+  bar.append(externalOpenLink());
+  const x = el("button", "icon plain note-close", "✕");
+  x.type = "button";
+  x.setAttribute("aria-label", "閉じる");
+  x.addEventListener("click", () => bar.remove());
+  bar.append(x);
+  document.body.append(bar);
+}
+
+/** アプリ内ブラウザから、普段のブラウザへ移るリンク。押した時の URL で開く（後で入れた経路も引き継ぐ）。 */
+export function externalOpenLink(): HTMLAnchorElement {
   const ua = navigator.userAgent;
   const open = el("a", "inapp-open", /iPhone|iPad|iPod/.test(ua) ? "Safari で開く" : "ブラウザで開く");
-  const here = new URL(location.href);
-  if (/Line\//i.test(ua)) {
-    here.searchParams.set("openExternalBrowser", "1");
-    open.href = here.href;
-  } else if (/Android/i.test(ua)) {
-    open.href = `intent://${here.host}${here.pathname}${here.search}${here.hash}#Intent;scheme=https;package=com.android.chrome;end`;
+  const target = (): string => {
+    const here = new URL(location.href);
+    if (/Line\//i.test(ua)) {
+      here.searchParams.set("openExternalBrowser", "1");
+      return here.href;
+    }
+    return `intent://${here.host}${here.pathname}${here.search}${here.hash}#Intent;scheme=https;package=com.android.chrome;end`;
+  };
+  if (/Line\//i.test(ua) || /Android/i.test(ua)) {
+    open.href = target();
+    open.addEventListener("pointerdown", () => (open.href = target()));
+    open.addEventListener("focus", () => (open.href = target()));
   } else {
     open.href = "#";
     open.textContent = "リンクをコピー";
@@ -294,13 +314,7 @@ function bannerForInApp(): void {
       void navigator.clipboard?.writeText(location.href).then(() => (open.textContent = "コピーしました"), () => {});
     });
   }
-  bar.append(open);
-  const x = el("button", "icon plain note-close", "✕");
-  x.type = "button";
-  x.setAttribute("aria-label", "閉じる");
-  x.addEventListener("click", () => bar.remove());
-  bar.append(x);
-  document.body.append(bar);
+  return open;
 }
 
 /** いまの画面（地図・経路・案内）。 */
