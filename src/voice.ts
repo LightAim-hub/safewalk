@@ -235,6 +235,8 @@ export function turnSpeech(stepText: string, metresToTurn: number | null): strin
   const verb = main
     .replace(/^次の角を/, "")
     .replace(/^次の分かれ道で/, "分かれ道で")
+    .replace(/曲がる、/, "曲がり、")
+    .replace(/進む、/, "進み、")
     .replace(/曲がる$/, "曲がります")
     .replace(/進む$/, "進みます")
     .replace(/始める$/, "始めます");

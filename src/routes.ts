@@ -199,6 +199,21 @@ function bearing(a: [number, number], b: [number, number]): number {
   return (Math.atan2((b[0] - a[0]) * k, b[1] - a[1]) * 180) / Math.PI;
 }
 
+/** 道の向きを見る長さ(m)。隣どうしの点だけで向きを取ると、道の端の短い折れ（数m）で左右が逆になるため。 */
+const HEADING_M = 12;
+
+/** 区間の始め（end=false）か終わり（end=true）の向きを、HEADING_M ほど離れた点との間で取る。 */
+function legBearing(pts: [number, number][], end: boolean): number {
+  const list = end ? [...pts].reverse() : pts;
+  let walked = 0;
+  let j = 1;
+  for (; j < list.length - 1; j++) {
+    walked += metres({ lat: list[j - 1][1], lon: list[j - 1][0] }, { lat: list[j][1], lon: list[j][0] });
+    if (walked >= HEADING_M) break;
+  }
+  return end ? bearing(list[j], list[0]) : bearing(list[0], list[j]);
+}
+
 function turnWord(delta: number): string | null {
   const size = Math.abs(delta);
   if (size < 35) return null;
@@ -303,7 +318,7 @@ function walkThrough(legs: Leg[]): {
   let walked = 0;
   const profile: [number, number][] = [[0, 0]];
   let heading: number | null = null;
-  const steps: (Step & { road: string; entry: number | null })[] = [];
+  const steps: (Step & { road: string; entry: number | null; word: string | null })[] = [];
   const byRoad = new Map<string, number>();
   for (const leg of legs) {
     if (leg.metres < 1 || leg.pts.length < 2) continue;
@@ -314,27 +329,32 @@ function walkThrough(legs: Leg[]): {
     const pts = leg.pts;
     const road = displayName(leg.name);
     if (road) byRoad.set(road, (byRoad.get(road) ?? 0) + leg.metres);
-    const start = bearing(pts[0], pts[1]);
+    const start = legBearing(pts, false);
     const last = steps[steps.length - 1];
     if (!last) {
-      steps.push({ text: `${compass(start)}へ歩き始める`, metres: 0, at: pts[0], road, entry: null });
+      steps.push({ text: `${compass(start)}へ歩き始める`, metres: 0, at: pts[0], road, entry: null, word: null });
     } else {
       const delta = ((start - heading! + 540) % 360) - 180;
       const turn = turnWord(delta);
       const renamed = road !== "" && last.road !== "" && road !== last.road;
-      if (turn && last.metres >= STEP_MIN_M) steps.push({ text: turn, metres: 0, at: pts[0], road, entry: heading });
+      if (turn && last.metres >= STEP_MIN_M) steps.push({ text: turn, metres: 0, at: pts[0], road, entry: heading, word: turn });
       else if (turn && last.entry === null) last.text = `${compass(start)}へ歩き始める`;
       else if (turn) {
-        // 短い区間の直後に曲がる時は、その手前からの向きの変化を1つの案内にする。
-        last.text = turnWord(((start - last.entry! + 540) % 360) - 180) ?? "道なりに進む";
+        // 短い区間の直後に曲がる時、2つの曲がりが逆の向きなら「右に曲がり、すぐ左」と両方を言う
+        // （歩道橋の上り口・つづら折りで、合わせた向きだけを言うと、最初の角で逆へ曲がってしまうため）。
+        // 同じ向きなら、その手前からの向きの変化を1つの案内にする。
+        const side = (w: string) => (w.includes("右") ? "右" : "左");
+        if (last.word && side(last.word) !== side(turn)) last.text = `${last.word}、すぐ${turn}`;
+        else last.text = turnWord(((start - last.entry! + 540) % 360) - 180) ?? "道なりに進む";
+        last.word = null;
       } else if (renamed && last.metres >= STEP_MIN_M) {
-        steps.push({ text: "道なりに進む", metres: 0, at: pts[0], road, entry: heading });
+        steps.push({ text: "道なりに進む", metres: 0, at: pts[0], road, entry: heading, word: null });
       }
     }
     const current = steps[steps.length - 1];
     current.metres += leg.metres;
     if (!current.road) current.road = road;
-    heading = bearing(pts[pts.length - 2], pts[pts.length - 1]);
+    heading = legBearing(pts, true);
   }
   // 短い橋などで道路名が変わるだけの区間は、案内に出さず前の手順へまとめる。
   for (let i = steps.length - 1; i > 0; i--) {

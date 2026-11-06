@@ -24,6 +24,10 @@ export const STEP_REACHED_M = 20;
 /** 着いた判定の半径の上限。GPS の誤差が大きくても、これより遠くでは着いたとしない。 */
 export const ARRIVE_MAX_M = 50;
 export const ANNOUNCE_M = 40;
+/** 曲がり角の前に、もう一度早めに知らせる距離（m）。この距離まで直進が続く時だけ（実機で「声が少ない」ため）。 */
+export const ANNOUNCE_FAR_M = 100;
+/** 着いてから、案内を自動で終えるまでの時間（ms）。「終了」を押さなくても終わるように。 */
+export const ARRIVE_END_MS = 8000;
 /** 次に歩く座標を探す範囲。GPS の跳びで先へ進み過ぎないようにする。 */
 export const GUIDE_WINDOW = 400;
 export let guideProgress = 0;
@@ -31,6 +35,8 @@ export let watchId: number | null = null;
 export let rerouting = false;
 export let voiceOn = true;
 export let announced = "";
+let announcedFar = "";
+let arriveTimer = 0;
 export let wakeLock: WakeLockSentinel | null = null;
 /**
  * 位置の更新(watchPosition の通知)がこの時間なければ、案内が古い可能性を穏やかに知らせる。
@@ -198,8 +204,12 @@ export function alongMetres(route: Route, from: number, to: number): number {
 /** 案内の文から、曲がる向きの矢印を選ぶ。 */
 export function arrowFor(text: string): string {
   if (text.startsWith("経由地")) return "◎";
-  const right = text.includes("右");
-  if (!right && !text.includes("左")) return "↑";
+  // 道の名前（括弧の中）に「右」「左」があっても見ない。「右に曲がる、すぐ左…」は最初の向きで出す。
+  const main = text.replace(/[（(].*$/, "");
+  const r = main.indexOf("右");
+  const l = main.indexOf("左");
+  if (r < 0 && l < 0) return "↑";
+  const right = r >= 0 && (l < 0 || r < l);
   if (text.startsWith("やや")) return right ? "↗" : "↖";
   if (text.startsWith("大きく")) return right ? "↘" : "↙";
   return right ? "→" : "←";
@@ -332,6 +342,7 @@ export function reroute(p: LatLon, route: Route, startOfGuide = false): boolean 
   state.routes = [joined];
   guideProgress = 0;
   announced = "";
+  announcedFar = "";
   noticeRoute = null;
   setEnd("from", { ...p, name: CURRENT }, false, true);
   selectRoute(0, true);
@@ -471,8 +482,16 @@ export function updateGuide(p: LatLon, accuracy?: number): void {
   if (metres(p, { lat: end[1], lon: end[0] }) <= reach && rest.metresLeft <= (loop ? reach * 2 : reach + 30)) {
     arrivedFlag = true;
     if ($("guide-next").textContent !== "目的地に着きました") {
-      speak("目的地に到着しました。お疲れさまでした。");
+      speak("目的地に到着しました。お疲れさまでした。案内を終えます。");
       track("guide_arrive");
+      // 少し置いてから、案内を自動で終える（その間に「終了」を押してもよい）。
+      window.clearTimeout(arriveTimer);
+      arriveTimer = window.setTimeout(() => {
+        if (arrivedFlag && document.body.classList.contains("guiding")) {
+          finishGuide();
+          toast("目的地に着いたので、案内を終えました");
+        }
+      }, ARRIVE_END_MS);
     }
     put("guide-next", "目的地に着きました");
     showTurn("⚑", "");
@@ -481,6 +500,15 @@ export function updateGuide(p: LatLon, accuracy?: number): void {
     return;
   }
   const { next, then, metresLeft, metresToNext } = rest;
+  // 直進の後の曲がり角は、100m ほど手前でも一度知らせる。
+  if (next) {
+    const far = metres(p, { lat: next.at[1], lon: next.at[0] });
+    const key = next.at.join(",");
+    if (far <= ANNOUNCE_FAR_M && far > ANNOUNCE_M * 1.5 && key !== announcedFar && key !== announced) {
+      announcedFar = key;
+      speak(turnSpeech(next.text, far));
+    }
+  }
   if (next && metres(p, { lat: next.at[1], lon: next.at[0] }) <= ANNOUNCE_M) {
     const key = next.at.join(",");
     if (key !== announced) {
@@ -533,6 +561,7 @@ export function startGuide(index: number): void {
     } else if (!lost) setStopped(now - anchorAt >= STOP_MS && anchor !== null);
   }, 3000);
   announced = "";
+  announcedFar = "";
   guideProgress = 0;
   guideState = newGuideState();
   noticeRoute = null;
@@ -541,6 +570,7 @@ export function startGuide(index: number): void {
   firstFix = true;
   offCount = 0;
   arrivedFlag = false;
+  window.clearTimeout(arriveTimer);
   for (const kind of ["notice", "off", "gps", "info"] as AlertKind[]) hideAlert(kind);
   const lengthM = state.routes[index]?.metres ?? 0;
   if (lengthM >= LONG_ROUTE_M) showAlert("info", BATTERY_TEXT, 12000);
